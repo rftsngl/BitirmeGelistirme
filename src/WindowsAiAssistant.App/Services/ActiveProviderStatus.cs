@@ -24,23 +24,78 @@ public interface IActiveProviderStatus : INotifyPropertyChanged
 
 public sealed class ActiveProviderStatus : IActiveProviderStatus
 {
+    private readonly IProviderConfigurationService _configurationService;
     private ProviderProfile? _profile;
     private bool _hasSavedKey;
+
+    public ActiveProviderStatus(IProviderConfigurationService configurationService)
+    {
+        _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public string EffectiveActiveProfileId => _profile?.Id ?? string.Empty;
     public bool HasActiveProfile => _profile is not null;
-    public string DisplayName => _profile?.DisplayName ?? "Yeni AI runtime bekleniyor";
+    public string DisplayName => _profile?.DisplayName ?? "Saglayici secilmedi";
     public string Model => _profile?.Model ?? "-";
-    public string Kind => _profile?.Kind.ToString() ?? "FrontendOnly";
+    public string Kind => _profile?.Kind.ToString() ?? "-";
     public string BaseUrl => _profile?.BaseUrl ?? string.Empty;
     public bool IsEnabled => _profile?.IsEnabled ?? false;
-    public bool RequiresApiKey => _profile?.RequiresApiKey ?? false;
+    public bool RequiresApiKey => _profile?.RequiresApiKey ?? true;
     public bool HasSavedKey => _hasSavedKey;
-    public bool IsReady => IsEnabled && (!RequiresApiKey || HasSavedKey);
-    public string ReadyReason => IsReady ? "Hazir." : "Yeni AI-first backend henuz baglanmadi.";
-    public string ReadyBadge => IsReady ? "HAZIR" : "RUNTIME YOK";
+
+    public bool IsReady =>
+        _profile is not null && _configurationService.IsProfileReady(_profile);
+
+    public string ReadyReason
+    {
+        get
+        {
+            if (_profile is null)
+            {
+                return "Aktif saglayici profili secilmedi.";
+            }
+
+            if (!_profile.IsEnabled)
+            {
+                return "Profil devre disi.";
+            }
+
+            if (string.IsNullOrWhiteSpace(_profile.BaseUrl) || string.IsNullOrWhiteSpace(_profile.Model))
+            {
+                return "BaseUrl veya model eksik.";
+            }
+
+            if (_profile.RequiresApiKey && !_configurationService.IsProfileReady(_profile))
+            {
+                var envHint = string.IsNullOrWhiteSpace(_profile.ApiKeyEnvVar)
+                    ? "API anahtari"
+                    : $"API anahtari ({_profile.ApiKeyEnvVar})";
+                return $"{envHint} ortam degiskeninde veya yerel ayarlarda bulunamadi.";
+            }
+
+            return "AgentLoop bu saglayici ile calismaya hazir.";
+        }
+    }
+
+    public string ReadyBadge
+    {
+        get
+        {
+            if (_profile is null)
+            {
+                return "YOK";
+            }
+
+            if (!_profile.IsEnabled)
+            {
+                return "KAPALI";
+            }
+
+            return IsReady ? "HAZIR" : "EKSIK";
+        }
+    }
 
     public void SetProfile(ProviderProfile? profile, bool hasSavedKey)
     {

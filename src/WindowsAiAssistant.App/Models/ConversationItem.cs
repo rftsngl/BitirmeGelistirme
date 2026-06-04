@@ -27,6 +27,9 @@ public sealed class ConversationItem : ObservableObject
     public string SafetyDisposition { get; init; } = string.Empty;
     public string Decision { get; init; } = string.Empty;
     public string ToolExecutionResult { get; init; } = string.Empty;
+    public string StepInfo { get; init; } = string.Empty;
+    public string ObservationSummary { get; init; } = string.Empty;
+    public string LogPath { get; init; } = string.Empty;
 
     public ICommand? PrimaryCommand { get; init; }
     public ICommand? SecondaryCommand { get; init; }

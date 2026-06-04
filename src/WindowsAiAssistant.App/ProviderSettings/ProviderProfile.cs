@@ -3,16 +3,14 @@ namespace WindowsAiAssistant.App.ProviderSettings;
 public enum ModelProviderKind
 {
     OpenAICompatible,
-    OpenAI,
     Gemini,
-    Anthropic,
-    Ollama
+    Local
 }
 
 public enum ModelEndpointStyle
 {
     OpenAiChatCompletions,
-    Unsupported
+    GeminiGenerateContent
 }
 
 public enum ModelAuthScheme
@@ -35,7 +33,12 @@ public sealed class ProviderProfile
     public string ApiKeyEnvVar { get; init; } = string.Empty;
     public string ApiKeyHeaderName { get; init; } = "Authorization";
     public ModelAuthScheme AuthScheme { get; init; } = ModelAuthScheme.Bearer;
-    public bool IsEnabled { get; init; }
+    public bool IsEnabled { get; init; } = true;
+    public bool IsBuiltIn { get; init; }
+    public double? Temperature { get; init; }
+    public int? MaxTokens { get; init; }
+    public bool VisionEnabled { get; init; }
+    public int RequestTimeoutSeconds { get; init; } = 120;
 }
 
 public sealed class ProviderProfileSaveResult
@@ -49,17 +52,25 @@ public sealed class ProviderProfileSaveResult
 
 public enum ProviderConnectionTestStatus
 {
-    RuntimeUnavailable
+    Success,
+    Failed,
+    Cancelled
 }
 
 public sealed class ConnectionTestSummary
 {
-    public ProviderConnectionTestStatus Status { get; init; } = ProviderConnectionTestStatus.RuntimeUnavailable;
-    public string Message { get; init; } = "Yeni AI-first provider katmani henuz baglanmadi.";
+    public ProviderConnectionTestStatus Status { get; init; } = ProviderConnectionTestStatus.Failed;
+    public string Message { get; init; } = string.Empty;
     public DateTimeOffset CompletedAt { get; init; } = DateTimeOffset.Now;
     public TimeSpan Duration { get; init; }
 
-    public string Title => "Runtime kullanilamiyor";
+    public string Title => Status switch
+    {
+        ProviderConnectionTestStatus.Success => "Baglanti basarili",
+        ProviderConnectionTestStatus.Cancelled => "Test iptal edildi",
+        _ => "Baglanti basarisiz"
+    };
+
     public string CompletedDisplay => CompletedAt.ToLocalTime().ToString("HH:mm:ss");
     public string DurationDisplay => $"{(int)Duration.TotalMilliseconds} ms";
 }

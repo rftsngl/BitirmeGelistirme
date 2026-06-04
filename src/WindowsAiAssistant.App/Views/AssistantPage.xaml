@@ -157,6 +157,14 @@
                             <TextBlock Text="Gönder" />
                         </StackPanel>
                     </Button>
+                    <Button Command="{Binding CancelRunCommand}"
+                            IsEnabled="{Binding IsBusy}"
+                            ToolTipService.ToolTip="Çalışan agent isteğini iptal et">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Durdur" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Grid.ColumnSpan="2"

@@ -7,33 +7,26 @@ namespace WindowsAiAssistant.App.ProviderSettings;
 
 public sealed class ProviderSettingsViewModel : ObservableObject
 {
-    private const string PlaceholderProfileId = "new-ai-runtime";
     private readonly ActiveProviderStatus _providerStatus;
-    private readonly HashSet<string> _savedKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IProviderConfigurationService _configurationService;
+    private readonly ProviderConnectionTester _connectionTester;
     private ProviderProfile? _selectedProfile;
     private ProviderProfileDraft? _editingDraft;
     private ConnectionTestSummary? _lastConnectionTest;
-    private string? _activeProfileId;
-    private string _statusMessage = "Bu ekran su anda yalnizca frontend durumunu gosterir.";
+    private string _statusMessage = "Saglayici profilleri yukleniyor...";
     private string _apiKeyInput = string.Empty;
     private bool _isEditingNew;
     private bool _isTestingConnection;
 
-    public ProviderSettingsViewModel(ActiveProviderStatus providerStatus)
+    public ProviderSettingsViewModel(
+        ActiveProviderStatus providerStatus,
+        IProviderConfigurationService configurationService,
+        ProviderConnectionTester connectionTester)
     {
         _providerStatus = providerStatus ?? throw new ArgumentNullException(nameof(providerStatus));
-        Profiles =
-        [
-            new ProviderProfile
-            {
-                Id = PlaceholderProfileId,
-                DisplayName = "Yeni AI-first runtime",
-                Kind = ModelProviderKind.OpenAICompatible,
-                Model = "Henuz baglanmadi",
-                EndpointPath = "chat/completions",
-                IsEnabled = false
-            }
-        ];
+        _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+        _connectionTester = connectionTester ?? throw new ArgumentNullException(nameof(connectionTester));
+        Profiles = [];
         ProfileItems = [];
     }
 
@@ -58,15 +51,15 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         }
     }
 
-    public string EffectiveActiveProfileId => _activeProfileId ?? string.Empty;
+    public string EffectiveActiveProfileId => _configurationService.ActiveProfileId ?? string.Empty;
     public string ActiveProfileCaption => string.IsNullOrWhiteSpace(EffectiveActiveProfileId) ? "(yok)" : EffectiveActiveProfileId;
     public bool IsCurrentActive => SelectedProfile is not null && SelectedProfile.Id.Equals(EffectiveActiveProfileId, StringComparison.OrdinalIgnoreCase);
-    public bool IsCurrentBuiltIn => SelectedProfile?.Id.Equals(PlaceholderProfileId, StringComparison.OrdinalIgnoreCase) == true;
+    public bool IsCurrentBuiltIn => SelectedProfile?.IsBuiltIn == true;
     public bool IsCurrentUserDefined => SelectedProfile is not null && !IsCurrentBuiltIn;
     public string SetActiveButtonText => IsCurrentActive ? "Aktif" : "Aktif Yap";
     public bool SetActiveEnabled => SelectedProfile is { IsEnabled: true };
-    public bool TestConnectionEnabled => SelectedProfile is not null;
-    public bool EditEnabled => IsCurrentUserDefined;
+    public bool TestConnectionEnabled => SelectedProfile is not null && !IsTestingConnection;
+    public bool EditEnabled => SelectedProfile is not null;
     public bool DeleteEnabled => IsCurrentUserDefined;
 
     public string DetailDisplayName => SelectedProfile?.DisplayName ?? "-";
@@ -76,14 +69,28 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     public string DetailEndpointPath => SelectedProfile?.EndpointPath ?? "-";
     public string DetailRequiresApiKey => SelectedProfile is null ? "-" : SelectedProfile.RequiresApiKey ? "Evet" : "Hayir";
     public string DetailIsEnabled => SelectedProfile is null ? "-" : SelectedProfile.IsEnabled ? "Evet" : "Hayir";
-    public string DetailOriginLabel => SelectedProfile is null ? "-" : IsCurrentBuiltIn ? "Yerlesik frontend placeholder" : "Gecici UI profili";
+    public string DetailTemperature => SelectedProfile?.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(varsayilan)";
+    public string DetailMaxTokens => SelectedProfile?.MaxTokens?.ToString() ?? "(varsayilan)";
+    public string DetailVisionEnabled => SelectedProfile is null ? "-" : SelectedProfile.VisionEnabled ? "Evet" : "Hayir";
+    public string DetailOriginLabel => SelectedProfile is null ? "-" : IsCurrentBuiltIn ? "Yerlesik profil" : "Ozel profil";
 
-    public bool HasSavedKeyForCurrent => SelectedProfile is not null && _savedKeys.Contains(SelectedProfile.Id);
-    public string SavedKeyMask => HasSavedKeyForCurrent ? "********demo" : string.Empty;
-    public string SavedKeyStatus => HasSavedKeyForCurrent ? "Anahtar yalnizca UI oturumunda tutuluyor." : "Kayitli anahtar yok.";
+    public bool HasSavedKeyForCurrent =>
+        SelectedProfile is not null && _configurationService.HasSavedApiKey(SelectedProfile.Id);
+
+    public bool HasEnvKeyForCurrent =>
+        SelectedProfile is not null &&
+        !string.IsNullOrWhiteSpace(SelectedProfile.ApiKeyEnvVar) &&
+        !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(SelectedProfile.ApiKeyEnvVar));
+
+    public string SavedKeyMask => HasSavedKeyForCurrent ? "********" : string.Empty;
+    public string SavedKeyStatus => HasEnvKeyForCurrent
+        ? $"Ortam degiskeni ({SelectedProfile?.ApiKeyEnvVar}) mevcut."
+        : HasSavedKeyForCurrent
+            ? "Anahtar yerel kullanici ayarlarinda saklaniyor."
+            : "Kayitli anahtar yok.";
     public bool KeySaveRemoveEnabled => SelectedProfile is { RequiresApiKey: true };
     public bool ShowDisabledBanner => SelectedProfile is { IsEnabled: false };
-    public string DisabledBannerText => ShowDisabledBanner ? "Profil devre disi. Yeni runtime baglandiginda etkinlestirilecek." : string.Empty;
+    public string DisabledBannerText => ShowDisabledBanner ? "Profil devre disi. Aktif yapmadan once etkinlestirin." : string.Empty;
     public bool ShowNoKeyMessage => SelectedProfile is { RequiresApiKey: false };
     public bool ShowSavedKeyRow => SelectedProfile is { RequiresApiKey: true };
     public Visibility KeyAreaVisibility => ShowSavedKeyRow ? Visibility.Visible : Visibility.Collapsed;
@@ -120,7 +127,13 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     public bool IsTestingConnection
     {
         get => _isTestingConnection;
-        private set => SetField(ref _isTestingConnection, value);
+        private set
+        {
+            if (SetField(ref _isTestingConnection, value))
+            {
+                OnPropertyChanged(nameof(TestConnectionEnabled));
+            }
+        }
     }
 
     public ProviderProfileDraft? EditingDraft
@@ -141,9 +154,12 @@ public sealed class ProviderSettingsViewModel : ObservableObject
 
     public void Load()
     {
-        RebuildProfileItems();
-        SelectedProfile ??= Profiles.FirstOrDefault();
+        ReloadProfilesFromService();
+        SelectedProfile ??= Profiles.FirstOrDefault(profile =>
+            profile.Id.Equals(_configurationService.ActiveProfileId, StringComparison.OrdinalIgnoreCase)) ??
+            Profiles.FirstOrDefault();
         SyncProviderStatus();
+        StatusMessage = "Saglayici profilleri yuklendi. Aktif profili secin veya duzenleyin.";
     }
 
     public Task SetActiveAsync()
@@ -154,11 +170,11 @@ public sealed class ProviderSettingsViewModel : ObservableObject
             return Task.CompletedTask;
         }
 
-        _activeProfileId = SelectedProfile.Id;
+        _configurationService.SetActiveProfile(SelectedProfile.Id);
         RefreshFlags();
         SyncProviderStatus();
         NotifySelectionChanged();
-        StatusMessage = "Profil yalnizca frontend oturumu icin aktif edildi.";
+        StatusMessage = $"'{SelectedProfile.DisplayName}' aktif saglayici olarak ayarlandi.";
         return Task.CompletedTask;
     }
 
@@ -166,16 +182,16 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     {
         if (SelectedProfile is not { RequiresApiKey: true } || string.IsNullOrWhiteSpace(ApiKeyInput))
         {
-            StatusMessage = "UI oturumu icin bir API anahtari girin.";
+            StatusMessage = "Kaydetmek icin bir API anahtari girin.";
             return Task.CompletedTask;
         }
 
-        _savedKeys.Add(SelectedProfile.Id);
+        _configurationService.SaveApiKey(SelectedProfile.Id, ApiKeyInput);
         ApiKeyInput = string.Empty;
         RefreshFlags();
         SyncProviderStatus();
         NotifySelectionChanged();
-        StatusMessage = "Anahtar yalnizca bellekte tutuluyor; kalici backend kaldirildi.";
+        StatusMessage = "API anahtari yerel kullanici ayarlarina kaydedildi.";
         return Task.CompletedTask;
     }
 
@@ -183,23 +199,37 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     {
         if (SelectedProfile is not null)
         {
-            _savedKeys.Remove(SelectedProfile.Id);
+            _configurationService.RemoveApiKey(SelectedProfile.Id);
         }
 
         RefreshFlags();
         SyncProviderStatus();
         NotifySelectionChanged();
-        StatusMessage = "Gecici anahtar kaldirildi.";
+        StatusMessage = "Yerel API anahtari kaldirildi.";
         return Task.CompletedTask;
     }
 
-    public Task TestConnectionAsync(CancellationToken cancellationToken = default)
+    public async Task TestConnectionAsync(CancellationToken cancellationToken = default)
     {
+        if (SelectedProfile is null)
+        {
+            return;
+        }
+
         IsTestingConnection = true;
-        LastConnectionTest = new ConnectionTestSummary();
-        StatusMessage = LastConnectionTest.Message;
-        IsTestingConnection = false;
-        return Task.CompletedTask;
+        StatusMessage = "Baglanti test ediliyor...";
+
+        try
+        {
+            LastConnectionTest = await _connectionTester
+                .TestProfileAsync(SelectedProfile, cancellationToken)
+                .ConfigureAwait(true);
+            StatusMessage = LastConnectionTest.Message;
+        }
+        finally
+        {
+            IsTestingConnection = false;
+        }
     }
 
     public void BeginNewProfile()
@@ -210,9 +240,9 @@ public sealed class ProviderSettingsViewModel : ObservableObject
 
     public void BeginEditCurrent()
     {
-        if (!IsCurrentUserDefined || SelectedProfile is null)
+        if (SelectedProfile is null)
         {
-            StatusMessage = "Yerlesik placeholder profil duzenlenemez.";
+            StatusMessage = "Duzenlenecek profil secilmedi.";
             return;
         }
 
@@ -244,21 +274,12 @@ public sealed class ProviderSettingsViewModel : ObservableObject
             return ProviderProfileSaveResult.Fail("Bu kimlige sahip bir profil zaten var.");
         }
 
-        var existing = Profiles.FirstOrDefault(item => item.Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null)
-        {
-            Profiles[Profiles.IndexOf(existing)] = profile;
-        }
-        else
-        {
-            Profiles.Add(profile);
-        }
-
+        _configurationService.UpsertProfile(profile);
         EditingDraft = null;
         _isEditingNew = false;
-        RebuildProfileItems();
+        ReloadProfilesFromService();
         SelectedProfile = Profiles.First(item => item.Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase));
-        StatusMessage = "Profil yalnizca frontend oturumunda kaydedildi.";
+        StatusMessage = "Profil kaydedildi.";
         return ProviderProfileSaveResult.Ok();
     }
 
@@ -270,17 +291,19 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         }
 
         var removedId = SelectedProfile.Id;
-        Profiles.Remove(SelectedProfile);
-        _savedKeys.Remove(removedId);
-        if (removedId.Equals(_activeProfileId, StringComparison.OrdinalIgnoreCase))
+        try
         {
-            _activeProfileId = null;
+            _configurationService.DeleteProfile(removedId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ProviderProfileSaveResult.Fail(ex.Message);
         }
 
-        RebuildProfileItems();
+        ReloadProfilesFromService();
         SelectedProfile = Profiles.FirstOrDefault();
         SyncProviderStatus();
-        StatusMessage = "Gecici profil silindi.";
+        StatusMessage = "Profil silindi.";
         return ProviderProfileSaveResult.Ok();
     }
 
@@ -293,17 +316,30 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         !string.IsNullOrWhiteSpace(profileId) &&
         profileId.Equals(EffectiveActiveProfileId, StringComparison.OrdinalIgnoreCase);
 
-    public bool ProfileHasSavedKey(string profileId) => _savedKeys.Contains(profileId);
+    public bool ProfileHasSavedKey(string profileId) => _configurationService.HasSavedApiKey(profileId);
+
+    private void ReloadProfilesFromService()
+    {
+        Profiles.Clear();
+        foreach (var profile in _configurationService.Profiles)
+        {
+            Profiles.Add(profile);
+        }
+
+        RebuildProfileItems();
+    }
 
     private void RebuildProfileItems()
     {
         ProfileItems.Clear();
         foreach (var profile in Profiles)
         {
-            ProfileItems.Add(new ProfileListItem(profile, profile.Id.Equals(PlaceholderProfileId, StringComparison.OrdinalIgnoreCase))
+            ProfileItems.Add(new ProfileListItem(profile, profile.IsBuiltIn)
             {
                 IsActive = IsProfileActive(profile.Id),
-                HasSavedKey = ProfileHasSavedKey(profile.Id)
+                HasSavedKey = ProfileHasSavedKey(profile.Id) ||
+                              (!string.IsNullOrWhiteSpace(profile.ApiKeyEnvVar) &&
+                               !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(profile.ApiKeyEnvVar)))
             });
         }
     }
@@ -313,14 +349,21 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         foreach (var item in ProfileItems)
         {
             item.IsActive = IsProfileActive(item.Id);
-            item.HasSavedKey = ProfileHasSavedKey(item.Id);
+            item.HasSavedKey = ProfileHasSavedKey(item.Id) ||
+                               (!string.IsNullOrWhiteSpace(item.Profile.ApiKeyEnvVar) &&
+                                !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(item.Profile.ApiKeyEnvVar)));
         }
     }
 
     private void SyncProviderStatus()
     {
-        var active = Profiles.FirstOrDefault(profile => IsProfileActive(profile.Id));
-        _providerStatus.SetProfile(active, active is not null && ProfileHasSavedKey(active.Id));
+        var active = Profiles.FirstOrDefault(profile => IsProfileActive(profile.Id)) ??
+                     _configurationService.ActiveProfile;
+        _providerStatus.SetProfile(
+            active,
+            active is not null && (_configurationService.HasSavedApiKey(active.Id) ||
+                                   (!string.IsNullOrWhiteSpace(active.ApiKeyEnvVar) &&
+                                    !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(active.ApiKeyEnvVar)))));
     }
 
     private string SuggestNewId()
@@ -357,8 +400,12 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(DetailEndpointPath));
         OnPropertyChanged(nameof(DetailRequiresApiKey));
         OnPropertyChanged(nameof(DetailIsEnabled));
+        OnPropertyChanged(nameof(DetailTemperature));
+        OnPropertyChanged(nameof(DetailMaxTokens));
+        OnPropertyChanged(nameof(DetailVisionEnabled));
         OnPropertyChanged(nameof(DetailOriginLabel));
         OnPropertyChanged(nameof(HasSavedKeyForCurrent));
+        OnPropertyChanged(nameof(HasEnvKeyForCurrent));
         OnPropertyChanged(nameof(SavedKeyMask));
         OnPropertyChanged(nameof(SavedKeyStatus));
         OnPropertyChanged(nameof(KeySaveRemoveEnabled));

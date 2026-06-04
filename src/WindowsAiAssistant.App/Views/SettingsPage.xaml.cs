@@ -20,16 +20,14 @@ public sealed partial class SettingsPage : Page
     public IReadOnlyList<ModelProviderKind> ProviderKinds { get; } =
     [
         ModelProviderKind.OpenAICompatible,
-        ModelProviderKind.OpenAI,
         ModelProviderKind.Gemini,
-        ModelProviderKind.Anthropic,
-        ModelProviderKind.Ollama
+        ModelProviderKind.Local
     ];
 
     public IReadOnlyList<ModelEndpointStyle> EndpointStyles { get; } =
     [
         ModelEndpointStyle.OpenAiChatCompletions,
-        ModelEndpointStyle.Unsupported
+        ModelEndpointStyle.GeminiGenerateContent
     ];
 
     public IReadOnlyList<ModelAuthScheme> AuthSchemes { get; } =

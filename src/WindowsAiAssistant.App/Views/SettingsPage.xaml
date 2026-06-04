@@ -183,6 +183,9 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="GÖRÜNEN AD" />
@@ -200,11 +203,20 @@
                             <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="ENDPOINT" />
                             <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding DetailEndpointPath, Mode=OneWay}" Style="{StaticResource MetadataValueTextBlockStyle}" />
 
-                            <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="API KEY GEREKLİ" />
-                            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding DetailRequiresApiKey, Mode=OneWay}" Style="{StaticResource MetadataValueTextBlockStyle}" />
+                            <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="SICAKLIK" />
+                            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding DetailTemperature, Mode=OneWay}" Style="{StaticResource MetadataValueTextBlockStyle}" />
 
-                            <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="ETKİN" />
-                            <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding DetailIsEnabled, Mode=OneWay}" Style="{StaticResource MetadataValueTextBlockStyle}" />
+                            <TextBlock Grid.Row="6" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="MAX TOKEN" />
+                            <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding DetailMaxTokens, Mode=OneWay}" Style="{StaticResource MetadataValueTextBlockStyle}" />
+
+                            <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="VISION" />
+                            <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding DetailVisionEnabled, Mode=OneWay}" Style="{StaticResource MetadataValueTextBlockStyle}" />
+
+                            <TextBlock Grid.Row="8" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="API KEY GEREKLİ" />
+                            <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding DetailRequiresApiKey, Mode=OneWay}" Style="{StaticResource MetadataValueTextBlockStyle}" />
+
+                            <TextBlock Grid.Row="9" Grid.Column="0" Style="{StaticResource LabelTextBlockStyle}" Text="ETKİN" />
+                            <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding DetailIsEnabled, Mode=OneWay}" Style="{StaticResource MetadataValueTextBlockStyle}" />
                         </Grid>
 
                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -376,6 +388,21 @@
                     <TextBox Header="Endpoint yolu"
                              Text="{Binding EndpointPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              PlaceholderText="chat/completions" />
+
+                    <TextBox Header="Temperature (opsiyonel)"
+                             Text="{Binding TemperatureText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             PlaceholderText="0.7" />
+                    <TextBox Header="Max tokens (opsiyonel)"
+                             Text="{Binding MaxTokensText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             PlaceholderText="4096" />
+                    <NumberBox Header="Istek zaman asimi (sn)"
+                               Value="{Binding RequestTimeoutSeconds, Mode=TwoWay}"
+                               Minimum="5"
+                               Maximum="600"
+                               SpinButtonPlacementMode="Inline" />
+
+                    <ToggleSwitch Header="Vision destegi (Faz 9)"
+                                  IsOn="{Binding VisionEnabled, Mode=TwoWay}" />
 
                     <ToggleSwitch Header="API anahtarı gerekiyor"
                                   IsOn="{Binding RequiresApiKey, Mode=TwoWay}" />
