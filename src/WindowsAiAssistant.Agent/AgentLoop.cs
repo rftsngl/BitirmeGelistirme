@@ -69,13 +69,15 @@ public sealed class AgentLoop
             cancellationToken.ThrowIfCancellationRequested();
 
             var lastStep = session.Steps.LastOrDefault();
-            Report(progress, stepIndex, maxSteps, "gozlem", "Masaustu durumu aliniyor");
+            Report(progress, stepIndex, maxSteps, "gozlem", "Masaustu durumu ve ekran goruntusu aliniyor");
 
             var observation = await _observationService.CaptureAsync(
                 new ObservationCaptureOptions
                 {
                     LastUserGoal = session.UserGoal,
-                    LastActionResult = lastStep?.ActionResult?.Message
+                    LastActionResult = lastStep?.ActionResult?.Message,
+                    RunId = session.RunId,
+                    StepIndex = stepIndex
                 },
                 cancellationToken).ConfigureAwait(false);
             lastObservation = observation;
@@ -83,7 +85,7 @@ public sealed class AgentLoop
             var prompt = _promptBuilder.Build(session.UserGoal, observation, session.Steps);
             Report(progress, stepIndex, maxSteps, "llm", $"Adim {stepIndex + 1} karar isteniyor");
 
-            var llmContent = await RequestLlmDecisionAsync(prompt, stepIndex, cancellationToken).ConfigureAwait(false);
+            var llmContent = await RequestLlmDecisionAsync(prompt, observation, cancellationToken).ConfigureAwait(false);
             if (llmContent.Error is not null)
             {
                 return Fail(session, llmContent.Error, lastObservation);
@@ -94,7 +96,7 @@ public sealed class AgentLoop
             {
                 var retryPrompt = prompt + Environment.NewLine +
                     "Your previous reply was invalid. Return ONLY one valid JSON object matching the schema.";
-                llmContent = await RequestLlmDecisionAsync(retryPrompt, stepIndex, cancellationToken).ConfigureAwait(false);
+                llmContent = await RequestLlmDecisionAsync(retryPrompt, observation, cancellationToken).ConfigureAwait(false);
                 if (llmContent.Error is not null)
                 {
                     return Fail(session, llmContent.Error, lastObservation);
@@ -130,6 +132,7 @@ public sealed class AgentLoop
                     StepIndex = stepIndex,
                     UserGoal = session.UserGoal,
                     ObservationSummaryJson = observation.ToJsonSummary(),
+                    ScreenshotPath = observation.Screenshot?.FilePath,
                     LlmRawOutput = llmContent.Content,
                     ParsedDecisionJson = JsonSerializer.Serialize(decision, LogJsonOptions),
                     ActionResultJson = JsonSerializer.Serialize(actionResult, LogJsonOptions),
@@ -185,12 +188,14 @@ public sealed class AgentLoop
 
     private async Task<(string? Content, string? Error)> RequestLlmDecisionAsync(
         string prompt,
-        int stepIndex,
+        DesktopObservation observation,
         CancellationToken cancellationToken)
     {
         try
         {
-            var content = await _aiClient.GetDecisionAsync(prompt, cancellationToken).ConfigureAwait(false);
+            var content = await _aiClient
+                .GetDecisionAsync(prompt, observation.Screenshot?.Base64Png, cancellationToken)
+                .ConfigureAwait(false);
             return (content, null);
         }
         catch (AiClientException ex)

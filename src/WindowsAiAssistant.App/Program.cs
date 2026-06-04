@@ -24,6 +24,7 @@ public static class AppServices
         services.AddSingleton<IProviderConfigurationService, ProviderConfigurationService>();
         services.AddSingleton<ForegroundWindowService>();
         services.AddSingleton<ScreenInfoService>();
+        services.AddSingleton<ScreenCaptureService>();
         services.AddSingleton<ObservationService>();
         services.AddSingleton<IActionHandler, RespondActionHandler>();
         services.AddSingleton<IActionHandler, AskUserActionHandler>();

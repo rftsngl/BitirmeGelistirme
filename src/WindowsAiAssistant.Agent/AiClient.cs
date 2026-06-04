@@ -29,16 +29,20 @@ public sealed class AiClient : IDisposable
         };
     }
 
-    public Task<string> GetDecisionAsync(string prompt, CancellationToken cancellationToken = default) =>
-        GetDecisionAsync(prompt, _providerOptions, _agentOptions.SystemPrompt, cancellationToken);
+    public Task<string> GetDecisionAsync(
+        string prompt,
+        string? imageBase64Png = null,
+        CancellationToken cancellationToken = default) =>
+        GetDecisionAsync(prompt, _providerOptions, _agentOptions.SystemPrompt, imageBase64Png, cancellationToken);
 
     public Task<string> ProbeAsync(ProviderOptions options, CancellationToken cancellationToken = default) =>
-        GetDecisionAsync("Reply with exactly: OK", options, "You are a connectivity probe. Reply briefly.", cancellationToken);
+        GetDecisionAsync("Reply with exactly: OK", options, "You are a connectivity probe. Reply briefly.", null, cancellationToken);
 
     public async Task<string> GetDecisionAsync(
         string prompt,
         ProviderOptions options,
         string systemPrompt,
+        string? imageBase64Png = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
@@ -47,12 +51,16 @@ public sealed class AiClient : IDisposable
 
         ValidateConfiguration(options);
 
+        var useVision = options.VisionEnabled && !string.IsNullOrWhiteSpace(imageBase64Png);
+
         if (string.Equals(options.Provider, "Gemini", StringComparison.OrdinalIgnoreCase))
         {
-            return await GetGeminiDecisionAsync(prompt, options, systemPrompt, cancellationToken).ConfigureAwait(false);
+            return await GetGeminiDecisionAsync(prompt, options, systemPrompt, useVision ? imageBase64Png : null, cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        return await GetOpenAiCompatibleDecisionAsync(prompt, options, systemPrompt, cancellationToken).ConfigureAwait(false);
+        return await GetOpenAiCompatibleDecisionAsync(prompt, options, systemPrompt, useVision ? imageBase64Png : null, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public void Dispose() => _httpClient.Dispose();
@@ -61,10 +69,11 @@ public sealed class AiClient : IDisposable
         string prompt,
         ProviderOptions options,
         string systemPrompt,
+        string? imageBase64Png,
         CancellationToken cancellationToken)
     {
         var requestUri = BuildOpenAiRequestUri(options);
-        var requestBody = BuildOpenAiRequestBody(prompt, options, systemPrompt);
+        var requestBody = BuildOpenAiRequestBody(prompt, options, systemPrompt, imageBase64Png);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
         ApplyAuthentication(request, options);
@@ -79,10 +88,11 @@ public sealed class AiClient : IDisposable
         string prompt,
         ProviderOptions options,
         string systemPrompt,
+        string? imageBase64Png,
         CancellationToken cancellationToken)
     {
         var requestUri = BuildGeminiRequestUri(options);
-        var requestBody = BuildGeminiRequestBody(prompt, options, systemPrompt);
+        var requestBody = BuildGeminiRequestBody(prompt, options, systemPrompt, imageBase64Png);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
         ApplyAuthentication(request, options);
@@ -214,15 +224,31 @@ public sealed class AiClient : IDisposable
         return new Uri($"{baseUrl}{endpoint}");
     }
 
-    private static string BuildOpenAiRequestBody(string userPrompt, ProviderOptions options, string systemPrompt)
+    private static string BuildOpenAiRequestBody(
+        string userPrompt,
+        ProviderOptions options,
+        string systemPrompt,
+        string? imageBase64Png)
     {
+        object userContent = string.IsNullOrWhiteSpace(imageBase64Png)
+            ? userPrompt
+            : new object[]
+            {
+                new { type = "text", text = userPrompt },
+                new
+                {
+                    type = "image_url",
+                    image_url = new { url = $"data:image/png;base64,{imageBase64Png}" }
+                }
+            };
+
         var payload = new Dictionary<string, object?>
         {
             ["model"] = options.Model,
             ["messages"] = new object[]
             {
                 new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
+                new { role = "user", content = userContent }
             }
         };
 
@@ -239,7 +265,11 @@ public sealed class AiClient : IDisposable
         return JsonSerializer.Serialize(payload, JsonOptions);
     }
 
-    private static string BuildGeminiRequestBody(string userPrompt, ProviderOptions options, string systemPrompt)
+    private static string BuildGeminiRequestBody(
+        string userPrompt,
+        ProviderOptions options,
+        string systemPrompt,
+        string? imageBase64Png)
     {
         var generationConfig = new Dictionary<string, object?>();
         if (options.Temperature is not null)
@@ -250,6 +280,19 @@ public sealed class AiClient : IDisposable
         if (options.MaxTokens is not null)
         {
             generationConfig["maxOutputTokens"] = options.MaxTokens.Value;
+        }
+
+        var userParts = new List<object> { new { text = userPrompt } };
+        if (!string.IsNullOrWhiteSpace(imageBase64Png))
+        {
+            userParts.Add(new
+            {
+                inline_data = new
+                {
+                    mime_type = "image/png",
+                    data = imageBase64Png
+                }
+            });
         }
 
         var payload = new Dictionary<string, object?>
@@ -263,7 +306,7 @@ public sealed class AiClient : IDisposable
                 new
                 {
                     role = "user",
-                    parts = new[] { new { text = userPrompt } }
+                    parts = userParts.ToArray()
                 }
             }
         };

@@ -14,12 +14,14 @@ public sealed class DesktopObservation
     public int CursorY { get; init; }
     public string? LastActionResult { get; init; }
     public string? LastUserGoal { get; init; }
+    public ScreenshotObservation? Screenshot { get; init; }
 
     public string ToShortSummary()
     {
         var window = string.IsNullOrWhiteSpace(ActiveWindowTitle) ? "(baslik yok)" : ActiveWindowTitle;
         var process = string.IsNullOrWhiteSpace(ActiveProcessName) ? "(bilinmiyor)" : ActiveProcessName;
-        return $"{window} · {process} · {ScreenWidth}x{ScreenHeight}";
+        var screenshot = Screenshot is null ? string.Empty : " · screenshot";
+        return $"{window} · {process} · {ScreenWidth}x{ScreenHeight}{screenshot}";
     }
 
     public string ToPromptSummary()
@@ -35,6 +37,8 @@ public sealed class DesktopObservation
             cursorY: {CursorY}
             lastUserGoal: {LastUserGoal ?? "(none)"}
             lastActionResult: {LastActionResult ?? "(none)"}
+            screenshotPath: {Screenshot?.FilePath ?? "(none)"}
+            screenshotSize: {(Screenshot is null ? "(none)" : $"{Screenshot.Width}x{Screenshot.Height}")}
             """;
     }
 
@@ -50,6 +54,9 @@ public sealed class DesktopObservation
             cursorX = CursorX,
             cursorY = CursorY,
             lastUserGoal = LastUserGoal,
-            lastActionResult = LastActionResult
+            lastActionResult = LastActionResult,
+            screenshotPath = Screenshot?.FilePath,
+            screenshotWidth = Screenshot?.Width,
+            screenshotHeight = Screenshot?.Height
         });
 }

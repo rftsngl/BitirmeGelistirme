@@ -1,4 +1,5 @@
 using System.Text;
+using WindowsAiAssistant.Runtime.Config;
 using WindowsAiAssistant.Runtime.Observation;
 
 namespace WindowsAiAssistant.Agent;
@@ -6,10 +7,12 @@ namespace WindowsAiAssistant.Agent;
 public sealed class PromptBuilder
 {
     private readonly AgentOptions _options;
+    private readonly ProviderOptions _providerOptions;
 
-    public PromptBuilder(AgentOptions options)
+    public PromptBuilder(AgentOptions options, ProviderOptions providerOptions)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _providerOptions = providerOptions ?? throw new ArgumentNullException(nameof(providerOptions));
     }
 
     public string Build(string userGoal, DesktopObservation observation, IEnumerable<AgentStep> priorSteps)
@@ -44,11 +47,33 @@ public sealed class PromptBuilder
         builder.AppendLine();
         builder.AppendLine("Current desktop observation:");
         builder.AppendLine(observation.ToPromptSummary());
+        AppendScreenshotContext(builder, observation);
         builder.AppendLine();
         AppendStepHistory(builder, priorSteps);
         builder.AppendLine($"User goal: {userGoal.Trim()}");
 
         return builder.ToString();
+    }
+
+    private void AppendScreenshotContext(StringBuilder builder, DesktopObservation observation)
+    {
+        if (observation.Screenshot is null)
+        {
+            return;
+        }
+
+        builder.AppendLine("Screen capture:");
+        if (_providerOptions.VisionEnabled)
+        {
+            builder.AppendLine("- A desktop screenshot image is attached to this request.");
+            builder.AppendLine("- Use visible UI content when answering questions about what is on screen.");
+        }
+        else
+        {
+            builder.AppendLine($"- screenshotPath: {observation.Screenshot.FilePath}");
+            builder.AppendLine("- Vision is disabled for this provider profile; you cannot see pixels.");
+            builder.AppendLine("- Use window metadata above and mention that a screenshot was saved locally.");
+        }
     }
 
     private void AppendStepHistory(StringBuilder builder, IEnumerable<AgentStep> priorSteps)
