@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WindowsAiAssistant.App.ProviderSettings;
-using WindowsAiAssistant.Infrastructure;
 
 namespace WindowsAiAssistant.App.Views;
 

@@ -1,16 +1,9 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using WindowsAiAssistant.Infrastructure;
-using WindowsAiAssistant.Infrastructure.Secrets;
-using WindowsAiAssistant.Infrastructure.State;
+using WindowsAiAssistant.App.ProviderSettings;
 
 namespace WindowsAiAssistant.App.Services;
 
-/// <summary>
-/// Shared, observable view of the currently active model provider profile.
-/// Backed by <see cref="ModelDecisionSettings"/>, <see cref="IActiveProfileStore"/>, and the secret store.
-/// Use <see cref="Refresh"/> after any mutation to update bound consumers (Assistant header, settings page, etc.).
-/// </summary>
 public interface IActiveProviderStatus : INotifyPropertyChanged
 {
     string EffectiveActiveProfileId { get; }
@@ -27,113 +20,34 @@ public interface IActiveProviderStatus : INotifyPropertyChanged
     string ReadyBadge { get; }
 
     void Refresh();
-    bool ProfileHasSavedKey(string profileId);
 }
 
 public sealed class ActiveProviderStatus : IActiveProviderStatus
 {
-    private readonly ModelDecisionSettings _settings;
-    private readonly IActiveProfileStore _activeProfileStore;
-    private readonly IModelProviderSecretStore _secretStore;
-
-    public ActiveProviderStatus(
-        ModelDecisionSettings settings,
-        IActiveProfileStore activeProfileStore,
-        IModelProviderSecretStore secretStore)
-    {
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _activeProfileStore = activeProfileStore ?? throw new ArgumentNullException(nameof(activeProfileStore));
-        _secretStore = secretStore ?? throw new ArgumentNullException(nameof(secretStore));
-    }
+    private ProviderProfile? _profile;
+    private bool _hasSavedKey;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public string EffectiveActiveProfileId =>
-        _activeProfileStore.GetActiveProfileId() ?? _settings.ActiveProfile ?? string.Empty;
+    public string EffectiveActiveProfileId => _profile?.Id ?? string.Empty;
+    public bool HasActiveProfile => _profile is not null;
+    public string DisplayName => _profile?.DisplayName ?? "Yeni AI runtime bekleniyor";
+    public string Model => _profile?.Model ?? "-";
+    public string Kind => _profile?.Kind.ToString() ?? "FrontendOnly";
+    public string BaseUrl => _profile?.BaseUrl ?? string.Empty;
+    public bool IsEnabled => _profile?.IsEnabled ?? false;
+    public bool RequiresApiKey => _profile?.RequiresApiKey ?? false;
+    public bool HasSavedKey => _hasSavedKey;
+    public bool IsReady => IsEnabled && (!RequiresApiKey || HasSavedKey);
+    public string ReadyReason => IsReady ? "Hazir." : "Yeni AI-first backend henuz baglanmadi.";
+    public string ReadyBadge => IsReady ? "HAZIR" : "RUNTIME YOK";
 
-    public bool HasActiveProfile => ResolveProfile() is not null;
-
-    public string DisplayName => ResolveProfile()?.DisplayName ?? "Aktif profil yok";
-    public string Model => ResolveProfile()?.Model ?? "—";
-    public string Kind => ResolveProfile()?.Kind.ToString() ?? "—";
-    public string BaseUrl => ResolveProfile()?.BaseUrl ?? string.Empty;
-    public bool IsEnabled => ResolveProfile()?.IsEnabled ?? false;
-    public bool RequiresApiKey => ResolveProfile()?.RequiresApiKey ?? false;
-
-    public bool HasSavedKey
+    public void SetProfile(ProviderProfile? profile, bool hasSavedKey)
     {
-        get
-        {
-            var profile = ResolveProfile();
-            if (profile is null)
-            {
-                return false;
-            }
-
-            return _secretStore.HasApiKey(profile.Id);
-        }
+        _profile = profile;
+        _hasSavedKey = hasSavedKey;
+        Refresh();
     }
-
-    public bool IsReady
-    {
-        get
-        {
-            var profile = ResolveProfile();
-            if (profile is null || !profile.IsEnabled)
-            {
-                return false;
-            }
-
-            if (!profile.RequiresApiKey)
-            {
-                return true;
-            }
-
-            if (_secretStore.HasApiKey(profile.Id))
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrWhiteSpace(profile.ApiKeyEnvVar) &&
-                !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(profile.ApiKeyEnvVar)))
-            {
-                return true;
-            }
-
-            return false;
-        }
-    }
-
-    public string ReadyReason
-    {
-        get
-        {
-            var profile = ResolveProfile();
-            if (profile is null)
-            {
-                return "Aktif profil ayarlanmamış.";
-            }
-
-            if (!profile.IsEnabled)
-            {
-                return "Profil devre dışı.";
-            }
-
-            if (profile.RequiresApiKey && !HasSavedKey &&
-                (string.IsNullOrWhiteSpace(profile.ApiKeyEnvVar) ||
-                 string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(profile.ApiKeyEnvVar))))
-            {
-                return "API anahtarı eksik. Ayarlar > Profil > API Anahtarı altından kaydedin.";
-            }
-
-            return "Hazır.";
-        }
-    }
-
-    public string ReadyBadge => IsReady ? "HAZIR" : "AYAR GEREKLİ";
-
-    public bool ProfileHasSavedKey(string profileId) =>
-        !string.IsNullOrWhiteSpace(profileId) && _secretStore.HasApiKey(profileId);
 
     public void Refresh()
     {
@@ -149,18 +63,6 @@ public sealed class ActiveProviderStatus : IActiveProviderStatus
         OnPropertyChanged(nameof(IsReady));
         OnPropertyChanged(nameof(ReadyReason));
         OnPropertyChanged(nameof(ReadyBadge));
-    }
-
-    private ModelDecisionProfile? ResolveProfile()
-    {
-        var id = EffectiveActiveProfileId;
-        if (string.IsNullOrWhiteSpace(id) || _settings.Profiles is null)
-        {
-            return null;
-        }
-
-        return _settings.Profiles.FirstOrDefault(p =>
-            p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

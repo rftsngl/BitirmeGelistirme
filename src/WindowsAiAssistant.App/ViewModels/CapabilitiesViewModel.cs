@@ -1,34 +1,36 @@
 using System.Collections.ObjectModel;
 using WindowsAiAssistant.App.Models;
 using WindowsAiAssistant.App.Mvvm;
-using WindowsAiAssistant.Contracts.Interfaces;
-using WindowsAiAssistant.Contracts.Models.Agent.Enums;
 
 namespace WindowsAiAssistant.App.ViewModels;
 
 public sealed class CapabilitiesViewModel : ObservableObject
 {
-    private readonly ICapabilityRegistry _capabilityRegistry;
-    private readonly List<CapabilityViewItem> _allItems = [];
+    private readonly List<CapabilityViewItem> _allItems =
+    [
+        NewItem("OpenApp", "\uE7F4", "Uygulama acma eylemi.", "Application"),
+        NewItem("OpenFile", "\uE8E5", "Dosyayi varsayilan uygulamada acma eylemi.", "File"),
+        NewItem("OpenUrl", "\uE774", "URL acma eylemi.", "Url"),
+        NewItem("TypeText", "\uE765", "Aktif uygulamaya metin yazma eylemi.", "ForegroundWindow"),
+        NewItem("PressKey", "\uE92E", "Tek tus gonderme eylemi.", "ForegroundWindow"),
+        NewItem("PressShortcut", "\uE92E", "Klavye kisayolu gonderme eylemi.", "ForegroundWindow"),
+        NewItem("Wait", "\uE823", "Kisa sure bekleme eylemi.", "Runtime"),
+        NewItem("AskUser", "\uE897", "Kullanicidan ek bilgi isteme eylemi.", "User"),
+        NewItem("Stop", "\uE71A", "Agent dongusunu sonlandirma eylemi.", "Runtime")
+    ];
 
     private string _searchText = string.Empty;
 
-    public CapabilitiesViewModel(ICapabilityRegistry capabilityRegistry)
+    public CapabilitiesViewModel()
     {
-        _capabilityRegistry = capabilityRegistry ?? throw new ArgumentNullException(nameof(capabilityRegistry));
         Items = [];
-        ReloadFromRegistry();
+        ApplyFilter();
     }
 
     public ObservableCollection<CapabilityViewItem> Items { get; }
-
     public int TotalCount => _allItems.Count;
     public int VisibleCount => Items.Count;
-
-    public string CountSummary =>
-        TotalCount == VisibleCount
-            ? $"Toplam {TotalCount} yetenek"
-            : $"{VisibleCount} / {TotalCount} yetenek gösteriliyor";
+    public string CountSummary => $"{VisibleCount} / {TotalCount} planlanan eylem gosteriliyor";
 
     public string SearchText
     {
@@ -44,33 +46,19 @@ public sealed class CapabilitiesViewModel : ObservableObject
 
     public void ReloadFromRegistry()
     {
-        _allItems.Clear();
-        foreach (var capability in _capabilityRegistry.GetAll().OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
-        {
-            _allItems.Add(new CapabilityViewItem
-            {
-                Name = capability.Name,
-                IconGlyph = ResolveIconGlyph(capability.Name),
-                TargetKindLabels = capability.SupportedTargetKinds.Select(k => k.ToString()).ToList(),
-                Description = ResolveDescription(capability.Name)
-            });
-        }
-
         ApplyFilter();
     }
 
     private void ApplyFilter()
     {
         Items.Clear();
-        IEnumerable<CapabilityViewItem> source = _allItems;
-        if (!string.IsNullOrWhiteSpace(_searchText))
-        {
-            var query = _searchText.Trim();
-            source = _allItems.Where(item =>
+        var query = SearchText.Trim();
+        var source = string.IsNullOrWhiteSpace(query)
+            ? _allItems
+            : _allItems.Where(item =>
                 item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 item.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                item.TargetKindLabels.Any(l => l.Contains(query, StringComparison.OrdinalIgnoreCase)));
-        }
+                item.TargetKindLabels.Any(label => label.Contains(query, StringComparison.OrdinalIgnoreCase)));
 
         foreach (var item in source)
         {
@@ -81,33 +69,12 @@ public sealed class CapabilitiesViewModel : ObservableObject
         OnPropertyChanged(nameof(CountSummary));
     }
 
-    private static string ResolveIconGlyph(string capabilityName) =>
-        capabilityName switch
+    private static CapabilityViewItem NewItem(string name, string icon, string description, string target) =>
+        new()
         {
-            "ApplicationCapability" => "\uE7F4",
-            "WindowProcessCapability" => "\uE737",
-            "ProcessVerificationCapability" => "\uE9F5",
-            "ForegroundAlignmentCapability" => "\uE74C",
-            "ServiceStatusCapability" => "\uE9D9",
-            "ServiceControlCapability" => "\uE9F3",
-            "FileVerificationCapability" => "\uE73E",
-            "FileOpenCapability" => "\uE8E5",
-            "NoOpCapability" => "\uE711",
-            _ => "\uE9CE"
-        };
-
-    private static string ResolveDescription(string capabilityName) =>
-        capabilityName switch
-        {
-            "ApplicationCapability" => "Belirlenen uygulamayı açar veya odaklar.",
-            "WindowProcessCapability" => "Pencere/işlem hedeflerinde bağlam çıkarır.",
-            "ProcessVerificationCapability" => "İşlem varlığı doğrulaması yapar.",
-            "ForegroundAlignmentCapability" => "Ön planda olan pencereyi hizalar.",
-            "ServiceStatusCapability" => "Windows servis durumunu raporlar.",
-            "ServiceControlCapability" => "Windows servisini başlat/durdur.",
-            "FileVerificationCapability" => "Belirtilen dosyanın varlığını kontrol eder.",
-            "FileOpenCapability" => "Dosyayı varsayılan uygulamayla açar.",
-            "NoOpCapability" => "Bilinçli olarak hiçbir şey yapmaz (placeholder).",
-            _ => string.Empty
+            Name = name,
+            IconGlyph = icon,
+            Description = description,
+            TargetKindLabels = [target]
         };
 }

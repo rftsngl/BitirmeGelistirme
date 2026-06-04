@@ -1,62 +1,47 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
+using WindowsAiAssistant.App.Mvvm;
 using WindowsAiAssistant.App.Services;
-using WindowsAiAssistant.Infrastructure;
-using WindowsAiAssistant.Infrastructure.Secrets;
-using WindowsAiAssistant.Infrastructure.State;
 
 namespace WindowsAiAssistant.App.ProviderSettings;
 
-public sealed class ProviderSettingsViewModel : INotifyPropertyChanged
+public sealed class ProviderSettingsViewModel : ObservableObject
 {
-    private readonly ModelDecisionSettings _settings;
-    private readonly IActiveProfileStore _activeProfileStore;
-    private readonly IModelProviderSecretStore _secretStore;
-    private readonly RefreshableModelDecisionProvider _refreshable;
-    private readonly ProviderConnectionTester _connectionTester;
-    private readonly IUserProviderProfileStore _userProfileStore;
-    private readonly IBuiltInProfileSet _builtInProfileSet;
-    private readonly IActiveProviderStatus _providerStatus;
-
-    private ModelDecisionProfile? _selectedProfile;
-    private string _statusMessage = string.Empty;
-    private string _apiKeyInput = string.Empty;
+    private const string PlaceholderProfileId = "new-ai-runtime";
+    private readonly ActiveProviderStatus _providerStatus;
+    private readonly HashSet<string> _savedKeys = new(StringComparer.OrdinalIgnoreCase);
+    private ProviderProfile? _selectedProfile;
     private ProviderProfileDraft? _editingDraft;
-    private bool _isEditingNew;
     private ConnectionTestSummary? _lastConnectionTest;
+    private string? _activeProfileId;
+    private string _statusMessage = "Bu ekran su anda yalnizca frontend durumunu gosterir.";
+    private string _apiKeyInput = string.Empty;
+    private bool _isEditingNew;
     private bool _isTestingConnection;
 
-    public ProviderSettingsViewModel(
-        ModelDecisionSettings settings,
-        IActiveProfileStore activeProfileStore,
-        IModelProviderSecretStore secretStore,
-        RefreshableModelDecisionProvider refreshable,
-        ProviderConnectionTester connectionTester,
-        IUserProviderProfileStore userProfileStore,
-        IBuiltInProfileSet builtInProfileSet,
-        IActiveProviderStatus providerStatus)
+    public ProviderSettingsViewModel(ActiveProviderStatus providerStatus)
     {
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _activeProfileStore = activeProfileStore ?? throw new ArgumentNullException(nameof(activeProfileStore));
-        _secretStore = secretStore ?? throw new ArgumentNullException(nameof(secretStore));
-        _refreshable = refreshable ?? throw new ArgumentNullException(nameof(refreshable));
-        _connectionTester = connectionTester ?? throw new ArgumentNullException(nameof(connectionTester));
-        _userProfileStore = userProfileStore ?? throw new ArgumentNullException(nameof(userProfileStore));
-        _builtInProfileSet = builtInProfileSet ?? throw new ArgumentNullException(nameof(builtInProfileSet));
         _providerStatus = providerStatus ?? throw new ArgumentNullException(nameof(providerStatus));
-        Profiles = new ObservableCollection<ModelDecisionProfile>();
-        ProfileItems = new ObservableCollection<ProfileListItem>();
+        Profiles =
+        [
+            new ProviderProfile
+            {
+                Id = PlaceholderProfileId,
+                DisplayName = "Yeni AI-first runtime",
+                Kind = ModelProviderKind.OpenAICompatible,
+                Model = "Henuz baglanmadi",
+                EndpointPath = "chat/completions",
+                IsEnabled = false
+            }
+        ];
+        ProfileItems = [];
     }
 
     public IActiveProviderStatus ProviderStatus => _providerStatus;
-
+    public ObservableCollection<ProviderProfile> Profiles { get; }
     public ObservableCollection<ProfileListItem> ProfileItems { get; }
 
-    public ObservableCollection<ModelDecisionProfile> Profiles { get; }
-
-    public ModelDecisionProfile? SelectedProfile
+    public ProviderProfile? SelectedProfile
     {
         get => _selectedProfile;
         set
@@ -67,69 +52,55 @@ public sealed class ProviderSettingsViewModel : INotifyPropertyChanged
             }
 
             _selectedProfile = value;
-            _apiKeyInput = string.Empty;
-            _lastConnectionTest = null;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(DetailDisplayName));
-            OnPropertyChanged(nameof(DetailKind));
-            OnPropertyChanged(nameof(DetailBaseUrl));
-            OnPropertyChanged(nameof(DetailModel));
-            OnPropertyChanged(nameof(DetailEndpointPath));
-            OnPropertyChanged(nameof(DetailRequiresApiKey));
-            OnPropertyChanged(nameof(DetailIsEnabled));
-            OnPropertyChanged(nameof(DetailOriginLabel));
-            OnPropertyChanged(nameof(IsCurrentBuiltIn));
-            OnPropertyChanged(nameof(IsCurrentUserDefined));
-            OnPropertyChanged(nameof(IsCurrentActive));
-            OnPropertyChanged(nameof(KeySaveRemoveEnabled));
-            OnPropertyChanged(nameof(SetActiveEnabled));
-            OnPropertyChanged(nameof(SetActiveButtonText));
-            OnPropertyChanged(nameof(TestConnectionEnabled));
-            OnPropertyChanged(nameof(EditEnabled));
-            OnPropertyChanged(nameof(DeleteEnabled));
-            OnPropertyChanged(nameof(SavedKeyStatus));
-            OnPropertyChanged(nameof(SavedKeyMask));
-            OnPropertyChanged(nameof(HasSavedKeyForCurrent));
-            OnPropertyChanged(nameof(DisabledBannerText));
-            OnPropertyChanged(nameof(ShowDisabledBanner));
-            OnPropertyChanged(nameof(ShowNoKeyMessage));
-            OnPropertyChanged(nameof(ShowSavedKeyRow));
-            OnPropertyChanged(nameof(DisabledBannerVisibility));
-            OnPropertyChanged(nameof(NoKeyMessageVisibility));
-            OnPropertyChanged(nameof(SavedKeyRowVisibility));
-            OnPropertyChanged(nameof(KeyAreaVisibility));
-            OnPropertyChanged(nameof(LastConnectionTest));
-            OnPropertyChanged(nameof(HasLastConnectionTest));
+            ApiKeyInput = string.Empty;
+            LastConnectionTest = null;
+            NotifySelectionChanged();
         }
     }
 
-    public bool IsCurrentActive =>
-        SelectedProfile is not null &&
-        SelectedProfile.Id.Equals(EffectiveActiveProfileId, StringComparison.OrdinalIgnoreCase);
+    public string EffectiveActiveProfileId => _activeProfileId ?? string.Empty;
+    public string ActiveProfileCaption => string.IsNullOrWhiteSpace(EffectiveActiveProfileId) ? "(yok)" : EffectiveActiveProfileId;
+    public bool IsCurrentActive => SelectedProfile is not null && SelectedProfile.Id.Equals(EffectiveActiveProfileId, StringComparison.OrdinalIgnoreCase);
+    public bool IsCurrentBuiltIn => SelectedProfile?.Id.Equals(PlaceholderProfileId, StringComparison.OrdinalIgnoreCase) == true;
+    public bool IsCurrentUserDefined => SelectedProfile is not null && !IsCurrentBuiltIn;
+    public string SetActiveButtonText => IsCurrentActive ? "Aktif" : "Aktif Yap";
+    public bool SetActiveEnabled => SelectedProfile is { IsEnabled: true };
+    public bool TestConnectionEnabled => SelectedProfile is not null;
+    public bool EditEnabled => IsCurrentUserDefined;
+    public bool DeleteEnabled => IsCurrentUserDefined;
 
-    public string SetActiveButtonText =>
-        IsCurrentActive ? "Aktif (seçili)" : "Aktif Yap";
+    public string DetailDisplayName => SelectedProfile?.DisplayName ?? "-";
+    public string DetailKind => SelectedProfile?.Kind.ToString() ?? "-";
+    public string DetailBaseUrl => SelectedProfile?.BaseUrl ?? "-";
+    public string DetailModel => SelectedProfile?.Model ?? "-";
+    public string DetailEndpointPath => SelectedProfile?.EndpointPath ?? "-";
+    public string DetailRequiresApiKey => SelectedProfile is null ? "-" : SelectedProfile.RequiresApiKey ? "Evet" : "Hayir";
+    public string DetailIsEnabled => SelectedProfile is null ? "-" : SelectedProfile.IsEnabled ? "Evet" : "Hayir";
+    public string DetailOriginLabel => SelectedProfile is null ? "-" : IsCurrentBuiltIn ? "Yerlesik frontend placeholder" : "Gecici UI profili";
 
-    public bool HasSavedKeyForCurrent =>
-        SelectedProfile is { RequiresApiKey: true } &&
-        _secretStore.HasApiKey(SelectedProfile.Id);
+    public bool HasSavedKeyForCurrent => SelectedProfile is not null && _savedKeys.Contains(SelectedProfile.Id);
+    public string SavedKeyMask => HasSavedKeyForCurrent ? "********demo" : string.Empty;
+    public string SavedKeyStatus => HasSavedKeyForCurrent ? "Anahtar yalnizca UI oturumunda tutuluyor." : "Kayitli anahtar yok.";
+    public bool KeySaveRemoveEnabled => SelectedProfile is { RequiresApiKey: true };
+    public bool ShowDisabledBanner => SelectedProfile is { IsEnabled: false };
+    public string DisabledBannerText => ShowDisabledBanner ? "Profil devre disi. Yeni runtime baglandiginda etkinlestirilecek." : string.Empty;
+    public bool ShowNoKeyMessage => SelectedProfile is { RequiresApiKey: false };
+    public bool ShowSavedKeyRow => SelectedProfile is { RequiresApiKey: true };
+    public Visibility KeyAreaVisibility => ShowSavedKeyRow ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility DisabledBannerVisibility => ShowDisabledBanner ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility NoKeyMessageVisibility => ShowNoKeyMessage ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility SavedKeyRowVisibility => ShowSavedKeyRow ? Visibility.Visible : Visibility.Collapsed;
 
-    public string SavedKeyMask
+    public string ApiKeyInput
     {
-        get
-        {
-            if (SelectedProfile is null || !SelectedProfile.RequiresApiKey)
-            {
-                return string.Empty;
-            }
+        get => _apiKeyInput;
+        set => SetField(ref _apiKeyInput, value ?? string.Empty);
+    }
 
-            if (!_secretStore.TryGetApiKey(SelectedProfile.Id, out var key) || string.IsNullOrEmpty(key))
-            {
-                return string.Empty;
-            }
-
-            return MaskKey(key!);
-        }
+    public string StatusMessage
+    {
+        get => _statusMessage;
+        private set => SetField(ref _statusMessage, value);
     }
 
     public ConnectionTestSummary? LastConnectionTest
@@ -137,130 +108,19 @@ public sealed class ProviderSettingsViewModel : INotifyPropertyChanged
         get => _lastConnectionTest;
         private set
         {
-            if (ReferenceEquals(_lastConnectionTest, value))
+            if (SetField(ref _lastConnectionTest, value))
             {
-                return;
+                OnPropertyChanged(nameof(HasLastConnectionTest));
             }
-
-            _lastConnectionTest = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(HasLastConnectionTest));
         }
     }
 
-    public bool HasLastConnectionTest => _lastConnectionTest is not null;
+    public bool HasLastConnectionTest => LastConnectionTest is not null;
 
     public bool IsTestingConnection
     {
         get => _isTestingConnection;
-        private set
-        {
-            if (_isTestingConnection == value)
-            {
-                return;
-            }
-
-            _isTestingConnection = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public Visibility KeyAreaVisibility =>
-        SelectedProfile?.RequiresApiKey == true ? Visibility.Visible : Visibility.Collapsed;
-
-    public bool KeySaveRemoveEnabled =>
-        SelectedProfile is { RequiresApiKey: true };
-
-    public Visibility DisabledBannerVisibility =>
-        ShowDisabledBanner ? Visibility.Visible : Visibility.Collapsed;
-
-    public bool ShowDisabledBanner =>
-        SelectedProfile is { IsEnabled: false };
-
-    public Visibility NoKeyMessageVisibility =>
-        ShowNoKeyMessage ? Visibility.Visible : Visibility.Collapsed;
-
-    public bool ShowNoKeyMessage =>
-        SelectedProfile is { RequiresApiKey: false };
-
-    public Visibility SavedKeyRowVisibility =>
-        ShowSavedKeyRow ? Visibility.Visible : Visibility.Collapsed;
-
-    public bool ShowSavedKeyRow =>
-        SelectedProfile?.RequiresApiKey == true;
-
-    /// <summary>
-    /// Effective active profile: user override file, else appsettings default.
-    /// </summary>
-    public string EffectiveActiveProfileId =>
-        _activeProfileStore.GetActiveProfileId() ?? _settings.ActiveProfile ?? string.Empty;
-
-    public string ActiveProfileCaption =>
-        string.IsNullOrWhiteSpace(EffectiveActiveProfileId)
-            ? "(yok)"
-            : EffectiveActiveProfileId;
-
-    public string DetailDisplayName => SelectedProfile?.DisplayName ?? "—";
-    public string DetailKind => SelectedProfile?.Kind.ToString() ?? "—";
-    public string DetailBaseUrl => SelectedProfile?.BaseUrl ?? "—";
-    public string DetailModel => SelectedProfile?.Model ?? "—";
-    public string DetailEndpointPath => SelectedProfile?.EndpointPath ?? "—";
-    public string DetailRequiresApiKey => SelectedProfile is null ? "—" : SelectedProfile.RequiresApiKey ? "Evet" : "Hayır";
-    public string DetailIsEnabled => SelectedProfile is null ? "—" : SelectedProfile.IsEnabled ? "Evet" : "Hayır";
-
-    public string DetailOriginLabel =>
-        SelectedProfile is null ? "—" :
-        IsCurrentBuiltIn ? "Yerleşik (uygulama ile birlikte gelir)" : "Kullanıcı tanımlı";
-
-    public bool IsCurrentBuiltIn =>
-        SelectedProfile is not null && _builtInProfileSet.IsBuiltIn(SelectedProfile.Id);
-
-    public bool IsCurrentUserDefined =>
-        SelectedProfile is not null && !IsCurrentBuiltIn;
-
-    public bool SetActiveEnabled =>
-        SelectedProfile is { IsEnabled: true };
-
-    public bool TestConnectionEnabled =>
-        SelectedProfile is { IsEnabled: true };
-
-    public bool EditEnabled => IsCurrentUserDefined;
-
-    public bool DeleteEnabled => IsCurrentUserDefined;
-
-    public string SavedKeyStatus
-    {
-        get
-        {
-            if (SelectedProfile is null || !SelectedProfile.RequiresApiKey)
-            {
-                return string.Empty;
-            }
-
-            return _secretStore.HasApiKey(SelectedProfile.Id)
-                ? "Kayıtlı anahtar mevcut."
-                : "Kayıtlı anahtar yok.";
-        }
-    }
-
-    public string DisabledBannerText =>
-        SelectedProfile is { IsEnabled: false }
-            ? "Profil devre dışı. Düzenleyerek etkinleştirebilirsiniz."
-            : string.Empty;
-
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        private set
-        {
-            if (_statusMessage == value)
-            {
-                return;
-            }
-
-            _statusMessage = value;
-            OnPropertyChanged();
-        }
+        private set => SetField(ref _isTestingConnection, value);
     }
 
     public ProviderProfileDraft? EditingDraft
@@ -268,235 +128,96 @@ public sealed class ProviderSettingsViewModel : INotifyPropertyChanged
         get => _editingDraft;
         private set
         {
-            if (ReferenceEquals(_editingDraft, value))
+            if (SetField(ref _editingDraft, value))
             {
-                return;
+                OnPropertyChanged(nameof(IsEditing));
+                OnPropertyChanged(nameof(EditingTitle));
             }
-
-            _editingDraft = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(IsEditing));
-            OnPropertyChanged(nameof(EditingTitle));
         }
     }
 
     public bool IsEditing => EditingDraft is not null;
-
-    public string EditingTitle => _isEditingNew ? "Yeni profil" : "Profili düzenle";
-
-    /// <summary>
-    /// Buffer for API key input (cleared after successful save). Not persisted in VM across sessions.
-    /// </summary>
-    public string ApiKeyInput
-    {
-        get => _apiKeyInput;
-        set
-        {
-            if (_apiKeyInput == value)
-            {
-                return;
-            }
-
-            _apiKeyInput = value;
-            OnPropertyChanged();
-        }
-    }
+    public string EditingTitle => _isEditingNew ? "Yeni profil" : "Profili duzenle";
 
     public void Load()
     {
-        Profiles.Clear();
-        foreach (var p in _settings.Profiles ?? [])
-        {
-            Profiles.Add(p);
-        }
-
         RebuildProfileItems();
-
-        var effectiveId = EffectiveActiveProfileId;
-        SelectedProfile = Profiles.FirstOrDefault(x =>
-                           x.Id.Equals(effectiveId, StringComparison.OrdinalIgnoreCase))
-                       ?? Profiles.FirstOrDefault();
-
-        OnPropertyChanged(nameof(EffectiveActiveProfileId));
-        OnPropertyChanged(nameof(ActiveProfileCaption));
-        StatusMessage = string.Empty;
-    }
-
-    private void RebuildProfileItems()
-    {
-        ProfileItems.Clear();
-        foreach (var profile in Profiles)
-        {
-            ProfileItems.Add(new ProfileListItem(profile)
-            {
-                IsActive = IsProfileActive(profile.Id),
-                HasSavedKey = ProfileHasSavedKey(profile.Id),
-                IsBuiltIn = _builtInProfileSet.IsBuiltIn(profile.Id)
-            });
-        }
-    }
-
-    public ProfileListItem? FindListItem(string profileId) =>
-        ProfileItems.FirstOrDefault(item =>
-            item.Id.Equals(profileId, StringComparison.OrdinalIgnoreCase));
-
-    private void RefreshListItemFlags()
-    {
-        var activeId = EffectiveActiveProfileId;
-        foreach (var item in ProfileItems)
-        {
-            item.IsActive = !string.IsNullOrWhiteSpace(activeId) &&
-                            item.Id.Equals(activeId, StringComparison.OrdinalIgnoreCase);
-            item.HasSavedKey = ProfileHasSavedKey(item.Id);
-        }
+        SelectedProfile ??= Profiles.FirstOrDefault();
+        SyncProviderStatus();
     }
 
     public Task SetActiveAsync()
     {
-        if (SelectedProfile is null || !SelectedProfile.IsEnabled)
+        if (SelectedProfile is not { IsEnabled: true })
         {
-            StatusMessage = "Etkin bir profil seçin.";
+            StatusMessage = "Etkin bir profil secin.";
             return Task.CompletedTask;
         }
 
-        _activeProfileStore.SetActiveProfileId(SelectedProfile.Id);
-        _refreshable.Refresh();
-        _providerStatus.Refresh();
-        RefreshListItemFlags();
-        OnPropertyChanged(nameof(EffectiveActiveProfileId));
-        OnPropertyChanged(nameof(ActiveProfileCaption));
-        OnPropertyChanged(nameof(IsCurrentActive));
-        OnPropertyChanged(nameof(SetActiveButtonText));
-        StatusMessage = "Aktif profil güncellendi.";
+        _activeProfileId = SelectedProfile.Id;
+        RefreshFlags();
+        SyncProviderStatus();
+        NotifySelectionChanged();
+        StatusMessage = "Profil yalnizca frontend oturumu icin aktif edildi.";
         return Task.CompletedTask;
     }
 
     public Task SaveKeyAsync()
     {
-        if (SelectedProfile is null || !SelectedProfile.RequiresApiKey)
+        if (SelectedProfile is not { RequiresApiKey: true } || string.IsNullOrWhiteSpace(ApiKeyInput))
         {
-            StatusMessage = "Bu profil için API anahtarı gerekmiyor.";
+            StatusMessage = "UI oturumu icin bir API anahtari girin.";
             return Task.CompletedTask;
         }
 
-        if (string.IsNullOrWhiteSpace(ApiKeyInput))
-        {
-            StatusMessage = "Kaydetmeden önce API anahtarını girin.";
-            return Task.CompletedTask;
-        }
-
-        _secretStore.SaveApiKey(SelectedProfile.Id, ApiKeyInput.Trim());
+        _savedKeys.Add(SelectedProfile.Id);
         ApiKeyInput = string.Empty;
-        _providerStatus.Refresh();
-        RefreshListItemFlags();
-        OnPropertyChanged(nameof(SavedKeyStatus));
-        OnPropertyChanged(nameof(SavedKeyMask));
-        OnPropertyChanged(nameof(HasSavedKeyForCurrent));
-        OnPropertyChanged(nameof(SavedKeyRowVisibility));
-        StatusMessage = "Anahtar kaydedildi.";
+        RefreshFlags();
+        SyncProviderStatus();
+        NotifySelectionChanged();
+        StatusMessage = "Anahtar yalnizca bellekte tutuluyor; kalici backend kaldirildi.";
         return Task.CompletedTask;
     }
 
     public Task RemoveKeyAsync()
     {
-        if (SelectedProfile is null || !SelectedProfile.RequiresApiKey)
+        if (SelectedProfile is not null)
         {
-            StatusMessage = "Bu profil için kayıtlı anahtar bulunmuyor.";
-            return Task.CompletedTask;
+            _savedKeys.Remove(SelectedProfile.Id);
         }
 
-        _secretStore.DeleteApiKey(SelectedProfile.Id);
-        _providerStatus.Refresh();
-        RefreshListItemFlags();
-        OnPropertyChanged(nameof(SavedKeyStatus));
-        OnPropertyChanged(nameof(SavedKeyMask));
-        OnPropertyChanged(nameof(HasSavedKeyForCurrent));
-        OnPropertyChanged(nameof(SavedKeyRowVisibility));
-        StatusMessage = "Kayıtlı anahtar silindi.";
+        RefreshFlags();
+        SyncProviderStatus();
+        NotifySelectionChanged();
+        StatusMessage = "Gecici anahtar kaldirildi.";
         return Task.CompletedTask;
     }
 
-    public async Task TestConnectionAsync(CancellationToken cancellationToken = default)
+    public Task TestConnectionAsync(CancellationToken cancellationToken = default)
     {
-        if (SelectedProfile is null || !SelectedProfile.IsEnabled)
-        {
-            StatusMessage = "Test için etkin bir profil seçin.";
-            return;
-        }
-
         IsTestingConnection = true;
-        try
-        {
-            StatusMessage = "Test ediliyor…";
-            var startedAt = DateTimeOffset.Now;
-            var timeoutMs = _settings.TimeoutMilliseconds > 0 ? _settings.TimeoutMilliseconds : 10000;
-            var timeout = TimeSpan.FromMilliseconds(timeoutMs);
-
-            var result = await _connectionTester.TestAsync(SelectedProfile, timeout, cancellationToken).ConfigureAwait(true);
-            var elapsed = DateTimeOffset.Now - startedAt;
-
-            LastConnectionTest = new ConnectionTestSummary
-            {
-                Status = result.Status,
-                Message = result.UserMessage,
-                CompletedAt = DateTimeOffset.Now,
-                Duration = elapsed
-            };
-            StatusMessage = result.UserMessage;
-        }
-        finally
-        {
-            IsTestingConnection = false;
-        }
-    }
-
-    public void RefreshSavedKeyStatus()
-    {
-        OnPropertyChanged(nameof(SavedKeyStatus));
-        OnPropertyChanged(nameof(SavedKeyMask));
-        OnPropertyChanged(nameof(HasSavedKeyForCurrent));
-    }
-
-    public bool IsProfileActive(string profileId) =>
-        !string.IsNullOrWhiteSpace(profileId) &&
-        profileId.Equals(EffectiveActiveProfileId, StringComparison.OrdinalIgnoreCase);
-
-    public bool ProfileHasSavedKey(string profileId) =>
-        !string.IsNullOrWhiteSpace(profileId) && _secretStore.HasApiKey(profileId);
-
-    private static string MaskKey(string key)
-    {
-        if (string.IsNullOrEmpty(key))
-        {
-            return string.Empty;
-        }
-
-        var visibleChars = key.Length >= 4 ? 4 : key.Length;
-        var suffix = key[^visibleChars..];
-        return $"••••••••{suffix}";
+        LastConnectionTest = new ConnectionTestSummary();
+        StatusMessage = LastConnectionTest.Message;
+        IsTestingConnection = false;
+        return Task.CompletedTask;
     }
 
     public void BeginNewProfile()
     {
         _isEditingNew = true;
-        EditingDraft = new ProviderProfileDraft
-        {
-            Id = SuggestNewId()
-        };
-        StatusMessage = string.Empty;
+        EditingDraft = new ProviderProfileDraft { Id = SuggestNewId() };
     }
 
     public void BeginEditCurrent()
     {
-        if (SelectedProfile is null || !IsCurrentUserDefined)
+        if (!IsCurrentUserDefined || SelectedProfile is null)
         {
-            StatusMessage = "Yalnızca kullanıcı tanımlı profiller düzenlenebilir.";
+            StatusMessage = "Yerlesik placeholder profil duzenlenemez.";
             return;
         }
 
         _isEditingNew = false;
         EditingDraft = ProviderProfileDraft.FromProfile(SelectedProfile);
-        StatusMessage = string.Empty;
     }
 
     public void CancelEdit()
@@ -509,195 +230,145 @@ public sealed class ProviderSettingsViewModel : INotifyPropertyChanged
     {
         if (EditingDraft is null)
         {
-            return ProviderProfileSaveResult.Fail("Aktif düzenleme yok.");
+            return ProviderProfileSaveResult.Fail("Aktif duzenleme yok.");
         }
 
-        var draft = EditingDraft;
-        if (string.IsNullOrWhiteSpace(draft.Id))
+        var profile = EditingDraft.ToProfile();
+        if (string.IsNullOrWhiteSpace(profile.Id) || string.IsNullOrWhiteSpace(profile.DisplayName))
         {
-            return ProviderProfileSaveResult.Fail("Profil kimliği gerekli.");
+            return ProviderProfileSaveResult.Fail("Profil kimligi ve gorunen ad gereklidir.");
         }
 
-        if (string.IsNullOrWhiteSpace(draft.DisplayName))
+        if (_isEditingNew && Profiles.Any(item => item.Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase)))
         {
-            return ProviderProfileSaveResult.Fail("Görünen ad gerekli.");
+            return ProviderProfileSaveResult.Fail("Bu kimlige sahip bir profil zaten var.");
         }
 
-        var trimmedId = draft.Id.Trim();
-        if (_isEditingNew && _builtInProfileSet.IsBuiltIn(trimmedId))
+        var existing = Profiles.FirstOrDefault(item => item.Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
         {
-            return ProviderProfileSaveResult.Fail("Bu kimlik yerleşik bir profile ait. Farklı bir kimlik seçin.");
-        }
-
-        if (_isEditingNew && _settings.Profiles.Any(p => p.Id.Equals(trimmedId, StringComparison.OrdinalIgnoreCase)))
-        {
-            return ProviderProfileSaveResult.Fail("Bu kimliğe sahip bir profil zaten var.");
-        }
-
-        var profile = draft.ToProfile();
-        _userProfileStore.Save(profile);
-        UpsertInRuntime(profile);
-        _refreshable.Refresh();
-        _providerStatus.Refresh();
-        RebuildProfileItems();
-        SelectedProfile = Profiles.FirstOrDefault(p =>
-            p.Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase));
-        EditingDraft = null;
-        _isEditingNew = false;
-        StatusMessage = "Profil kaydedildi.";
-        return ProviderProfileSaveResult.Ok();
-    }
-
-    public ProviderProfileSaveResult DeleteCurrent()
-    {
-        if (SelectedProfile is null)
-        {
-            return ProviderProfileSaveResult.Fail("Önce silmek istediğiniz profili seçin.");
-        }
-
-        if (!IsCurrentUserDefined)
-        {
-            return ProviderProfileSaveResult.Fail("Yalnızca kullanıcı tanımlı profiller silinebilir.");
-        }
-
-        var idToRemove = SelectedProfile.Id;
-        _userProfileStore.Delete(idToRemove);
-        if (_secretStore.HasApiKey(idToRemove))
-        {
-            _secretStore.DeleteApiKey(idToRemove);
-        }
-
-        if (string.Equals(EffectiveActiveProfileId, idToRemove, StringComparison.OrdinalIgnoreCase))
-        {
-            _activeProfileStore.ClearOverride();
-        }
-
-        RemoveFromRuntime(idToRemove);
-        _refreshable.Refresh();
-        _providerStatus.Refresh();
-        RebuildProfileItems();
-        SelectedProfile = Profiles.FirstOrDefault();
-        OnPropertyChanged(nameof(EffectiveActiveProfileId));
-        OnPropertyChanged(nameof(ActiveProfileCaption));
-        StatusMessage = "Profil silindi.";
-        return ProviderProfileSaveResult.Ok();
-    }
-
-    private void UpsertInRuntime(ModelDecisionProfile profile)
-    {
-        var index = _settings.Profiles.FindIndex(p =>
-            p.Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase));
-        if (index >= 0)
-        {
-            _settings.Profiles[index] = profile;
-        }
-        else
-        {
-            _settings.Profiles.Add(profile);
-        }
-
-        var observableIndex = -1;
-        for (var i = 0; i < Profiles.Count; i++)
-        {
-            if (Profiles[i].Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase))
-            {
-                observableIndex = i;
-                break;
-            }
-        }
-
-        if (observableIndex >= 0)
-        {
-            Profiles[observableIndex] = profile;
+            Profiles[Profiles.IndexOf(existing)] = profile;
         }
         else
         {
             Profiles.Add(profile);
         }
+
+        EditingDraft = null;
+        _isEditingNew = false;
+        RebuildProfileItems();
+        SelectedProfile = Profiles.First(item => item.Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase));
+        StatusMessage = "Profil yalnizca frontend oturumunda kaydedildi.";
+        return ProviderProfileSaveResult.Ok();
     }
 
-    private void RemoveFromRuntime(string profileId)
+    public ProviderProfileSaveResult DeleteCurrent()
     {
-        _settings.Profiles.RemoveAll(p =>
-            p.Id.Equals(profileId, StringComparison.OrdinalIgnoreCase));
-        for (var i = Profiles.Count - 1; i >= 0; i--)
+        if (!IsCurrentUserDefined || SelectedProfile is null)
         {
-            if (Profiles[i].Id.Equals(profileId, StringComparison.OrdinalIgnoreCase))
-            {
-                Profiles.RemoveAt(i);
-            }
+            return ProviderProfileSaveResult.Fail("Bu profil silinemez.");
         }
+
+        var removedId = SelectedProfile.Id;
+        Profiles.Remove(SelectedProfile);
+        _savedKeys.Remove(removedId);
+        if (removedId.Equals(_activeProfileId, StringComparison.OrdinalIgnoreCase))
+        {
+            _activeProfileId = null;
+        }
+
+        RebuildProfileItems();
+        SelectedProfile = Profiles.FirstOrDefault();
+        SyncProviderStatus();
+        StatusMessage = "Gecici profil silindi.";
+        return ProviderProfileSaveResult.Ok();
+    }
+
+    public void RefreshSavedKeyStatus()
+    {
+        NotifySelectionChanged();
+    }
+
+    public bool IsProfileActive(string profileId) =>
+        !string.IsNullOrWhiteSpace(profileId) &&
+        profileId.Equals(EffectiveActiveProfileId, StringComparison.OrdinalIgnoreCase);
+
+    public bool ProfileHasSavedKey(string profileId) => _savedKeys.Contains(profileId);
+
+    private void RebuildProfileItems()
+    {
+        ProfileItems.Clear();
+        foreach (var profile in Profiles)
+        {
+            ProfileItems.Add(new ProfileListItem(profile, profile.Id.Equals(PlaceholderProfileId, StringComparison.OrdinalIgnoreCase))
+            {
+                IsActive = IsProfileActive(profile.Id),
+                HasSavedKey = ProfileHasSavedKey(profile.Id)
+            });
+        }
+    }
+
+    private void RefreshFlags()
+    {
+        foreach (var item in ProfileItems)
+        {
+            item.IsActive = IsProfileActive(item.Id);
+            item.HasSavedKey = ProfileHasSavedKey(item.Id);
+        }
+    }
+
+    private void SyncProviderStatus()
+    {
+        var active = Profiles.FirstOrDefault(profile => IsProfileActive(profile.Id));
+        _providerStatus.SetProfile(active, active is not null && ProfileHasSavedKey(active.Id));
     }
 
     private string SuggestNewId()
     {
-        var baseId = "custom-provider";
-        var existing = new HashSet<string>(
-            _settings.Profiles.Select(p => p.Id),
-            StringComparer.OrdinalIgnoreCase);
-        if (!existing.Contains(baseId))
+        for (var i = 1; i < 1000; i++)
         {
-            return baseId;
-        }
-
-        for (var i = 2; i < 1000; i++)
-        {
-            var candidate = $"{baseId}-{i}";
-            if (!existing.Contains(candidate))
+            var candidate = i == 1 ? "custom-provider" : $"custom-provider-{i}";
+            if (Profiles.All(profile => !profile.Id.Equals(candidate, StringComparison.OrdinalIgnoreCase)))
             {
                 return candidate;
             }
         }
 
-        return $"{baseId}-{Guid.NewGuid():N}";
+        return $"custom-provider-{Guid.NewGuid():N}";
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    private void NotifySelectionChanged()
     {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        OnPropertyChanged(nameof(SelectedProfile));
+        OnPropertyChanged(nameof(EffectiveActiveProfileId));
+        OnPropertyChanged(nameof(ActiveProfileCaption));
+        OnPropertyChanged(nameof(IsCurrentActive));
+        OnPropertyChanged(nameof(IsCurrentBuiltIn));
+        OnPropertyChanged(nameof(IsCurrentUserDefined));
+        OnPropertyChanged(nameof(SetActiveButtonText));
+        OnPropertyChanged(nameof(SetActiveEnabled));
+        OnPropertyChanged(nameof(TestConnectionEnabled));
+        OnPropertyChanged(nameof(EditEnabled));
+        OnPropertyChanged(nameof(DeleteEnabled));
+        OnPropertyChanged(nameof(DetailDisplayName));
+        OnPropertyChanged(nameof(DetailKind));
+        OnPropertyChanged(nameof(DetailBaseUrl));
+        OnPropertyChanged(nameof(DetailModel));
+        OnPropertyChanged(nameof(DetailEndpointPath));
+        OnPropertyChanged(nameof(DetailRequiresApiKey));
+        OnPropertyChanged(nameof(DetailIsEnabled));
+        OnPropertyChanged(nameof(DetailOriginLabel));
+        OnPropertyChanged(nameof(HasSavedKeyForCurrent));
+        OnPropertyChanged(nameof(SavedKeyMask));
+        OnPropertyChanged(nameof(SavedKeyStatus));
+        OnPropertyChanged(nameof(KeySaveRemoveEnabled));
+        OnPropertyChanged(nameof(ShowDisabledBanner));
+        OnPropertyChanged(nameof(DisabledBannerText));
+        OnPropertyChanged(nameof(ShowNoKeyMessage));
+        OnPropertyChanged(nameof(ShowSavedKeyRow));
+        OnPropertyChanged(nameof(KeyAreaVisibility));
+        OnPropertyChanged(nameof(DisabledBannerVisibility));
+        OnPropertyChanged(nameof(NoKeyMessageVisibility));
+        OnPropertyChanged(nameof(SavedKeyRowVisibility));
     }
-}
-
-public sealed class ProviderProfileSaveResult
-{
-    public bool Success { get; private init; }
-    public string Message { get; private init; } = string.Empty;
-
-    public static ProviderProfileSaveResult Ok() => new() { Success = true };
-    public static ProviderProfileSaveResult Fail(string message) => new() { Success = false, Message = message };
-}
-
-public sealed class ConnectionTestSummary
-{
-    public ProviderConnectionTestStatus Status { get; init; }
-    public string Message { get; init; } = string.Empty;
-    public DateTimeOffset CompletedAt { get; init; } = DateTimeOffset.Now;
-    public TimeSpan Duration { get; init; }
-
-    public bool IsSuccess => Status == ProviderConnectionTestStatus.Success;
-
-    public string Severity => Status switch
-    {
-        ProviderConnectionTestStatus.Success => "Success",
-        ProviderConnectionTestStatus.MissingKey => "Warning",
-        ProviderConnectionTestStatus.Timeout => "Warning",
-        ProviderConnectionTestStatus.InvalidResponse => "Warning",
-        _ => "Error"
-    };
-
-    public string Title => Status switch
-    {
-        ProviderConnectionTestStatus.Success => "Bağlantı başarılı",
-        ProviderConnectionTestStatus.MissingKey => "API anahtarı eksik",
-        ProviderConnectionTestStatus.Timeout => "Zaman aşımı",
-        ProviderConnectionTestStatus.HttpError => "HTTP hatası",
-        ProviderConnectionTestStatus.InvalidResponse => "Geçersiz yanıt",
-        ProviderConnectionTestStatus.NetworkFailure => "Ağ hatası",
-        _ => "Bağlantı başarısız"
-    };
-
-    public string CompletedDisplay => CompletedAt.ToLocalTime().ToString("HH:mm:ss");
-    public string DurationDisplay => $"{(int)Duration.TotalMilliseconds} ms";
 }

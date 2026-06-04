@@ -1,5 +1,4 @@
 using WindowsAiAssistant.App.Mvvm;
-using WindowsAiAssistant.Infrastructure;
 
 namespace WindowsAiAssistant.App.ProviderSettings;
 
@@ -7,20 +6,20 @@ public sealed class ProfileListItem : ObservableObject
 {
     private bool _isActive;
     private bool _hasSavedKey;
-    private bool _isBuiltIn;
 
-    public ProfileListItem(ModelDecisionProfile profile)
+    public ProfileListItem(ProviderProfile profile, bool isBuiltIn)
     {
         Profile = profile ?? throw new ArgumentNullException(nameof(profile));
+        IsBuiltIn = isBuiltIn;
     }
 
-    public ModelDecisionProfile Profile { get; }
-
+    public ProviderProfile Profile { get; }
     public string Id => Profile.Id;
     public string DisplayName => Profile.DisplayName;
     public string Kind => Profile.Kind.ToString();
     public string Model => Profile.Model;
     public bool RequiresApiKey => Profile.RequiresApiKey;
+    public bool IsBuiltIn { get; }
 
     public bool IsActive
     {
@@ -41,31 +40,13 @@ public sealed class ProfileListItem : ObservableObject
         {
             if (SetField(ref _hasSavedKey, value))
             {
-                OnPropertyChanged(nameof(ShowKeyBadge));
                 OnPropertyChanged(nameof(KeyBadgeText));
             }
         }
     }
 
-    public bool IsBuiltIn
-    {
-        get => _isBuiltIn;
-        set
-        {
-            if (SetField(ref _isBuiltIn, value))
-            {
-                OnPropertyChanged(nameof(OriginBadge));
-            }
-        }
-    }
-
-    public string ActiveBadge => IsActive ? "AKTİF" : string.Empty;
-
+    public string ActiveBadge => IsActive ? "AKTIF" : string.Empty;
     public bool ShowKeyBadge => RequiresApiKey;
-
-    public string KeyBadgeText =>
-        !RequiresApiKey ? string.Empty :
-        HasSavedKey ? "ANAHTAR ✓" : "ANAHTAR YOK";
-
-    public string OriginBadge => IsBuiltIn ? "YERLEŞİK" : "ÖZEL";
+    public string KeyBadgeText => !RequiresApiKey ? string.Empty : HasSavedKey ? "ANAHTAR VAR" : "ANAHTAR YOK";
+    public string OriginBadge => IsBuiltIn ? "YERLESIK" : "OZEL";
 }

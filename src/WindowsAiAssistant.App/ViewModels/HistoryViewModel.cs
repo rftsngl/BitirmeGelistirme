@@ -1,29 +1,21 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using WindowsAiAssistant.App.Models;
 using WindowsAiAssistant.App.Mvvm;
 using WindowsAiAssistant.App.Services;
-using WindowsAiAssistant.Contracts.Interfaces;
-using WindowsAiAssistant.Contracts.Models;
 
 namespace WindowsAiAssistant.App.ViewModels;
 
 public sealed class HistoryViewModel : ObservableObject
 {
-    private const int RefreshLimit = 25;
-    private readonly ICommandHistoryService _commandHistoryService;
     private readonly INavigationService _navigation;
     private readonly AssistantViewModel _assistantViewModel;
-
-    private RecentCommandSummary? _selectedItem;
+    private HistoryViewItem? _selectedItem;
     private bool _isRefreshing;
-    private string _statusMessage = "Geçmişi görüntülemek için 'Yenile'ye basın.";
+    private string _statusMessage = "Eski runtime gecmisi kaldirildi.";
 
-    public HistoryViewModel(
-        ICommandHistoryService commandHistoryService,
-        INavigationService navigation,
-        AssistantViewModel assistantViewModel)
+    public HistoryViewModel(INavigationService navigation, AssistantViewModel assistantViewModel)
     {
-        _commandHistoryService = commandHistoryService ?? throw new ArgumentNullException(nameof(commandHistoryService));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         _assistantViewModel = assistantViewModel ?? throw new ArgumentNullException(nameof(assistantViewModel));
 
@@ -32,12 +24,11 @@ public sealed class HistoryViewModel : ObservableObject
         LoadToAssistantCommand = new RelayCommand(LoadToAssistant, () => SelectedItem is not null);
     }
 
-    public ObservableCollection<RecentCommandSummary> Items { get; }
-
+    public ObservableCollection<HistoryViewItem> Items { get; }
     public ICommand RefreshCommand { get; }
     public ICommand LoadToAssistantCommand { get; }
 
-    public RecentCommandSummary? SelectedItem
+    public HistoryViewItem? SelectedItem
     {
         get => _selectedItem;
         set
@@ -51,7 +42,6 @@ public sealed class HistoryViewModel : ObservableObject
     }
 
     public bool HasSelection => SelectedItem is not null;
-
     public bool IsEmpty => Items.Count == 0;
 
     public string StatusMessage
@@ -72,28 +62,15 @@ public sealed class HistoryViewModel : ObservableObject
         }
     }
 
-    private async Task RefreshAsync()
+    private Task RefreshAsync()
     {
         IsRefreshing = true;
-        try
-        {
-            StatusMessage = "Yenileniyor…";
-            var items = await _commandHistoryService.GetRecentAsync(RefreshLimit).ConfigureAwait(true);
-            Items.Clear();
-            foreach (var item in items)
-            {
-                Items.Add(item);
-            }
-
-            OnPropertyChanged(nameof(IsEmpty));
-            StatusMessage = Items.Count == 0
-                ? "Kayıt bulunamadı."
-                : $"{Items.Count} kayıt yüklendi.";
-        }
-        finally
-        {
-            IsRefreshing = false;
-        }
+        Items.Clear();
+        SelectedItem = null;
+        StatusMessage = "Yeni AI-first runtime gecmis servisi henuz baglanmadi.";
+        OnPropertyChanged(nameof(IsEmpty));
+        IsRefreshing = false;
+        return Task.CompletedTask;
     }
 
     private void LoadToAssistant()
