@@ -10,7 +10,9 @@ public sealed class LaunchActionHandler : IActionHandler
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var target = ActionParameterReader.GetTargetOrParameter(action, "app", "command", "uri");
+        var target = ActionParameterReader.GetTargetOrParameter(
+            action, "app", "command", "uri", "name", "path",
+            "application", "executable", "program", "file", "target");
         if (string.IsNullOrWhiteSpace(target))
         {
             return Task.FromResult(new ActionResult
@@ -25,18 +27,20 @@ public sealed class LaunchActionHandler : IActionHandler
             target = catalogExecutable;
         }
 
+        var launchPath = AppLaunchCatalog.TryFindInstalledExecutable(target) ?? target;
+
         try
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = target,
+                FileName = launchPath,
                 UseShellExecute = true
             });
 
             return Task.FromResult(new ActionResult
             {
                 Success = true,
-                Message = $"{target} baslatildi."
+                Message = $"{launchPath} baslatildi."
             });
         }
         catch (Exception ex)

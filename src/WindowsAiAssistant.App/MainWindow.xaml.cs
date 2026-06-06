@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -100,9 +100,7 @@ public sealed partial class MainWindow : Window
         {
             "Assistant" => typeof(AssistantPage),
             "History" => typeof(HistoryPage),
-            "Capabilities" => typeof(CapabilitiesPage),
-            "Settings" => typeof(SettingsPage),
-            "AppSettings" => typeof(AppSettingsPage),
+            "Settings" => typeof(UnifiedSettingsPage),
             _ => typeof(AssistantPage)
         };
 

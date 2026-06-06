@@ -15,6 +15,24 @@ public sealed class AppSettingsViewModel : ObservableObject
     private readonly LocalAppSettingsService _localSettings;
     private string _statusMessage = string.Empty;
 
+    public IReadOnlyList<SettingsChoice> RiskHandlingChoices { get; } =
+    [
+        new("Allow", "Doğrudan çalıştır",
+            "Asistan bu tür işlemleri sizden onay istemeden uygular."),
+        new("RequireApproval", "Önce onay iste",
+            "İşlem yapılmadan önce sohbet veya sesli onay ekranında sizden izin istenir."),
+        new("Deny", "Engelle",
+            "Bu tür işlemler hiç çalıştırılmaz.")
+    ];
+
+    public IReadOnlyList<SettingsChoice> SpeechEngineChoices { get; } =
+    [
+        new("windows", "Windows (yerleşik)",
+            "Ek kurulum gerektirmez. Türkçe konuşma tanıma dil paketinin yüklü olması gerekir."),
+        new("whisper", "Whisper (bilgisayarınızda)",
+            "İnternet gerektirmez; ggml model dosyası indirip yolunu belirtmeniz gerekir. Genelde daha iyi tanır.")
+    ];
+
     public AppSettingsViewModel(
         AudioOptions audio,
         RuntimeOptions runtime,
@@ -26,10 +44,6 @@ public sealed class AppSettingsViewModel : ObservableObject
         _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
         ArgumentNullException.ThrowIfNull(microphoneDevices);
 
-        RiskHandlingOptions = new ObservableCollection<string>(
-            Enum.GetNames(typeof(RiskHandling)));
-
-        SpeechEngineOptions = new ObservableCollection<string> { "windows", "whisper" };
         MicrophoneOptions = new ObservableCollection<MicrophoneDevice>(microphoneDevices.ListDevices());
 
         if (WindowsStartupService.IsRegistered())
@@ -38,8 +52,6 @@ public sealed class AppSettingsViewModel : ObservableObject
         }
     }
 
-    public ObservableCollection<string> RiskHandlingOptions { get; }
-    public ObservableCollection<string> SpeechEngineOptions { get; }
     public ObservableCollection<MicrophoneDevice> MicrophoneOptions { get; }
 
     public bool BackgroundModeEnabled
@@ -139,7 +151,23 @@ public sealed class AppSettingsViewModel : ObservableObject
         {
             _audio.SpeechEngine = string.IsNullOrWhiteSpace(value) ? "windows" : value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedSpeechEngine));
             OnPropertyChanged(nameof(IsWhisperEngine));
+        }
+    }
+
+    public SettingsChoice? SelectedSpeechEngine
+    {
+        get => SpeechEngineChoices.FirstOrDefault(choice =>
+            choice.Value.Equals(_audio.SpeechEngine, StringComparison.OrdinalIgnoreCase));
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            SpeechEngine = value.Value;
         }
     }
 
@@ -163,6 +191,19 @@ public sealed class AppSettingsViewModel : ObservableObject
         }
     }
 
+    public bool DeveloperModeEnabled
+    {
+        get => _audio.DeveloperModeEnabled;
+        set
+        {
+            _audio.DeveloperModeEnabled = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsDeveloperMode));
+        }
+    }
+
+    public bool IsDeveloperMode => _audio.DeveloperModeEnabled;
+
     public string NormalHandling
     {
         get => _runtime.ActionPolicy.Normal.ToString();
@@ -172,6 +213,19 @@ public sealed class AppSettingsViewModel : ObservableObject
             {
                 _runtime.ActionPolicy.Normal = parsed;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SelectedNormalHandling));
+            }
+        }
+    }
+
+    public SettingsChoice? SelectedNormalHandling
+    {
+        get => FindRiskChoice(_runtime.ActionPolicy.Normal);
+        set
+        {
+            if (value is not null)
+            {
+                NormalHandling = value.Value;
             }
         }
     }
@@ -185,6 +239,19 @@ public sealed class AppSettingsViewModel : ObservableObject
             {
                 _runtime.ActionPolicy.Sensitive = parsed;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SelectedSensitiveHandling));
+            }
+        }
+    }
+
+    public SettingsChoice? SelectedSensitiveHandling
+    {
+        get => FindRiskChoice(_runtime.ActionPolicy.Sensitive);
+        set
+        {
+            if (value is not null)
+            {
+                SensitiveHandling = value.Value;
             }
         }
     }
@@ -198,9 +265,26 @@ public sealed class AppSettingsViewModel : ObservableObject
             {
                 _runtime.ActionPolicy.Destructive = parsed;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SelectedDestructiveHandling));
             }
         }
     }
+
+    public SettingsChoice? SelectedDestructiveHandling
+    {
+        get => FindRiskChoice(_runtime.ActionPolicy.Destructive);
+        set
+        {
+            if (value is not null)
+            {
+                DestructiveHandling = value.Value;
+            }
+        }
+    }
+
+    private SettingsChoice? FindRiskChoice(RiskHandling handling) =>
+        RiskHandlingChoices.FirstOrDefault(choice =>
+            choice.Value.Equals(handling.ToString(), StringComparison.OrdinalIgnoreCase));
 
     public bool AllowSessionRemember
     {
@@ -253,7 +337,6 @@ public sealed class AppSettingsViewModel : ObservableObject
 
         _localSettings.SaveAudioAndPolicy(audioSnapshot, policySnapshot, uiAutomationSnapshot, StartWithWindows);
         StatusMessage =
-            "Ayarlar kaydedildi (appsettings.Local.json). " +
-            "Hotkey, wake-word, STT motoru ve UI otomasyon secenekleri icin uygulamayi yeniden baslatin.";
+            "Ayarlar kaydedildi. Sesli asistan kısayolu, uyandırma kelimesi ve konuşma motoru değişiklikleri için uygulamayı yeniden başlatın.";
     }
 }

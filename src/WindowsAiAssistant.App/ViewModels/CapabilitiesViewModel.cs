@@ -8,31 +8,32 @@ public sealed class CapabilitiesViewModel : ObservableObject
 {
     private readonly List<CapabilityViewItem> _allItems =
     [
-        NewItem("respond", "\uE8BD", "Kullaniciya nihai metin yaniti dondurur.", "Sohbet"),
-        NewItem("ask_user", "\uE897", "Kullanicidan ek bilgi ister.", "Sohbet"),
-        NewItem("stop", "\uE71A", "Agent dongusunu sonlandirir.", "Runtime"),
-        NewItem("wait", "\uE823", "Kisa sure bekler (seconds/ms).", "Runtime"),
-        NewItem("open_app", "\uE7F4", "Katalogdaki uygulamayi acar (notepad, calc, cmd...).", "Uygulama"),
-        NewItem("open_url", "\uE774", "Varsayilan tarayicida URL acar.", "Tarayici"),
-        NewItem("launch", "\uE7AC", "Herhangi bir exe/uri/komut baslatir (katalog disi).", "Uygulama"),
-        NewItem("type_text", "\uE765", "Odakli pencereye metin yazar (clipboard/SendInput).", "Klavye"),
-        NewItem("press_key", "\uE92E", "Tek tus gonderir.", "Klavye"),
-        NewItem("press_shortcut", "\uE92E", "Klavye kisayolu gonderir (Ctrl+A...).", "Klavye"),
-        NewItem("click_element", "\uE7C9", "UIA elementine tiklar (pattern -> mouse fallback).", "UI Element"),
+        NewItem("respond", "\uE8BD", "Kullanıcıya nihai metin yanıtı döndürür.", "Sohbet"),
+        NewItem("ask_user", "\uE897", "Kullanıcıdan ek bilgi ister.", "Sohbet"),
+        NewItem("stop", "\uE71A", "Asistan döngüsünü sonlandırır.", "Runtime"),
+        NewItem("wait", "\uE823", "Kısa süre bekler (seconds/ms).", "Runtime"),
+        NewItem("open_app", "\uE7F4", "Uygulama adını Windows üzerinden açar; bilinen adlar alias olarak çözülür.", "Uygulama"),
+        NewItem("open_url", "\uE774", "Varsayılan tarayıcıda URL açar.", "Tarayıcı"),
+        NewItem("launch", "\uE7AC", "Herhangi bir exe/uri/komut başlatır (katalog dışı).", "Uygulama"),
+        NewItem("shell", "\uE756", "PowerShell veya CMD ile komut çalıştırır ve stdout/stderr sonucunu sonraki adıma taşır.", "Kabuk"),
+        NewItem("type_text", "\uE765", "Odaklı pencereye metin yazar (clipboard/SendInput).", "Klavye"),
+        NewItem("press_key", "\uE92E", "Tek tuş gönderir.", "Klavye"),
+        NewItem("press_shortcut", "\uE92E", "Klavye kısayolu gönderir (Ctrl+A...).", "Klavye"),
+        NewItem("click_element", "\uE7C9", "UIA elementine tıklar (pattern -> mouse fallback).", "UI Element"),
         NewItem("focus_element", "\uE7B3", "UIA elementine odak verir.", "UI Element"),
         NewItem("read_element", "\uE890", "Element metnini/degerini okur.", "UI Element"),
-        NewItem("set_value", "\uE70F", "Elemente deger yazar (ValuePattern).", "UI Element"),
-        NewItem("select_element", "\uE762", "Liste/combo ogesini secer.", "UI Element"),
-        NewItem("expand_collapse", "\uE70D", "Menu/agac/combobox acar veya kapatir.", "UI Element"),
-        NewItem("invoke_toggle", "\uE73A", "Checkbox/switch durumunu degistirir.", "UI Element"),
-        NewItem("scroll", "\uE8CB", "Element icinde kaydirir (up/down/left/right).", "UI Element"),
-        NewItem("list_windows", "\uE8A5", "Gorunur pencereleri listeler.", "Pencere"),
-        NewItem("focus_window", "\uE737", "Pencereyi one getirir/odaklar.", "Pencere"),
+        NewItem("set_value", "\uE70F", "Elemente değer yazar (ValuePattern).", "UI Element"),
+        NewItem("select_element", "\uE762", "Liste/combo öğesini seçer.", "UI Element"),
+        NewItem("expand_collapse", "\uE70D", "Menü/ağaç/combobox açar veya kapatır.", "UI Element"),
+        NewItem("invoke_toggle", "\uE73A", "Checkbox/switch durumunu değiştirir.", "UI Element"),
+        NewItem("scroll", "\uE8CB", "Element içinde kaydırır (up/down/left/right).", "UI Element"),
+        NewItem("list_windows", "\uE8A5", "Görünür pencereleri listeler.", "Pencere"),
+        NewItem("focus_window", "\uE737", "Pencereyi öne getirir/odaklar.", "Pencere"),
         NewItem("window_state", "\uE740", "Pencere durumu: minimize/maximize/restore/close.", "Pencere"),
-        NewItem("move_window", "\uE759", "Pencereyi tasir/boyutlandirir.", "Pencere"),
-        NewItem("mouse_click", "\uE962", "Koordinat veya element merkezine tiklar (fallback).", "Mouse"),
-        NewItem("mouse_scroll", "\uE962", "Mouse tekerlegi ile kaydirir.", "Mouse"),
-        NewItem("mouse_drag", "\uE962", "Mouse ile suruekle-birak yapar (fallback).", "Mouse")
+        NewItem("move_window", "\uE759", "Pencereyi taşır/boyutlandırır.", "Pencere"),
+        NewItem("mouse_click", "\uE962", "Koordinat veya element merkezine tıklar (fallback).", "Mouse"),
+        NewItem("mouse_scroll", "\uE962", "Mouse tekerleği ile kaydırır.", "Mouse"),
+        NewItem("mouse_drag", "\uE962", "Mouse ile sürükle-bırak yapar (fallback).", "Mouse")
     ];
 
     private string _searchText = string.Empty;
@@ -46,7 +47,7 @@ public sealed class CapabilitiesViewModel : ObservableObject
     public ObservableCollection<CapabilityViewItem> Items { get; }
     public int TotalCount => _allItems.Count;
     public int VisibleCount => Items.Count;
-    public string CountSummary => $"{VisibleCount} / {TotalCount} destekli eylem gosteriliyor";
+    public string CountSummary => $"{VisibleCount} / {TotalCount} destekli eylem gösteriliyor";
 
     public string SearchText
     {

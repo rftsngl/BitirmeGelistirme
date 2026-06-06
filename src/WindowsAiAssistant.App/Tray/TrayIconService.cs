@@ -74,7 +74,7 @@ public sealed class TrayIconService : IDisposable
 
         _iconData.szTip = enabled
             ? "Windows AI Assistant — dinleniyor"
-            : "Windows AI Assistant — dinleme kapali";
+            : "Windows AI Assistant — dinleme kapalı";
         Shell_NotifyIcon(NimModify, ref _iconData);
     }
 
@@ -118,14 +118,14 @@ public sealed class TrayIconService : IDisposable
     private void ShowContextMenu()
     {
         var menu = CreatePopupMenu();
-        AppendMenu(menu, MfString, CmdOpenMain, "Asistani Ac");
+        AppendMenu(menu, MfString, CmdOpenMain, "Asistanı Aç");
         AppendMenu(menu, MfString, CmdActivateOverlay, "Sesli Komut (Ctrl+Alt+A)");
         AppendMenu(
             menu,
             MfString,
             CmdToggleListening,
-            _listeningEnabled ? "Dinlemeyi Durdur" : "Dinlemeyi Baslat");
-        AppendMenu(menu, MfString, CmdExit, "Cikis");
+            _listeningEnabled ? "Dinlemeyi Durdur" : "Dinlemeyi Başlat");
+        AppendMenu(menu, MfString, CmdExit, "Çıkış");
 
         GetCursorPos(out var point);
         SetForegroundWindow(_messageWindow.Handle);
@@ -249,7 +249,7 @@ internal sealed class TrayMessageWindow : IDisposable
 
         if (_hwnd == nint.Zero)
         {
-            throw new InvalidOperationException("Tray message window olusturulamadi.");
+            throw new InvalidOperationException("Tray mesaj penceresi oluşturulamadı.");
         }
 
         _oldWndProc = SetWindowLongPtr(_hwnd, GwlWndproc, Marshal.GetFunctionPointerForDelegate(_wndProcDelegate));

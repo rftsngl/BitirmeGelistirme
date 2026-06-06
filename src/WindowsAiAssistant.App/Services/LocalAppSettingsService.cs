@@ -88,6 +88,7 @@ public sealed class LocalAppSettingsService
         to.SpeechEngine = from.SpeechEngine;
         to.WhisperModelPath = from.WhisperModelPath;
         to.InputDeviceIndex = from.InputDeviceIndex;
+        to.DeveloperModeEnabled = from.DeveloperModeEnabled;
     }
 
     public static void CopyPolicy(ActionPolicy from, ActionPolicy to)

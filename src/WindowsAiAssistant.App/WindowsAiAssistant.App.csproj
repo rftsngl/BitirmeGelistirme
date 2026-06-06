@@ -35,4 +35,14 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
+  <!-- Calisan uygulamayi build oncesi sonlandirir; cikti DLL kilidinden kaynaklanan
+       MSB3021/MSB3027 hatalarini kalici olarak onler. Surec yoksa cikti/exit-kodu
+       yok sayilir (idempotent). -->
+  <Target Name="StopRunningAppBeforeBuild" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT'">
+    <Exec Command="taskkill /F /IM WindowsAiAssistant.App.exe /T &gt;nul 2&gt;&amp;1 &amp; exit /b 0"
+          IgnoreExitCode="true"
+          StandardOutputImportance="low"
+          StandardErrorImportance="low" />
+  </Target>
+
 </Project>

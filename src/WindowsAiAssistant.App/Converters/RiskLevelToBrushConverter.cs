@@ -12,9 +12,12 @@ public sealed class RiskLevelToBrushConverter : IValueConverter
         return risk.ToLowerInvariant() switch
         {
             "low" => new SolidColorBrush(Color.FromArgb(255, 0x10, 0x88, 0x47)),
+            "normal" => new SolidColorBrush(Color.FromArgb(255, 0x10, 0x88, 0x47)),
             "medium" => new SolidColorBrush(Color.FromArgb(255, 0xCA, 0x80, 0x00)),
+            "hassas" => new SolidColorBrush(Color.FromArgb(255, 0xCA, 0x80, 0x00)),
             "high" => new SolidColorBrush(Color.FromArgb(255, 0xC4, 0x2B, 0x1C)),
             "critical" => new SolidColorBrush(Color.FromArgb(255, 0x90, 0x10, 0x10)),
+            "yıkıcı" => new SolidColorBrush(Color.FromArgb(255, 0x90, 0x10, 0x10)),
             _ => new SolidColorBrush(Color.FromArgb(255, 0x80, 0x80, 0x80))
         };
     }

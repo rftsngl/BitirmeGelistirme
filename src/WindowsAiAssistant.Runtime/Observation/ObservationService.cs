@@ -1,4 +1,5 @@
 using WindowsAiAssistant.Runtime.Automation;
+using WindowsAiAssistant.Runtime.Debugging;
 using WindowsAiAssistant.Runtime.Windows;
 
 namespace WindowsAiAssistant.Runtime.Observation;
@@ -49,8 +50,16 @@ public sealed class ObservationService
         }
 
         UiElementTree? uiTree = null;
+        string? uiCaptureSkipReason = null;
         var foreground = windows.FirstOrDefault(window => window.IsForeground);
-        if (foreground is not null)
+        var skipSelfUi = AgentSelfWindow.IsAssistantProcess(processName) ||
+                         (foreground is not null && AgentSelfWindow.IsAssistantProcess(foreground.ProcessName));
+        if (skipSelfUi)
+        {
+            uiCaptureSkipReason =
+                "atlandi (Windows AI Assistant penceresi — bu UI otomatiklestirilmez; open_app/shell/focus_window kullanin)";
+        }
+        else if (foreground is not null)
         {
             try
             {
@@ -64,7 +73,7 @@ public sealed class ObservationService
             }
         }
 
-        return new DesktopObservation
+        var observation = new DesktopObservation
         {
             Timestamp = DateTimeOffset.UtcNow,
             ActiveWindowTitle = windowTitle,
@@ -81,7 +90,40 @@ public sealed class ObservationService
             Screenshot = screenshot,
             Windows = windows,
             UiTree = uiTree,
+            UiCaptureSkipReason = uiCaptureSkipReason,
             Monitors = monitors
         };
+
+        // #region agent log
+        var isSelfWindow = skipSelfUi;
+        var uiElements = uiTree?.Elements ?? Array.Empty<UiElementSnapshot>();
+        var suspiciousLabels = uiElements
+            .Where(e =>
+                (e.Name?.Contains("ONAY", StringComparison.OrdinalIgnoreCase) == true) ||
+                (e.Name?.Contains("REDD", StringComparison.OrdinalIgnoreCase) == true) ||
+                (e.ElementId.Contains("onay", StringComparison.OrdinalIgnoreCase)))
+            .Take(5)
+            .Select(e => new { e.ElementId, e.Name, e.ControlType })
+            .ToList();
+        DebugAgentLog.Write(
+            "H1",
+            "ObservationService.CaptureAsync",
+            "observation captured",
+            new
+            {
+                options?.RunId,
+                options?.StepIndex,
+                processName,
+                windowTitle,
+                isSelfWindow,
+                uiElementCount = uiElements.Count,
+                uiCaptureSkipReason,
+                lastActionResult = options?.LastActionResult,
+                suspiciousLabels
+            },
+            options?.RunId);
+        // #endregion
+
+        return observation;
     }
 }

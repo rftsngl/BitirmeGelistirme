@@ -15,6 +15,7 @@ public sealed class HistoryViewModel : ObservableObject
     private readonly AssistantViewModel _assistantViewModel;
     private readonly RunLogger _runLogger;
     private readonly RunLogReader _runLogReader;
+    private readonly Configuration.AudioOptions _audioOptions;
     private readonly List<HistoryViewItem> _allItems = [];
     private HistoryViewItem? _selectedItem;
     private HistoryStepItem? _selectedStep;
@@ -22,19 +23,22 @@ public sealed class HistoryViewModel : ObservableObject
     private string _filterText = string.Empty;
     private string _triggerFilter = string.Empty;
     private string _statusFilter = string.Empty;
-    private string _statusMessage = "Calistirilan run kayitlari logs/runs altinda listelenir.";
+    private string _statusMessage = "Geçmiş kayıtları burada listelenir.";
 
     public HistoryViewModel(
         INavigationService navigation,
         AssistantViewModel assistantViewModel,
         RunLogger runLogger,
-        RunLogReader runLogReader)
+        RunLogReader runLogReader,
+        Configuration.AudioOptions audioOptions)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         _assistantViewModel = assistantViewModel ?? throw new ArgumentNullException(nameof(assistantViewModel));
         _runLogger = runLogger ?? throw new ArgumentNullException(nameof(runLogger));
         _runLogReader = runLogReader ?? throw new ArgumentNullException(nameof(runLogReader));
+        _audioOptions = audioOptions ?? throw new ArgumentNullException(nameof(audioOptions));
 
+        StatusMessage = "Geçmiş kayıtları burada listelenir.";
         Items = [];
         Steps = [];
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsRefreshing);
@@ -42,6 +46,10 @@ public sealed class HistoryViewModel : ObservableObject
         OpenLogFileCommand = new RelayCommand(OpenLogFile, () => SelectedItem is not null);
         OpenScreenshotCommand = new RelayCommand(OpenScreenshot, () => SelectedStep?.HasScreenshot == true);
         CopyUiTreeCommand = new RelayCommand(CopyUiTree, () => SelectedStep?.UiTreeRawJson.Length > 0);
+        CopyCommandCommand = new RelayCommand(CopyCommand, () => SelectedItem is not null);
+        CopyResultCommand = new RelayCommand(CopyResult, () => SelectedItem is not null && !string.IsNullOrWhiteSpace(SelectedItem.LastResult));
+        ClearFiltersCommand = new RelayCommand(ClearFilters, () => HasActiveFilters);
+        OpenLogsFolderCommand = new RelayCommand(OpenLogsFolder);
     }
 
     public ObservableCollection<HistoryViewItem> Items { get; }
@@ -51,6 +59,10 @@ public sealed class HistoryViewModel : ObservableObject
     public ICommand OpenLogFileCommand { get; }
     public ICommand OpenScreenshotCommand { get; }
     public ICommand CopyUiTreeCommand { get; }
+    public ICommand CopyCommandCommand { get; }
+    public ICommand CopyResultCommand { get; }
+    public ICommand ClearFiltersCommand { get; }
+    public ICommand OpenLogsFolderCommand { get; }
 
     public string FilterText
     {
@@ -64,11 +76,22 @@ public sealed class HistoryViewModel : ObservableObject
         }
     }
 
-    public IReadOnlyList<string> TriggerFilterOptions { get; } =
-        ["", "chat", "voice_overlay", "hotkey"];
+    public IReadOnlyList<HistoryFilterOption> TriggerFilterOptions { get; } =
+    [
+        new("", "Tüm kaynaklar"),
+        new("chat", "Sohbet"),
+        new("voice_overlay", "Sesli asistan"),
+        new("hotkey", "Kısayol")
+    ];
 
-    public IReadOnlyList<string> StatusFilterOptions { get; } =
-        ["", "success", "error", "max_steps", "cancelled", "gate"];
+    public IReadOnlyList<HistoryFilterOption> StatusFilterOptions { get; } =
+    [
+        new("", "Tüm durumlar"),
+        new("ok", "Başarılı"),
+        new("fail", "Başarısız"),
+        new("gate", "Onay / engel"),
+        new("limit", "Adım limiti")
+    ];
 
     public string TriggerFilter
     {
@@ -104,6 +127,8 @@ public sealed class HistoryViewModel : ObservableObject
                 LoadStepsForSelection();
                 (LoadToAssistantCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 (OpenLogFileCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (CopyCommandCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (CopyResultCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
     }
@@ -125,6 +150,16 @@ public sealed class HistoryViewModel : ObservableObject
     public bool HasSelection => SelectedItem is not null;
     public bool HasStepSelection => SelectedStep is not null;
     public bool IsEmpty => Items.Count == 0;
+    public bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(FilterText) ||
+        !string.IsNullOrWhiteSpace(TriggerFilter) ||
+        !string.IsNullOrWhiteSpace(StatusFilter);
+
+    public int TotalRunCount => _allItems.Count;
+    public int FilteredRunCount => Items.Count;
+    public int SuccessfulRunCount => _allItems.Count(item => item.IsSuccessful);
+    public int ProblemRunCount => _allItems.Count(item => item.StatusCategory is "fail" or "gate" or "limit");
+    public bool CanClearHistory => _allItems.Count > 0;
 
     public string StatusMessage
     {
@@ -143,6 +178,8 @@ public sealed class HistoryViewModel : ObservableObject
             }
         }
     }
+
+    public bool DeveloperModeEnabled => _audioOptions.DeveloperModeEnabled;
 
     public Task RefreshAsync()
     {
@@ -163,6 +200,7 @@ public sealed class HistoryViewModel : ObservableObject
             }
 
             ApplyFilter();
+            UpdateSummaryCounts();
 
             if (!string.IsNullOrWhiteSpace(selectedRunId))
             {
@@ -173,13 +211,12 @@ public sealed class HistoryViewModel : ObservableObject
                 SelectedItem = Items[0];
             }
 
-            StatusMessage = _allItems.Count == 0
-                ? $"Kayit bulunamadi. Dizin: {_runLogger.LogsDirectoryFullPath}"
-                : $"{Items.Count} / {_allItems.Count} run listelendi. Dizin: {_runLogger.LogsDirectoryFullPath}";
+            StatusMessage = BuildStatusMessage();
         }
         finally
         {
             OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(CanClearHistory));
             IsRefreshing = false;
         }
 
@@ -201,7 +238,7 @@ public sealed class HistoryViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(_statusFilter))
         {
             source = source.Where(item =>
-                item.FinalStatus.Contains(_statusFilter, StringComparison.OrdinalIgnoreCase));
+                item.StatusCategory.Equals(_statusFilter, StringComparison.OrdinalIgnoreCase));
         }
 
         if (!string.IsNullOrWhiteSpace(query))
@@ -209,7 +246,8 @@ public sealed class HistoryViewModel : ObservableObject
             source = source.Where(item =>
                 item.CommandText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 item.FinalStatus.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                item.TriggerSource.Contains(query, StringComparison.OrdinalIgnoreCase));
+                item.TriggerSource.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                item.LastResult.Contains(query, StringComparison.OrdinalIgnoreCase));
         }
 
         foreach (var item in source)
@@ -218,26 +256,72 @@ public sealed class HistoryViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(IsEmpty));
-        var filterParts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(_triggerFilter))
+        UpdateSummaryCounts();
+        StatusMessage = BuildStatusMessage();
+        (ClearFiltersCommand as RelayCommand)?.RaiseCanExecuteChanged();
+    }
+
+    private void UpdateSummaryCounts()
+    {
+        OnPropertyChanged(nameof(TotalRunCount));
+        OnPropertyChanged(nameof(FilteredRunCount));
+        OnPropertyChanged(nameof(SuccessfulRunCount));
+        OnPropertyChanged(nameof(ProblemRunCount));
+        OnPropertyChanged(nameof(CanClearHistory));
+    }
+
+    private string BuildStatusMessage()
+    {
+        if (_allItems.Count == 0)
         {
-            filterParts.Add($"tetik: {_triggerFilter}");
+            return DeveloperModeEnabled
+                ? $"Henüz kayıt yok. Asistan çalıştıkça burada görünür. Log dizini: {_runLogger.LogsDirectoryFullPath}"
+                : "Henüz geçmiş kaydı yok. Asistan bir komut çalıştırdığında burada listelenir.";
         }
 
-        if (!string.IsNullOrWhiteSpace(_statusFilter))
+        var filterHint = HasActiveFilters ? " (filtre uygulanıyor)" : string.Empty;
+        return DeveloperModeEnabled
+            ? $"{Items.Count} / {_allItems.Count} kayıt gösteriliyor{filterHint}."
+            : $"{Items.Count} kayıt gösteriliyor{filterHint}. Toplam {_allItems.Count} kayıt.";
+    }
+
+    public async Task<bool> DeleteSelectedAsync()
+    {
+        if (SelectedItem is null || string.IsNullOrWhiteSpace(SelectedItem.LogFilePath))
         {
-            filterParts.Add($"durum: {_statusFilter}");
+            return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(query))
+        var path = SelectedItem.LogFilePath;
+        var deleted = await Task.Run(() => _runLogReader.TryDeleteRunFile(path)).ConfigureAwait(true);
+        if (!deleted)
         {
-            filterParts.Add($"metin: \"{query}\"");
+            StatusMessage = "Kayıt silinemedi. Dosya başka bir süreç tarafından kullanılıyor olabilir.";
+            return false;
         }
 
-        var filterLabel = filterParts.Count > 0 ? $" ({string.Join(", ", filterParts)})" : string.Empty;
-        StatusMessage = _allItems.Count == 0
-            ? $"Kayit yok. Dizin: {_runLogger.LogsDirectoryFullPath}"
-            : $"{Items.Count} / {_allItems.Count} run listelendi{filterLabel}.";
+        await RefreshAsync().ConfigureAwait(true);
+        StatusMessage = "Seçili kayıt silindi.";
+        return true;
+    }
+
+    public async Task<int> ClearAllAsync()
+    {
+        var deleted = await Task.Run(() =>
+            _runLogReader.DeleteAllRunFiles(_runLogger.LogsDirectoryFullPath)).ConfigureAwait(true);
+
+        await RefreshAsync().ConfigureAwait(true);
+        StatusMessage = deleted > 0
+            ? $"{deleted} geçmiş kaydı silindi."
+            : "Silinecek kayıt bulunamadı.";
+        return deleted;
+    }
+
+    private void ClearFilters()
+    {
+        FilterText = string.Empty;
+        TriggerFilter = string.Empty;
+        StatusFilter = string.Empty;
     }
 
     private void LoadStepsForSelection()
@@ -261,7 +345,7 @@ public sealed class HistoryViewModel : ObservableObject
             Steps.Add(new HistoryStepItem
             {
                 StepIndex = step.StepIndex,
-                Title = $"Adim {step.StepIndex + 1}: {step.ActionName}",
+                Title = $"Adım {step.StepIndex + 1}: {step.ActionName}",
                 Subtitle = step.ResultMessage,
                 Success = step.ActionSuccess,
                 GateOutcome = step.GateOutcome,
@@ -330,7 +414,7 @@ public sealed class HistoryViewModel : ObservableObject
             using var document = JsonDocument.Parse(raw);
             var formatted = JsonSerializer.Serialize(document, new JsonSerializerOptions { WriteIndented = true });
             var truncated = raw.Contains("\"truncated\":true", StringComparison.Ordinal);
-            var hint = truncated ? $"\n[KESILMIS — {raw.Length} karakter. Tam metni kopyalamak icin 'UI Agaci Kopyala' dugmesini kullanin.]" : $"\n[{raw.Length} karakter]";
+            var hint = truncated ? $"\n[KESİLMİŞ — {raw.Length} karakter. Tam metni kopyalamak için 'UI Ağacı Kopyala' düğmesini kullanın.]" : $"\n[{raw.Length} karakter]";
             return formatted + hint;
         }
         catch (JsonException)
@@ -402,15 +486,59 @@ public sealed class HistoryViewModel : ObservableObject
             return;
         }
 
+        CopyTextToClipboard(raw);
+    }
+
+    private void CopyCommand()
+    {
+        if (SelectedItem is null || string.IsNullOrWhiteSpace(SelectedItem.CommandText))
+        {
+            return;
+        }
+
+        CopyTextToClipboard(SelectedItem.CommandText);
+        StatusMessage = "Komut panoya kopyalandı.";
+    }
+
+    private void CopyResult()
+    {
+        if (SelectedItem is null || string.IsNullOrWhiteSpace(SelectedItem.LastResult))
+        {
+            return;
+        }
+
+        CopyTextToClipboard(SelectedItem.LastResult);
+        StatusMessage = "Sonuç panoya kopyalandı.";
+    }
+
+    private static void CopyTextToClipboard(string text)
+    {
         try
         {
             var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
-            dataPackage.SetText(raw);
+            dataPackage.SetText(text);
             Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
         }
         catch
         {
             // Best-effort clipboard write.
+        }
+    }
+
+    private void OpenLogsFolder()
+    {
+        try
+        {
+            var path = _runLogger.LogsDirectoryFullPath;
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo("explorer.exe", path)
+            {
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // best effort
         }
     }
 
@@ -463,3 +591,5 @@ public sealed class HistoryViewModel : ObservableObject
         }
     }
 }
+
+public sealed record HistoryFilterOption(string Value, string Label);

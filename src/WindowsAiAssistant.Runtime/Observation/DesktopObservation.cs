@@ -21,6 +21,7 @@ public sealed class DesktopObservation
     public ScreenshotObservation? Screenshot { get; init; }
     public IReadOnlyList<WindowInfo> Windows { get; init; } = Array.Empty<WindowInfo>();
     public UiElementTree? UiTree { get; init; }
+    public string? UiCaptureSkipReason { get; init; }
     public IReadOnlyList<MonitorDescription> Monitors { get; init; } = Array.Empty<MonitorDescription>();
 
     public string ToShortSummary()
@@ -80,7 +81,11 @@ public sealed class DesktopObservation
             builder.AppendLine("visibleWindows: (none)");
         }
 
-        if (UiTree is not null)
+        if (!string.IsNullOrWhiteSpace(UiCaptureSkipReason))
+        {
+            builder.AppendLine($"uiElements (active window): {UiCaptureSkipReason}");
+        }
+        else if (UiTree is not null)
         {
             builder.AppendLine(UiTree.ToPromptSummary());
         }

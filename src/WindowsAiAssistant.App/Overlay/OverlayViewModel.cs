@@ -18,7 +18,7 @@ public enum OverlayPhase
 public sealed class OverlayViewModel : ObservableObject
 {
     private OverlayPhase _phase = OverlayPhase.Hidden;
-    private string _statusText = "Hazir";
+    private string _statusText = "Hazır";
     private string _detailText = string.Empty;
     private string _transcriptText = string.Empty;
     private string _resultText = string.Empty;
@@ -75,10 +75,11 @@ public sealed class OverlayViewModel : ObservableObject
     public bool ShowManualInput => Phase == OverlayPhase.ManualInput;
 
     /// <summary>
-    /// Overlay dis tikla yalnizca terminal goruntuleme fazlarinda kapatilabilir; agent
-    /// calisirken veya onay beklerken odak kaybinda kapanmamali.
+    /// Overlay dis tikla yalnizca bekleme/manuel giris/terminal fazlarinda kapatilabilir;
+    /// agent calisirken veya onay beklerken odak kaybinda kapanmamali.
     /// </summary>
-    public bool CanDismissOnFocusLoss => Phase is OverlayPhase.Result or OverlayPhase.Error;
+    public bool CanDismissOnFocusLoss =>
+        Phase is OverlayPhase.Listening or OverlayPhase.ManualInput or OverlayPhase.Result or OverlayPhase.Error;
 
     public string ManualInputText
     {
@@ -89,7 +90,7 @@ public sealed class OverlayViewModel : ObservableObject
     public void SetManualInputPrompt(string detail)
     {
         Phase = OverlayPhase.ManualInput;
-        StatusText = "Metin girin";
+        StatusText = "Ses algılanmadı";
         DetailText = detail;
         ManualInputText = string.Empty;
         IsBusy = false;
@@ -112,7 +113,7 @@ public sealed class OverlayViewModel : ObservableObject
         if (Phase == OverlayPhase.ApprovalPending)
         {
             Phase = OverlayPhase.Running;
-            StatusText = "Calisiyor";
+            StatusText = "Çalışıyor";
             IsBusy = true;
         }
     }
@@ -123,7 +124,7 @@ public sealed class OverlayViewModel : ObservableObject
         if (Phase == OverlayPhase.ApprovalPending)
         {
             Phase = OverlayPhase.Running;
-            StatusText = "Calisiyor";
+            StatusText = "Çalışıyor";
             IsBusy = true;
         }
     }
@@ -133,7 +134,7 @@ public sealed class OverlayViewModel : ObservableObject
         TranscriptText = string.Empty;
         ResultText = string.Empty;
         DetailText = string.Empty;
-        StatusText = "Dinliyorum...";
+        StatusText = "Dinliyorum…";
         Phase = OverlayPhase.Listening;
         IsBusy = true;
     }
@@ -141,7 +142,7 @@ public sealed class OverlayViewModel : ObservableObject
     public void SetTranscribing()
     {
         Phase = OverlayPhase.Transcribing;
-        StatusText = "Konusmaniz algilaniyor...";
+        StatusText = "Komut algılanıyor…";
     }
 
     public void SetCommandText(string transcript) => TranscriptText = transcript;
@@ -149,7 +150,7 @@ public sealed class OverlayViewModel : ObservableObject
     public void SetRunning(string detail)
     {
         Phase = OverlayPhase.Running;
-        StatusText = "Calisiyor";
+        StatusText = "Çalışıyor";
         DetailText = detail;
     }
 
@@ -158,7 +159,7 @@ public sealed class OverlayViewModel : ObservableObject
         Phase = OverlayPhase.Result;
         TranscriptText = transcript;
         ResultText = result;
-        StatusText = "Tamamlandi";
+        StatusText = "Tamamlandı";
         DetailText = string.Empty;
         IsBusy = false;
     }

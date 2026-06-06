@@ -1,4 +1,4 @@
-﻿<Window
+<Window
     x:Class="WindowsAiAssistant.App.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -52,20 +52,9 @@
                         <FontIcon Glyph="&#xE823;" />
                     </muxc:NavigationViewItem.Icon>
                 </muxc:NavigationViewItem>
-                <muxc:NavigationViewItem Tag="Capabilities" Content="Yetenekler">
-                    <muxc:NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE950;" />
-                    </muxc:NavigationViewItem.Icon>
-                </muxc:NavigationViewItem>
-                <muxc:NavigationViewItemSeparator />
-                <muxc:NavigationViewItem Tag="Settings" Content="Sağlayıcı Ayarları">
+                <muxc:NavigationViewItem Tag="Settings" Content="Ayarlar">
                     <muxc:NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
-                    </muxc:NavigationViewItem.Icon>
-                </muxc:NavigationViewItem>
-                <muxc:NavigationViewItem Tag="AppSettings" Content="Ses ve Güvenlik">
-                    <muxc:NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE1D6;" />
                     </muxc:NavigationViewItem.Icon>
                 </muxc:NavigationViewItem>
             </muxc:NavigationView.MenuItems>

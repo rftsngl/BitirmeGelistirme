@@ -36,4 +36,9 @@ public sealed class AudioOptions
     /// Yakalama yapilacak mikrofon cihaz indeksi. -1 = varsayilan cihaz.
     /// </summary>
     public int InputDeviceIndex { get; set; } = -1;
+
+    /// <summary>
+    /// Gelistirici Modu: LLM ciktilari, action ayrintilari, UIA agaci ve teknik loglari gosterir.
+    /// </summary>
+    public bool DeveloperModeEnabled { get; set; }
 }

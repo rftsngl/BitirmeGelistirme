@@ -4,6 +4,7 @@ using FlaUI.Core.Definitions;
 using FlaUI.UIA2;
 using FlaUI.UIA3;
 using WindowsAiAssistant.Runtime.Config;
+using WindowsAiAssistant.Runtime.Debugging;
 using WindowsAiAssistant.Runtime.Input;
 
 namespace WindowsAiAssistant.Runtime.Automation;
@@ -387,6 +388,14 @@ public sealed class UiAutomationService
     {
         if (!_registry.TryGet(elementId, out var reference) || reference is null)
         {
+            // #region agent log
+            DebugAgentLog.Write(
+                "H3",
+                "UiAutomationService.ResolveElement",
+                "element not in registry",
+                new { elementId, registrySize = _registry.Elements.Count },
+                null);
+            // #endregion
             throw new InvalidOperationException(
                 $"Element bulunamadi: '{elementId}'. Gozlem yenilendi; yalnizca mevcut listedeki elementId kullanin.");
         }

@@ -8,6 +8,7 @@ using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.App.Models;
 using WindowsAiAssistant.App.Mvvm;
 using WindowsAiAssistant.App.Services;
+using WindowsAiAssistant.Runtime.Policy;
 
 namespace WindowsAiAssistant.App.ViewModels;
 
@@ -19,10 +20,12 @@ public sealed class AssistantViewModel : ObservableObject
     private readonly AgentRunCoordinator _runCoordinator;
     private readonly VoiceApprovalService _voiceApproval;
     private readonly AudioOptions _audioOptions;
+    private readonly ActionPolicy _actionPolicy;
     private CancellationTokenSource? _runCts;
+    private ConversationItem? _liveActivityItem;
     private bool _isBusy;
     private string _commandInput = string.Empty;
-    private string _statusMessage = "Agent hazir. Mesajinizi gonderin.";
+    private string _statusMessage = "Asistan hazır. Mesajınızı gönderin.";
 
     public AssistantViewModel(
         INavigationService navigation,
@@ -31,7 +34,8 @@ public sealed class AssistantViewModel : ObservableObject
         ActionApprovalCoordinator approvalCoordinator,
         AgentRunCoordinator runCoordinator,
         VoiceApprovalService voiceApproval,
-        AudioOptions audioOptions)
+        AudioOptions audioOptions,
+        ActionPolicy actionPolicy)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         ProviderStatus = providerStatus ?? throw new ArgumentNullException(nameof(providerStatus));
@@ -40,6 +44,7 @@ public sealed class AssistantViewModel : ObservableObject
         _runCoordinator = runCoordinator ?? throw new ArgumentNullException(nameof(runCoordinator));
         _voiceApproval = voiceApproval ?? throw new ArgumentNullException(nameof(voiceApproval));
         _audioOptions = audioOptions ?? throw new ArgumentNullException(nameof(audioOptions));
+        _actionPolicy = actionPolicy ?? throw new ArgumentNullException(nameof(actionPolicy));
 
         Conversation = [];
         SubmitCommand = new AsyncRelayCommand(SubmitAsync, CanSubmit);
@@ -58,6 +63,8 @@ public sealed class AssistantViewModel : ObservableObject
     public ICommand ClearSessionCommand { get; }
     public ICommand OpenSettingsCommand { get; }
 
+    public event Action? ScrollToEndRequested;
+
     public string CommandInput
     {
         get => _commandInput;
@@ -73,8 +80,44 @@ public sealed class AssistantViewModel : ObservableObject
     public string StatusMessage
     {
         get => _statusMessage;
-        private set => SetField(ref _statusMessage, value);
+        private set
+        {
+            if (SetField(ref _statusMessage, value))
+            {
+                OnPropertyChanged(nameof(UserFriendlyStatus));
+            }
+        }
     }
+
+    public string UserFriendlyStatus
+    {
+        get
+        {
+            if (!ProviderStatus.IsReady)
+            {
+                return "Model ayarlanmalı";
+            }
+
+            if (IsBusy && _liveActivityItem is not null && !string.IsNullOrWhiteSpace(_liveActivityItem.LiveStatusLine))
+            {
+                return _liveActivityItem.LiveStatusLine;
+            }
+
+            if (IsBusy)
+            {
+                return "Çalışıyor…";
+            }
+
+            if (_audioOptions.GlobalHotKeyEnabled || _audioOptions.WakeWordEnabled)
+            {
+                return "Sesli asistan aktif";
+            }
+
+            return string.IsNullOrWhiteSpace(_statusMessage) ? "Hazır" : _statusMessage;
+        }
+    }
+
+    public bool DeveloperModeEnabled => _audioOptions.DeveloperModeEnabled;
 
     public bool IsBusy
     {
@@ -84,6 +127,7 @@ public sealed class AssistantViewModel : ObservableObject
             if (SetField(ref _isBusy, value))
             {
                 OnPropertyChanged(nameof(IsNotBusy));
+                OnPropertyChanged(nameof(UserFriendlyStatus));
                 RaiseCanExecuteChanged();
             }
         }
@@ -99,6 +143,7 @@ public sealed class AssistantViewModel : ObservableObject
     {
         if (e.PropertyName is nameof(IActiveProviderStatus.IsReady) or nameof(IActiveProviderStatus.ReadyBadge) or "")
         {
+            OnPropertyChanged(nameof(UserFriendlyStatus));
             RaiseCanExecuteChanged();
         }
     }
@@ -106,7 +151,7 @@ public sealed class AssistantViewModel : ObservableObject
     public void LoadCommand(string commandText)
     {
         CommandInput = commandText ?? string.Empty;
-        StatusMessage = "Komut yuklendi. Gonder ile agent calistirilir.";
+        StatusMessage = "Komut yüklendi. 'Gönder' ile asistan çalıştırılır.";
     }
 
     public void CleanupRuntimeSessionState()
@@ -124,7 +169,7 @@ public sealed class AssistantViewModel : ObservableObject
 
         _runCts.Cancel();
         _voiceApproval.Cancel();
-        StatusMessage = "Iptal istendi...";
+        StatusMessage = "İptal istendi...";
     }
 
     private async Task SubmitAsync()
@@ -140,10 +185,10 @@ public sealed class AssistantViewModel : ObservableObject
             Conversation.Add(new ConversationItem
             {
                 Kind = ConversationItemKind.ErrorCard,
-                Title = "Saglayici hazir degil",
+                Title = "Sağlayıcı hazır değil",
                 Body = ProviderStatus.ReadyReason,
                 PrimaryCommand = OpenSettingsCommand,
-                PrimaryCommandLabel = "Saglayici Ayarlari"
+                PrimaryCommandLabel = "Ayarlar"
             });
             OnPropertyChanged(nameof(HasConversation));
             StatusMessage = ProviderStatus.ReadyReason;
@@ -152,7 +197,7 @@ public sealed class AssistantViewModel : ObservableObject
 
         if (!_runCoordinator.TryEnterRun())
         {
-            StatusMessage = "Baska bir agent oturumu (sesli popup) calisiyor. Lutfen bekleyin.";
+            StatusMessage = "Başka bir asistan oturumu çalışıyor. Lütfen bekleyin.";
             return;
         }
 
@@ -161,19 +206,32 @@ public sealed class AssistantViewModel : ObservableObject
         _runCts = new CancellationTokenSource();
 
         IsBusy = true;
-        StatusMessage = "Agent calisiyor (adim 1)...";
+        StatusMessage = "Başlıyor…";
+
         Conversation.Add(new ConversationItem
         {
+            DeveloperModeEnabled = DeveloperModeEnabled,
             Kind = ConversationItemKind.UserMessage,
             Title = "Sen",
             Body = commandText
         });
 
+        _liveActivityItem = CreateLiveActivityItem();
+        Conversation.Add(_liveActivityItem);
+
         CommandInput = string.Empty;
         OnPropertyChanged(nameof(HasConversation));
         RaiseCanExecuteChanged();
+        RequestScrollToEnd();
 
         var progress = new Progress<AgentStepProgress>(UpdateProgress);
+        UpdateProgress(new AgentStepProgress
+        {
+            StepIndex = 0,
+            MaxSteps = 1,
+            Phase = "basladi",
+            Detail = commandText
+        });
 
         try
         {
@@ -183,37 +241,23 @@ public sealed class AssistantViewModel : ObservableObject
 
             if (!result.Success)
             {
+                FinalizeLiveActivity(success: false);
                 var isProviderError = result.ErrorKind == AgentErrorKind.Provider;
                 Conversation.Add(new ConversationItem
                 {
+                    DeveloperModeEnabled = DeveloperModeEnabled,
                     Kind = ConversationItemKind.ErrorCard,
                     Title = ResolveErrorTitle(result.ErrorKind),
-                    Body = result.ErrorMessage ?? "Istek tamamlanamadi.",
+                    Body = result.ErrorMessage ?? "İstek tamamlanamadı.",
                     PrimaryCommand = isProviderError ? OpenSettingsCommand : null,
-                    PrimaryCommandLabel = isProviderError ? "Saglayici Ayarlari" : string.Empty
+                    PrimaryCommandLabel = isProviderError ? "Ayarlar" : string.Empty
                 });
-                StatusMessage = result.ErrorMessage ?? "Istek tamamlanamadi.";
+                StatusMessage = result.ErrorMessage ?? "İstek tamamlanamadı.";
+                RequestScrollToEnd();
                 return;
             }
 
-            foreach (var step in result.Session.Steps)
-            {
-                var actionName = step.ParsedDecision?.Action ?? "step";
-                if (step.ParsedDecision?.Action is "respond")
-                {
-                    continue;
-                }
-
-                if (step.ActionResult is { Success: true } actionResult)
-                {
-                    Conversation.Add(new ConversationItem
-                    {
-                        Kind = ConversationItemKind.AssistantStatus,
-                        Title = $"Adim {step.Index + 1}: {actionName}",
-                        Body = actionResult.Message
-                    });
-                }
-            }
+            FinalizeLiveActivity(success: true);
 
             var physicalSteps = result.Session.Steps
                 .Count(step => step.ParsedDecision?.Action is not ("respond" or "ask_user" or "stop"));
@@ -222,21 +266,23 @@ public sealed class AssistantViewModel : ObservableObject
             string stepInfoText;
             if (hasRespondStep && physicalSteps > 0)
             {
-                stepInfoText = $"{physicalSteps} fiziksel adim + yanit";
+                stepInfoText = $"{physicalSteps} fiziksel adım + yanıt";
             }
             else if (physicalSteps == 0 && hasRespondStep)
             {
-                stepInfoText = "Dogrudan yanit (fiziksel adim yok)";
+                stepInfoText = "Doğrudan yanıt (fiziksel adım yok)";
             }
             else
             {
-                stepInfoText = $"{physicalSteps} adim";
+                stepInfoText = $"{physicalSteps} adım";
             }
 
-            var badge = result.ReachedMaxSteps ? $"Adim limiti ({result.Session.Steps.Count}/{result.Session.Steps.Count})" : "Tamamlandi";
+            var badge = result.ReachedMaxSteps ? $"Adım limiti ({result.Session.Steps.Count}/{result.Session.Steps.Count})" : "Tamamlandı";
             var logPath = result.LogFilePath ?? string.Empty;
+            var showLogAction = DeveloperModeEnabled && !string.IsNullOrWhiteSpace(logPath);
             Conversation.Add(new ConversationItem
             {
+                DeveloperModeEnabled = DeveloperModeEnabled,
                 Kind = ConversationItemKind.ResultCard,
                 Title = "Asistan",
                 Body = result.AssistantMessage ?? string.Empty,
@@ -244,32 +290,43 @@ public sealed class AssistantViewModel : ObservableObject
                 StepInfo = stepInfoText,
                 ObservationSummary = result.ObservationSummary ?? "(gozlem yok)",
                 LogPath = logPath,
-                PrimaryCommand = string.IsNullOrWhiteSpace(logPath) ? null : new RelayCommand(() => OpenLog(logPath)),
-                PrimaryCommandLabel = string.IsNullOrWhiteSpace(logPath) ? string.Empty : "Logu Ac"
+                PrimaryCommand = showLogAction ? new RelayCommand(() => OpenLog(logPath)) : null,
+                PrimaryCommandLabel = showLogAction ? "Logu Aç" : string.Empty
             });
             StatusMessage = result.ReachedMaxSteps
-                ? $"Adim limitine ulasildi ({result.Session.Steps.Count} adim, {physicalSteps} fiziksel). Log: {result.LogFilePath}"
-                : $"Tamamlandi — {stepInfoText}. Log: {result.LogFilePath}";
+                ? DeveloperModeEnabled
+                    ? $"Adım limitine ulaşıldı ({result.Session.Steps.Count} adım, {physicalSteps} fiziksel). Log: {result.LogFilePath}"
+                    : $"Adım limitine ulaşıldı ({result.Session.Steps.Count} adım, {physicalSteps} fiziksel)."
+                : DeveloperModeEnabled
+                    ? $"Tamamlandı — {stepInfoText}. Log: {result.LogFilePath}"
+                    : "Tamamlandı.";
+            RequestScrollToEnd();
         }
         catch (OperationCanceledException)
         {
+            FinalizeLiveActivity(success: false);
             Conversation.Add(new ConversationItem
             {
+                DeveloperModeEnabled = DeveloperModeEnabled,
                 Kind = ConversationItemKind.ErrorCard,
-                Title = "Iptal",
-                Body = "Agent calismasi kullanici tarafindan durduruldu."
+                Title = "İptal edildi",
+                Body = "Asistan çalışması durduruldu."
             });
-            StatusMessage = "Calisma iptal edildi.";
+            StatusMessage = "Çalışma iptal edildi.";
+            RequestScrollToEnd();
         }
         catch (Exception ex)
         {
+            FinalizeLiveActivity(success: false);
             Conversation.Add(new ConversationItem
             {
+                DeveloperModeEnabled = DeveloperModeEnabled,
                 Kind = ConversationItemKind.ErrorCard,
                 Title = "Beklenmeyen hata",
                 Body = ex.Message
             });
-            StatusMessage = "Istek tamamlanamadi.";
+            StatusMessage = "İstek tamamlanamadı.";
+            RequestScrollToEnd();
         }
         finally
         {
@@ -284,10 +341,79 @@ public sealed class AssistantViewModel : ObservableObject
     private void UpdateProgress(AgentStepProgress progress)
     {
         var stepNumber = Math.Min(progress.StepIndex + 1, progress.MaxSteps);
-        StatusMessage = string.IsNullOrWhiteSpace(progress.Detail)
-            ? $"Adim {stepNumber}/{progress.MaxSteps}: {progress.Phase}"
-            : $"Adim {stepNumber}/{progress.MaxSteps}: {progress.Phase} — {progress.Detail}";
+        var (label, detail) = ActivityPhaseFormatter.Format(progress);
+
+        if (_liveActivityItem is not null)
+        {
+            _liveActivityItem.CurrentStepIndex = stepNumber;
+            _liveActivityItem.MaxSteps = progress.MaxSteps;
+            _liveActivityItem.LiveStatusLine = label;
+            _liveActivityItem.LiveDetailLine = detail;
+            AppendTimelineEntry(_liveActivityItem, label, detail, progress.Phase);
+            OnPropertyChanged(nameof(UserFriendlyStatus));
+        }
+
+        StatusMessage = string.IsNullOrWhiteSpace(detail)
+            ? $"{label} — adım {stepNumber}/{progress.MaxSteps}"
+            : $"{label} — {detail}";
+        RequestScrollToEnd();
     }
+
+    private static ConversationItem CreateLiveActivityItem() =>
+        new()
+        {
+            Kind = ConversationItemKind.LiveActivity,
+            Title = "Asistan",
+            Body = string.Empty,
+            IsActive = true
+        };
+
+    private static void AppendTimelineEntry(ConversationItem item, string label, string detail, string phase)
+    {
+        foreach (var entry in item.Timeline.Where(entry => entry.IsActive))
+        {
+            entry.State = phase.Contains("fail", StringComparison.OrdinalIgnoreCase)
+                ? TimelineEntryState.Failed
+                : TimelineEntryState.Completed;
+        }
+
+        var duplicate = item.Timeline.LastOrDefault(entry =>
+            entry.Label.Equals(label, StringComparison.Ordinal) &&
+            entry.State == TimelineEntryState.Active);
+        if (duplicate is not null)
+        {
+            duplicate.Detail = detail;
+            return;
+        }
+
+        item.Timeline.Add(new ActivityTimelineEntry
+        {
+            Label = label,
+            Detail = detail,
+            State = TimelineEntryState.Active
+        });
+        item.OnPropertyChanged(nameof(ConversationItem.HasTimeline));
+    }
+
+    private void FinalizeLiveActivity(bool success)
+    {
+        if (_liveActivityItem is null)
+        {
+            return;
+        }
+
+        foreach (var entry in _liveActivityItem.Timeline.Where(entry => entry.IsActive))
+        {
+            entry.State = success ? TimelineEntryState.Completed : TimelineEntryState.Failed;
+        }
+
+        _liveActivityItem.IsActive = false;
+        Conversation.Remove(_liveActivityItem);
+        _liveActivityItem = null;
+        OnPropertyChanged(nameof(UserFriendlyStatus));
+    }
+
+    private void RequestScrollToEnd() => ScrollToEndRequested?.Invoke();
 
     private void OnApprovalRequested(object? sender, PendingApprovalRequest request)
     {
@@ -300,12 +426,14 @@ public sealed class AssistantViewModel : ObservableObject
 
         item = new ConversationItem
         {
+            DeveloperModeEnabled = DeveloperModeEnabled,
             Kind = ConversationItemKind.PendingApproval,
-            Title = "Islem onayi gerekli",
+            Title = "Bu işlem onay gerektiriyor",
             Body = body,
-            SelectedTool = request.Action.Action,
-            RiskLevel = ActionRiskDisplay.ToUiLabel(request.GateDecision.Risk),
-            StatusBadge = "BEKLIYOR",
+            SelectedTool = ActionDisplayHelper.ToUserFriendlyLabel(request.Action.Action),
+            RiskLevel = ActionDisplayHelper.ToRiskLabel(request.GateDecision.Risk.ToString()),
+            StatusBadge = "BEKLİYOR",
+            ShowSessionRemember = _actionPolicy.AllowSessionRemember || DeveloperModeEnabled,
             PrimaryCommandLabel = "Onayla",
             SecondaryCommandLabel = "Reddet",
             PrimaryCommand = new RelayCommand(() => ResolveApproval(request, item!, approved: true)),
@@ -315,6 +443,14 @@ public sealed class AssistantViewModel : ObservableObject
         Conversation.Add(item);
         OnPropertyChanged(nameof(HasConversation));
         StatusMessage = $"Onay bekleniyor: {request.GateDecision.Summary}";
+        UpdateProgress(new AgentStepProgress
+        {
+            StepIndex = _liveActivityItem?.CurrentStepIndex > 0 ? _liveActivityItem.CurrentStepIndex - 1 : 0,
+            MaxSteps = _liveActivityItem?.MaxSteps ?? 1,
+            Phase = "onay",
+            Detail = request.GateDecision.Summary
+        });
+        RequestScrollToEnd();
 
         _ = _voiceApproval.ListenForDecisionAsync(
             approved =>
@@ -334,8 +470,8 @@ public sealed class AssistantViewModel : ObservableObject
 
         _voiceApproval.Cancel();
         item.IsApprovalResolved = true;
-        item.StatusBadge = approved ? "ONAYLANDI" : "REDDEDILDI";
-        item.ResolutionNote = approved ? "Devam ediliyor..." : "Islem reddedildi.";
+        item.StatusBadge = approved ? "ONAYLANDI" : "REDDEDİLDİ";
+        item.ResolutionNote = approved ? "Devam ediliyor..." : "İşlem reddedildi.";
         if (approved)
         {
             request.Approve(rememberForSession: item.AllowForSession);
@@ -348,10 +484,10 @@ public sealed class AssistantViewModel : ObservableObject
 
     private static string ResolveErrorTitle(AgentErrorKind errorKind) => errorKind switch
     {
-        AgentErrorKind.Provider => "Saglayici / baglanti hatasi",
-        AgentErrorKind.Decision => "Karar cozumlenemedi",
-        AgentErrorKind.Action => "Eylem basarisiz",
-        _ => "Agent hatasi"
+        AgentErrorKind.Provider => "Sağlayıcı / bağlantı hatası",
+        AgentErrorKind.Decision => "Karar çözümlenemedi",
+        AgentErrorKind.Action => "Eylem başarısız",
+        _ => "Asistan hatası"
     };
 
     private static void OpenLog(string logPath)
@@ -382,9 +518,10 @@ public sealed class AssistantViewModel : ObservableObject
 
     private void ClearSession()
     {
+        FinalizeLiveActivity(success: false);
         Conversation.Clear();
         CommandInput = string.Empty;
-        StatusMessage = "Agent hazir. Mesajinizi gonderin.";
+        StatusMessage = "Asistan hazır. Mesajınızı gönderin.";
         OnPropertyChanged(nameof(HasConversation));
         RaiseCanExecuteChanged();
     }

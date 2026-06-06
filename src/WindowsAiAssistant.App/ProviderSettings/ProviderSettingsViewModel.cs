@@ -14,7 +14,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     private ProviderProfile? _selectedProfile;
     private ProviderProfileDraft? _editingDraft;
     private ConnectionTestSummary? _lastConnectionTest;
-    private string _statusMessage = "Saglayici profilleri yukleniyor...";
+    private string _statusMessage = "Sağlayıcı profilleri yükleniyor...";
     private string _apiKeyInput = string.Empty;
     private bool _isEditingNew;
     private bool _isTestingConnection;
@@ -70,12 +70,12 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     public string DetailBaseUrl => SelectedProfile?.BaseUrl ?? "-";
     public string DetailModel => SelectedProfile?.Model ?? "-";
     public string DetailEndpointPath => SelectedProfile?.EndpointPath ?? "-";
-    public string DetailRequiresApiKey => SelectedProfile is null ? "-" : SelectedProfile.RequiresApiKey ? "Evet" : "Hayir";
-    public string DetailIsEnabled => SelectedProfile is null ? "-" : SelectedProfile.IsEnabled ? "Evet" : "Hayir";
-    public string DetailTemperature => SelectedProfile?.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(varsayilan)";
-    public string DetailMaxTokens => SelectedProfile?.MaxTokens?.ToString() ?? "(varsayilan)";
-    public string DetailVisionEnabled => SelectedProfile is null ? "-" : SelectedProfile.VisionEnabled ? "Evet" : "Hayir";
-    public string DetailOriginLabel => SelectedProfile is null ? "-" : IsCurrentBuiltIn ? "Yerlesik profil" : "Ozel profil";
+    public string DetailRequiresApiKey => SelectedProfile is null ? "-" : SelectedProfile.RequiresApiKey ? "Evet" : "Hayır";
+    public string DetailIsEnabled => SelectedProfile is null ? "-" : SelectedProfile.IsEnabled ? "Evet" : "Hayır";
+    public string DetailTemperature => SelectedProfile?.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(varsayılan)";
+    public string DetailMaxTokens => SelectedProfile?.MaxTokens?.ToString() ?? "(varsayılan)";
+    public string DetailVisionEnabled => SelectedProfile is null ? "-" : SelectedProfile.VisionEnabled ? "Evet" : "Hayır";
+    public string DetailOriginLabel => SelectedProfile is null ? "-" : IsCurrentBuiltIn ? "Yerleşik profil" : "Özel profil";
 
     public bool HasSavedKeyForCurrent =>
         SelectedProfile is not null && _configurationService.HasSavedApiKey(SelectedProfile.Id);
@@ -87,13 +87,13 @@ public sealed class ProviderSettingsViewModel : ObservableObject
 
     public string SavedKeyMask => HasSavedKeyForCurrent ? "********" : string.Empty;
     public string SavedKeyStatus => HasEnvKeyForCurrent
-        ? $"Ortam degiskeni ({SelectedProfile?.ApiKeyEnvVar}) mevcut."
+        ? $"Ortam değişkeni ({SelectedProfile?.ApiKeyEnvVar}) mevcut."
         : HasSavedKeyForCurrent
-            ? "Anahtar yerel kullanici ayarlarinda saklaniyor."
-            : "Kayitli anahtar yok.";
+            ? "Anahtar yerel kullanıcı ayarlarında saklanıyor."
+            : "Kayıtlı anahtar yok.";
     public bool KeySaveRemoveEnabled => SelectedProfile is { RequiresApiKey: true };
     public bool ShowDisabledBanner => SelectedProfile is { IsEnabled: false };
-    public string DisabledBannerText => ShowDisabledBanner ? "Profil devre disi. Aktif yapmadan once etkinlestirin." : string.Empty;
+    public string DisabledBannerText => ShowDisabledBanner ? "Profil devre dışı. Aktif yapmadan önce etkinleştirin." : string.Empty;
     public bool ShowNoKeyMessage => SelectedProfile is { RequiresApiKey: false };
     public bool ShowSavedKeyRow => SelectedProfile is { RequiresApiKey: true };
     public Visibility KeyAreaVisibility => ShowSavedKeyRow ? Visibility.Visible : Visibility.Collapsed;
@@ -157,7 +157,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     }
 
     public bool IsEditing => EditingDraft is not null;
-    public string EditingTitle => _isEditingNew ? "Yeni profil" : "Profili duzenle";
+    public string EditingTitle => _isEditingNew ? "Yeni profil" : "Profili düzenle";
 
     public void Load()
     {
@@ -166,14 +166,14 @@ public sealed class ProviderSettingsViewModel : ObservableObject
             profile.Id.Equals(_configurationService.ActiveProfileId, StringComparison.OrdinalIgnoreCase)) ??
             Profiles.FirstOrDefault();
         SyncProviderStatus();
-        StatusMessage = "Saglayici profilleri yuklendi. Aktif profili secin veya duzenleyin.";
+        StatusMessage = "Sağlayıcı profilleri yüklendi. Aktif profili seçin veya düzenleyin.";
     }
 
     public Task SetActiveAsync()
     {
         if (SelectedProfile is not { IsEnabled: true })
         {
-            StatusMessage = "Etkin bir profil secin.";
+            StatusMessage = "Etkin bir profil seçin.";
             return Task.CompletedTask;
         }
 
@@ -181,7 +181,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         RefreshFlags();
         SyncProviderStatus();
         NotifySelectionChanged();
-        StatusMessage = $"'{SelectedProfile.DisplayName}' aktif saglayici olarak ayarlandi.";
+        StatusMessage = $"'{SelectedProfile.DisplayName}' aktif sağlayıcı olarak ayarlandı.";
         return Task.CompletedTask;
     }
 
@@ -189,7 +189,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     {
         if (SelectedProfile is not { RequiresApiKey: true } || string.IsNullOrWhiteSpace(ApiKeyInput))
         {
-            StatusMessage = "Kaydetmek icin bir API anahtari girin.";
+            StatusMessage = "Kaydetmek için bir API anahtarı girin.";
             return Task.CompletedTask;
         }
 
@@ -198,7 +198,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         RefreshFlags();
         SyncProviderStatus();
         NotifySelectionChanged();
-        StatusMessage = "API anahtari yerel kullanici ayarlarina kaydedildi.";
+        StatusMessage = "API anahtarı yerel kullanıcı ayarlarına kaydedildi.";
         return Task.CompletedTask;
     }
 
@@ -212,7 +212,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         RefreshFlags();
         SyncProviderStatus();
         NotifySelectionChanged();
-        StatusMessage = "Yerel API anahtari kaldirildi.";
+        StatusMessage = "Yerel API anahtarı kaldırıldı.";
         return Task.CompletedTask;
     }
 
@@ -224,7 +224,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         }
 
         IsTestingConnection = true;
-        StatusMessage = "Baglanti test ediliyor...";
+        StatusMessage = "Bağlantı test ediliyor...";
 
         try
         {
@@ -314,7 +314,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     {
         if (SelectedProfile is null)
         {
-            StatusMessage = "Duzenlenecek profil secilmedi.";
+            StatusMessage = "Düzenlenecek profil seçilmedi.";
             return;
         }
 
@@ -332,18 +332,18 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     {
         if (EditingDraft is null)
         {
-            return ProviderProfileSaveResult.Fail("Aktif duzenleme yok.");
+            return ProviderProfileSaveResult.Fail("Aktif düzenleme yok.");
         }
 
         var profile = EditingDraft.ToProfile();
         if (string.IsNullOrWhiteSpace(profile.Id) || string.IsNullOrWhiteSpace(profile.DisplayName))
         {
-            return ProviderProfileSaveResult.Fail("Profil kimligi ve gorunen ad gereklidir.");
+            return ProviderProfileSaveResult.Fail("Profil kimliği ve görünen ad gereklidir.");
         }
 
         if (_isEditingNew && Profiles.Any(item => item.Id.Equals(profile.Id, StringComparison.OrdinalIgnoreCase)))
         {
-            return ProviderProfileSaveResult.Fail("Bu kimlige sahip bir profil zaten var.");
+            return ProviderProfileSaveResult.Fail("Bu kimliğe sahip bir profil zaten var.");
         }
 
         _configurationService.UpsertProfile(profile);

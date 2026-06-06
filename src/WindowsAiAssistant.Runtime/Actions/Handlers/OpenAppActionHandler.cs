@@ -10,38 +10,42 @@ public sealed class OpenAppActionHandler : IActionHandler
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var target = action.Target;
-        if (string.IsNullOrWhiteSpace(target) &&
-            action.Parameters.TryGetValue("app", out var appParameter))
-        {
-            target = appParameter;
-        }
+        var target = ActionParameterReader.GetTargetOrParameter(
+            action, "app", "name", "application", "executable", "program", "target");
 
-        if (!AppLaunchCatalog.TryResolve(target, out var executable, out var error))
+        if (!AppLaunchCatalog.ResolveForOpenApp(target, out var executable, out var error))
         {
             return Task.FromResult(new ActionResult { Success = false, Message = error! });
         }
+
+        var launchPath = AppLaunchCatalog.TryFindInstalledExecutable(executable) ?? executable;
 
         try
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = executable,
+                FileName = launchPath,
                 UseShellExecute = true
             });
 
             return Task.FromResult(new ActionResult
             {
                 Success = true,
-                Message = $"{executable} baslatildi."
+                Message = $"{launchPath} baslatildi."
             });
         }
         catch (Exception ex)
         {
+            var hint = string.Equals(launchPath, executable, StringComparison.OrdinalIgnoreCase)
+                ? AppLaunchCatalog.TryFindInstalledExecutable(executable) is null
+                    ? " Kurulum yolu bulunamadi; 'launch' ile tam yol veya 'shell' ile keşif deneyin."
+                    : string.Empty
+                : string.Empty;
+
             return Task.FromResult(new ActionResult
             {
                 Success = false,
-                Message = $"Uygulama baslatilamadi: {ex.Message}"
+                Message = $"Uygulama '{executable}' baslatilamadi: {ex.Message}.{hint}"
             });
         }
     }

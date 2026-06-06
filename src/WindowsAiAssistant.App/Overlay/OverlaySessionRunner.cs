@@ -73,7 +73,7 @@ public sealed class OverlaySessionRunner
         {
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
-                _viewModel.SetError("Baska bir agent oturumu calisiyor. Lutfen bekleyin.");
+                _viewModel.SetError("Başka bir asistan oturumu çalışıyor. Lütfen bekleyin.");
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
             await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
@@ -126,7 +126,7 @@ public sealed class OverlaySessionRunner
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
                 _viewModel.SetManualInputPrompt(
-                    $"Ses tanima basarisiz: {ex.Message}. Komutu yazarak gonderebilirsiniz.");
+                    $"Sesi anlayamadım. Komutu yazarak gönderebilirsiniz. Ayrıntı: {ex.Message}");
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
             transcript = await WaitForManualInputAsync(token).ConfigureAwait(true);
@@ -137,7 +137,7 @@ public sealed class OverlaySessionRunner
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
                 _viewModel.SetManualInputPrompt(
-                    "Konusma algilanamadi. Komutu asagiya yazin ve Gonder'e basin. Mikrofon izni ve tr-TR dil paketini kontrol edin.");
+                    "Ses duyamadım. Komutu aşağıya yazıp Gönder'e basabilirsiniz. Mikrofon izni ve seçili mikrofonu kontrol edin.");
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
 
@@ -157,7 +157,7 @@ public sealed class OverlaySessionRunner
         await window.DispatcherQueue.EnqueueAsync(() =>
         {
             _viewModel.SetCommandText(transcript);
-            _viewModel.SetRunning("Agent baslatiliyor...");
+            _viewModel.SetRunning("İşlemi yapıyorum…");
             return Task.CompletedTask;
         }).ConfigureAwait(true);
 
@@ -168,8 +168,8 @@ public sealed class OverlaySessionRunner
                 var step = Math.Min(update.StepIndex + 1, update.MaxSteps);
                 _viewModel.SetRunning(
                     string.IsNullOrWhiteSpace(update.Detail)
-                        ? $"Adim {step}/{update.MaxSteps}: {update.Phase}"
-                        : $"Adim {step}/{update.MaxSteps}: {update.Phase} — {update.Detail}");
+                        ? $"Adım {step}/{update.MaxSteps}: {update.Phase}"
+                        : $"Adım {step}/{update.MaxSteps}: {update.Phase} — {update.Detail}");
             });
         });
 
@@ -202,14 +202,14 @@ public sealed class OverlaySessionRunner
         {
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
-                _viewModel.SetError(result.ErrorMessage ?? "Agent calismasi basarisiz.");
+                _viewModel.SetError(result.ErrorMessage ?? "Asistan çalışması başarısız.");
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
             await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
             return;
         }
 
-        var assistantMessage = result.AssistantMessage ?? "Tamamlandi.";
+        var assistantMessage = result.AssistantMessage ?? "Tamamlandı.";
         await window.DispatcherQueue.EnqueueAsync(() =>
         {
             _viewModel.SetResult(transcript, assistantMessage);

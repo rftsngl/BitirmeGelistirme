@@ -12,15 +12,115 @@ public sealed class HistoryViewItem
     public int StepCount { get; init; }
     public string LastResult { get; init; } = string.Empty;
 
+    public string ConversationTitle => BuildConversationTitle(CommandText, LastResult);
+    public string CommandPreview =>
+        string.IsNullOrWhiteSpace(CommandText) ? "Komut bulunmuyor" : TrimSentence(CommandText, 84);
     public string TimestampDisplay => TimestampUtc.ToLocalTime().ToString("g");
-    public string StepCountDisplay => $"{StepCount} adim";
+    public string RelativeTimeDisplay => FormatRelativeTime(TimestampUtc);
+    public string StepCountDisplay => StepCount == 1 ? "1 adım" : $"{StepCount} adım";
+    public string StatusBadgeDisplay => StatusCategory switch
+    {
+        "ok" => "Başarılı",
+        "fail" => "Başarısız",
+        "gate" => "Onay",
+        "limit" => "Limit",
+        _ => string.IsNullOrWhiteSpace(FinalStatus) ? "Bilinmiyor" : FinalStatus
+    };
+    public string StatusCategory => CategorizeStatus(FinalStatus);
+    public bool IsSuccessful => StatusCategory == "ok";
+    public string SelectedToolDisplay =>
+        string.IsNullOrWhiteSpace(SelectedTool) ? "Kayıtlı eylem yok" : ActionDisplayHelper.ToUserFriendlyLabel(SelectedTool);
+    public string LastResultDisplay =>
+        string.IsNullOrWhiteSpace(LastResult) ? "Bu kayıtta gösterilecek kısa sonuç bulunmuyor." : LastResult;
     public string TriggerDisplay => TriggerSource switch
     {
         "chat" => "Sohbet",
-        "voice_overlay" => "Sesli popup",
-        "hotkey" => "Klavye kisayolu",
+        "voice_overlay" => "Sesli asistan",
+        "hotkey" => "Klavye kısayolu",
         _ => TriggerSource
     };
+
+    private static string BuildConversationTitle(string command, string result)
+    {
+        var source = string.IsNullOrWhiteSpace(command) ? result : command;
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return "Adsız sohbet";
+        }
+
+        var normalized = source.Trim();
+        var lower = normalized.ToLowerInvariant();
+        if (lower.Contains("ekran") || lower.Contains("pencere"))
+        {
+            return "Ekran İncelemesi";
+        }
+
+        if (lower.Contains("not defteri") || lower.Contains("notepad"))
+        {
+            return "Not Defteri İşlemi";
+        }
+
+        if (lower.Contains("naber") || lower.Contains("selam") || lower.Contains("merhaba"))
+        {
+            return "Kısa Sohbet";
+        }
+
+        return TrimSentence(normalized, 54);
+    }
+
+    private static string TrimSentence(string value, int maxLength)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..Math.Max(1, maxLength - 1)].TrimEnd() + "…";
+    }
+
+    private static string CategorizeStatus(string status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "unknown";
+        }
+
+        var normalized = status.ToLowerInvariant();
+        if (normalized.Contains("tamamlandi"))
+        {
+            return "ok";
+        }
+
+        if (normalized.Contains("onay") || normalized.Contains("gate"))
+        {
+            return "gate";
+        }
+
+        if (normalized.Contains("limit"))
+        {
+            return "limit";
+        }
+
+        if (normalized.Contains("basarisiz") || normalized.Contains("engel") || normalized.Contains("hata"))
+        {
+            return "fail";
+        }
+
+        return "unknown";
+    }
+
+    private static string FormatRelativeTime(DateTimeOffset timestampUtc)
+    {
+        var local = timestampUtc.ToLocalTime();
+        var now = DateTimeOffset.Now;
+        if (local.Date == now.Date)
+        {
+            return $"Bugün {local:HH:mm}";
+        }
+
+        if (local.Date == now.Date.AddDays(-1))
+        {
+            return $"Dün {local:HH:mm}";
+        }
+
+        return local.ToString("dd MMM yyyy HH:mm");
+    }
 }
 
 public sealed class HistoryStepItem

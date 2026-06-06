@@ -209,6 +209,69 @@ public sealed class RunLogReader
             .ToList();
     }
 
+    public bool TryDeleteRunFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var parsed = TryParseFile(filePath);
+            if (parsed is not null)
+            {
+                foreach (var step in parsed.Steps)
+                {
+                    TryDeleteFileIfExists(step.ScreenshotPath);
+                }
+            }
+
+            File.Delete(filePath);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public int DeleteAllRunFiles(string logsDirectory)
+    {
+        if (!Directory.Exists(logsDirectory))
+        {
+            return 0;
+        }
+
+        var deleted = 0;
+        foreach (var path in Directory.EnumerateFiles(logsDirectory, "*.jsonl").ToList())
+        {
+            if (TryDeleteRunFile(path))
+            {
+                deleted++;
+            }
+        }
+
+        return deleted;
+    }
+
+    private static void TryDeleteFileIfExists(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // best effort
+        }
+    }
+
     private static RunLogStep? ParseStep(JsonElement root)
     {
         if (!root.TryGetProperty("StepIndex", out var stepIndexProp) ||

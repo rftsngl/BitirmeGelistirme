@@ -1,0 +1,6 @@
+{
+  "terminal.integrated.env.windows": {
+    "BITIRME_WORKSPACE": "${workspaceFolder}"
+  },
+  "dotnet.defaultSolution": "WindowsAiAssistant.sln"
+}

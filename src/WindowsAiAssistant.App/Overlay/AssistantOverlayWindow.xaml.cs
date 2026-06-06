@@ -1,8 +1,11 @@
+using Microsoft.UI.Composition;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media.Animation;
+using System.ComponentModel;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Windows.Graphics;
 using WindowsAiAssistant.App.Overlay;
@@ -13,6 +16,10 @@ public sealed partial class AssistantOverlayWindow : Window
 {
     private readonly OverlayViewModel _viewModel;
     private readonly OverlaySessionRunner _sessionRunner;
+    private Compositor? _compositor;
+    private Visual? _rootVisual;
+    private ScalarKeyFrameAnimation? _pulseAnimation;
+    private bool _isPulsing;
 
     public AssistantOverlayWindow(OverlayViewModel viewModel, OverlaySessionRunner sessionRunner)
     {
@@ -24,44 +31,135 @@ public sealed partial class AssistantOverlayWindow : Window
         ConfigureChrome();
         Activated += OnActivated;
         Closed += (_, _) => _sessionRunner.CancelActiveSession();
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     public void ShowAndPosition()
     {
         PositionBottomCenter();
         Activate();
+        EnsureCompositor();
         PlayShowAnimation();
+    }
+
+    private void EnsureCompositor()
+    {
+        if (_compositor is not null) return;
+        _rootVisual = ElementCompositionPreview.GetElementVisual(RootBorder);
+        _compositor = _rootVisual.Compositor;
     }
 
     private void PlayShowAnimation()
     {
-        RootTranslate.Y = 28;
-        RootBorder.Opacity = 0;
+        EnsureCompositor();
+        if (_compositor is null || _rootVisual is null) return;
 
-        var storyboard = new Storyboard();
+        _rootVisual.Opacity = 0f;
+        _rootVisual.Scale = new Vector3(0.96f, 0.96f, 1f);
+        _rootVisual.CenterPoint = new Vector3((float)(RootBorder.ActualWidth / 2), (float)RootBorder.ActualHeight, 0f);
 
-        var fade = new DoubleAnimation
+        var fadeIn = _compositor.CreateScalarKeyFrameAnimation();
+        fadeIn.InsertKeyFrame(0f, 0f);
+        fadeIn.InsertKeyFrame(1f, 1f, _compositor.CreateCubicBezierEasingFunction(
+            new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f)));
+        fadeIn.Duration = TimeSpan.FromMilliseconds(220);
+
+        var scaleUp = _compositor.CreateVector3KeyFrameAnimation();
+        scaleUp.InsertKeyFrame(0f, new Vector3(0.96f, 0.96f, 1f));
+        scaleUp.InsertKeyFrame(1f, new Vector3(1f, 1f, 1f), _compositor.CreateCubicBezierEasingFunction(
+            new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f)));
+        scaleUp.Duration = TimeSpan.FromMilliseconds(280);
+
+        _rootVisual.StartAnimation("Opacity", fadeIn);
+        _rootVisual.StartAnimation("Scale", scaleUp);
+    }
+
+    private async void PlayHideAnimation()
+    {
+        EnsureCompositor();
+        if (_compositor is null || _rootVisual is null)
         {
-            From = 0,
-            To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(180))
-        };
-        Storyboard.SetTarget(fade, RootBorder);
-        Storyboard.SetTargetProperty(fade, "Opacity");
+            AppWindow.Hide();
+            return;
+        }
 
-        var slide = new DoubleAnimation
+        StopPulseAnimation();
+
+        var fadeOut = _compositor.CreateScalarKeyFrameAnimation();
+        fadeOut.InsertKeyFrame(0f, 1f);
+        fadeOut.InsertKeyFrame(1f, 0f, _compositor.CreateCubicBezierEasingFunction(
+            new Vector2(0.4f, 0f), new Vector2(1f, 1f)));
+        fadeOut.Duration = TimeSpan.FromMilliseconds(160);
+
+        var scaleDown = _compositor.CreateVector3KeyFrameAnimation();
+        scaleDown.InsertKeyFrame(0f, new Vector3(1f, 1f, 1f));
+        scaleDown.InsertKeyFrame(1f, new Vector3(0.97f, 0.97f, 1f));
+        scaleDown.Duration = TimeSpan.FromMilliseconds(160);
+
+        _rootVisual.StartAnimation("Opacity", fadeOut);
+        _rootVisual.StartAnimation("Scale", scaleDown);
+
+        await Task.Delay(170);
+        AppWindow.Hide();
+    }
+
+    private void StartPulseAnimation()
+    {
+        EnsureCompositor();
+        if (_compositor is null || _rootVisual is null || _isPulsing) return;
+
+        _pulseAnimation = _compositor.CreateScalarKeyFrameAnimation();
+        _pulseAnimation.InsertKeyFrame(0f, 1f);
+        _pulseAnimation.InsertKeyFrame(0.5f, 0.6f);
+        _pulseAnimation.InsertKeyFrame(1f, 1f);
+        _pulseAnimation.Duration = TimeSpan.FromMilliseconds(1800);
+        _pulseAnimation.IterationBehavior = AnimationIterationBehavior.Forever;
+
+        var statusVisual = ElementCompositionPreview.GetElementVisual(StatusIcon);
+        statusVisual.StartAnimation("Opacity", _pulseAnimation);
+        _isPulsing = true;
+    }
+
+    private void StopPulseAnimation()
+    {
+        if (!_isPulsing) return;
+        var statusVisual = ElementCompositionPreview.GetElementVisual(StatusIcon);
+        statusVisual.StopAnimation("Opacity");
+        statusVisual.Opacity = 1f;
+        _isPulsing = false;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(OverlayViewModel.Phase)) return;
+
+        DispatcherQueue.TryEnqueue(() =>
         {
-            From = 28,
-            To = 0,
-            Duration = new Duration(TimeSpan.FromMilliseconds(220)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        };
-        Storyboard.SetTarget(slide, RootTranslate);
-        Storyboard.SetTargetProperty(slide, "Y");
+            UpdatePhaseVisuals();
+            switch (_viewModel.Phase)
+            {
+                case OverlayPhase.Listening:
+                case OverlayPhase.Transcribing:
+                    StartPulseAnimation();
+                    break;
+                default:
+                    StopPulseAnimation();
+                    break;
+            }
+        });
+    }
 
-        storyboard.Children.Add(fade);
-        storyboard.Children.Add(slide);
-        storyboard.Begin();
+    private void UpdatePhaseVisuals()
+    {
+        StatusIcon.Glyph = _viewModel.Phase switch
+        {
+            OverlayPhase.ManualInput => "\uE70F",
+            OverlayPhase.ApprovalPending => "\uE7BA",
+            OverlayPhase.Result => "\uE73E",
+            OverlayPhase.Error => "\uE783",
+            OverlayPhase.Running => "\uE768",
+            _ => "\uE1D6"
+        };
     }
 
     private void OnActivated(object sender, WindowActivatedEventArgs args)
@@ -71,7 +169,7 @@ public sealed partial class AssistantOverlayWindow : Window
             return;
         }
 
-        // Dis tikla kapatma yalnizca sonuc/hata gibi terminal fazlarda guvenli;
+        // Dis tikla kapatma yalnizca bekleme/manuel giris/terminal fazlarda guvenli;
         // agent calisirken baska pencerelere odak verdiginde overlay kapanmamali.
         if (_viewModel.CanDismissOnFocusLoss)
         {
@@ -82,7 +180,8 @@ public sealed partial class AssistantOverlayWindow : Window
     public void HideOverlay()
     {
         _sessionRunner.CancelActiveSession();
-        AppWindow.Hide();
+        StopPulseAnimation();
+        PlayHideAnimation();
     }
 
     public Task RunVoiceSessionAsync(CancellationToken cancellationToken = default) =>

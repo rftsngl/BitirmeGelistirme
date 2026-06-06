@@ -29,7 +29,7 @@ public sealed class ProviderConnectionTester
                 {
                     Status = ProviderConnectionTestStatus.Failed,
                     Duration = started.Elapsed,
-                    Message = "API anahtari bulunamadi. Ortam degiskeni veya yerel kayitli anahtar gerekli."
+                    Message = "API anahtarı bulunamadı. Ortam değişkeni veya yerel kayıtlı anahtar gerekli."
                 };
             }
 
@@ -43,8 +43,8 @@ public sealed class ProviderConnectionTester
                 Status = ProviderConnectionTestStatus.Success,
                 Duration = started.Elapsed,
                 Message = string.IsNullOrWhiteSpace(response)
-                    ? "Saglayici yanit verdi."
-                    : $"Saglayici yanit verdi: {Truncate(response, 120)}"
+                    ? "Sağlayıcı yanıt verdi."
+                    : $"Sağlayıcı yanıt verdi: {Truncate(response, 120)}"
             };
         }
         catch (OperationCanceledException)
@@ -53,7 +53,7 @@ public sealed class ProviderConnectionTester
             {
                 Status = ProviderConnectionTestStatus.Cancelled,
                 Duration = started.Elapsed,
-                Message = "Baglanti testi iptal edildi."
+                Message = "Bağlantı testi iptal edildi."
             };
         }
         catch (AiClientException ex)

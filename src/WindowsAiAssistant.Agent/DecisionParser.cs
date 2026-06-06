@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WindowsAiAssistant.Runtime.Automation;
 
 namespace WindowsAiAssistant.Agent;
 
@@ -70,6 +71,12 @@ public sealed class DecisionParser
         if (parameterError is not null)
         {
             return DecisionParseResult.Fail(parameterError);
+        }
+
+        var uiElementError = ValidateUiElementTarget(action, parameters, target);
+        if (uiElementError is not null)
+        {
+            return DecisionParseResult.Fail(uiElementError);
         }
 
         var decision = new AgentDecision
@@ -151,7 +158,8 @@ public sealed class DecisionParser
                 string.IsNullOrWhiteSpace(parameters["message"]) =>
                 $"'{action}' islemi icin parameters.message zorunludur.",
             "open_app" when string.IsNullOrWhiteSpace(target) &&
-                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "app")) =>
+                string.IsNullOrWhiteSpace(FirstParameter(parameters,
+                    "app", "name", "application", "executable", "program", "target")) =>
                 "open_app icin target veya parameters.app gerekli.",
             "open_url" when string.IsNullOrWhiteSpace(target) &&
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "url")) =>
@@ -187,9 +195,9 @@ public sealed class DecisionParser
             "window_state" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "state")) =>
                 "window_state icin parameters.state gerekli (minimize|maximize|restore|close).",
             "launch" when string.IsNullOrWhiteSpace(target) &&
-                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "app")) &&
-                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "command")) &&
-                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "uri")) =>
+                string.IsNullOrWhiteSpace(FirstParameter(parameters,
+                    "app", "command", "uri", "name", "path",
+                    "application", "executable", "program", "file", "target")) =>
                 "launch icin target veya parameters.app/command/uri gerekli.",
             "mouse_click" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "elementId")) &&
                 (string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "x")) ||
@@ -205,8 +213,39 @@ public sealed class DecisionParser
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "endX")) ||
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "endY")) =>
                 "mouse_drag icin parameters.startX, startY, endX, endY gerekli.",
+            "shell" when string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "command")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "cmd")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "script")) =>
+                "shell icin target veya parameters.command gerekli.",
             _ => null
         };
+    }
+
+    private static string? ValidateUiElementTarget(
+        string action,
+        IReadOnlyDictionary<string, string> parameters,
+        string? target)
+    {
+        if (!UiElementIdValidator.IsUiAutomationAction(action) &&
+            !action.Equals("mouse_click", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var elementId = UiElementIdValidator.GetElementTarget(action, target, parameters);
+        if (string.IsNullOrWhiteSpace(elementId))
+        {
+            return null;
+        }
+
+        if (UiElementIdValidator.IsValidFormat(elementId))
+        {
+            return null;
+        }
+
+        return $"'{action}' icin target gecerli bir elementId olmali (uiElements listesinden; ornek: btn-kaydet-a1b2). " +
+               "Gorunur metin, onay rozeti veya sohbet etiketi kullanmayin.";
     }
 
     private static string? ReadStringFromParameters(
@@ -215,6 +254,22 @@ public sealed class DecisionParser
         parameters.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
             ? value.Trim()
             : null;
+
+    private static string? FirstParameter(
+        IReadOnlyDictionary<string, string> parameters,
+        params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = ReadStringFromParameters(parameters, key);
+            if (value is not null)
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
 
 
     private static IReadOnlyDictionary<string, string> ReadParameters(JsonElement root)

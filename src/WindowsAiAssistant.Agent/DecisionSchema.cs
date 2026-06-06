@@ -46,16 +46,18 @@ public static class DecisionSchema
         "launch",
         "mouse_click",
         "mouse_scroll",
-        "mouse_drag"
+        "mouse_drag",
+        "shell"
     };
 
     public const string JsonSchemaExample = """
         {
           "decisionType": "execute_action",
-          "action": "respond",
-          "reason": "Short reason",
+          "action": "open_app",
+          "reason": "Short internal reason (English)",
+          "target": "primary argument: app name / elementId / window title / url / exe or command / key",
           "parameters": {
-            "message": "Response text"
+            "message": "Turkish text, ONLY for respond/ask_user; other actions use their own keys"
           },
           "isComplete": false
         }

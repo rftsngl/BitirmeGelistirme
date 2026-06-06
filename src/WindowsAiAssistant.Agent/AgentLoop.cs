@@ -1,5 +1,7 @@
 using System.Text.Json;
 using WindowsAiAssistant.Runtime.Actions;
+using WindowsAiAssistant.Runtime.Automation;
+using WindowsAiAssistant.Runtime.Debugging;
 using WindowsAiAssistant.Runtime.Logging;
 using WindowsAiAssistant.Runtime.Observation;
 using WindowsAiAssistant.Runtime.Policy;
@@ -31,7 +33,8 @@ public sealed class AgentLoop
         "launch",
         "mouse_click",
         "mouse_scroll",
-        "mouse_drag"
+        "mouse_drag",
+        "shell"
     };
 
     private static readonly JsonSerializerOptions LogJsonOptions = new() { WriteIndented = false };
@@ -153,6 +156,44 @@ public sealed class AgentLoop
 
             var decision = parseResult.Decision;
             var agentAction = decision.ToAgentAction();
+
+            // #region agent log
+            var isUiAction = UiElementIdValidator.IsUiAutomationAction(decision.Action) ||
+                             decision.Action.Equals("mouse_click", StringComparison.OrdinalIgnoreCase);
+            var targetLooksLikeElementId = UiElementIdValidator.IsValidFormat(decision.Target);
+            DebugAgentLog.Write(
+                "H2",
+                "AgentLoop.RunAsync",
+                "llm decision parsed",
+                new
+                {
+                    session.RunId,
+                    stepIndex,
+                    decision.Action,
+                    decision.Target,
+                    decisionType = decision.DecisionType.ToString(),
+                    isUiAction,
+                    targetLooksLikeElementId,
+                    userGoal = session.UserGoal
+                },
+                session.RunId);
+            if (isUiAction && !string.IsNullOrWhiteSpace(decision.Target) && !targetLooksLikeElementId)
+            {
+                DebugAgentLog.Write(
+                    "H3",
+                    "AgentLoop.RunAsync",
+                    "ui action with non-elementId target",
+                    new
+                    {
+                        session.RunId,
+                        stepIndex,
+                        decision.Action,
+                        decision.Target
+                    },
+                    session.RunId);
+            }
+            // #endregion
+
             var gateDecision = _actionGate.Evaluate(agentAction);
             Report(progress, stepIndex, maxSteps, "gate", gateDecision.Summary);
 
@@ -176,6 +217,7 @@ public sealed class AgentLoop
 
                 if (userApproved == true)
                 {
+                    Report(progress, stepIndex, maxSteps, "eylem", decision.Action);
                     actionResult = await _actionExecutor
                         .ExecuteAsync(agentAction, cancellationToken)
                         .ConfigureAwait(false);
@@ -191,9 +233,15 @@ public sealed class AgentLoop
             }
             else
             {
+                Report(progress, stepIndex, maxSteps, "eylem", decision.Action);
                 actionResult = await _actionExecutor
                     .ExecuteAsync(agentAction, cancellationToken)
                     .ConfigureAwait(false);
+            }
+
+            if (!actionResult.Success && decision.Action is not ("respond" or "ask_user" or "stop"))
+            {
+                Report(progress, stepIndex, maxSteps, "eylem", $"{decision.Action}|fail|{actionResult.Message}");
             }
 
             session.Steps.Add(new AgentStep
@@ -203,6 +251,25 @@ public sealed class AgentLoop
                 ParsedDecision = decision,
                 ActionResult = actionResult
             });
+
+            // #region agent log
+            DebugAgentLog.Write(
+                "H4",
+                "AgentLoop.RunAsync",
+                "action executed",
+                new
+                {
+                    session.RunId,
+                    stepIndex,
+                    decision.Action,
+                    decision.Target,
+                    actionResult.Success,
+                    actionResult.Message,
+                    gateOutcome = gateDecision.Outcome.ToString(),
+                    userApproved
+                },
+                session.RunId);
+            // #endregion
 
             var gateLogJson = SerializeGateLog(gateDecision, userApproved);
 
@@ -225,11 +292,10 @@ public sealed class AgentLoop
                 },
                 cancellationToken).ConfigureAwait(false);
 
-            if (!actionResult.Success && !IsRecoverableGateFailure(gateDecision, userApproved))
-            {
-                return Fail(session, actionResult.Message, lastObservation, AgentErrorKind.Action);
-            }
-
+            // Otonom operatör: başarısız bir eylem ölü nokta değil, geri bildirimdir.
+            // Hata mesajı sonraki gözlemin lastActionResult'una ve adım geçmişine düşer;
+            // LLM bunu okuyup strateji değiştirebilir (shell ile keşif, başka aile, ya da
+            // gerekirse respond). Döngü yalnızca maxSteps ile sınırlanır, ilk hatada durmaz.
             if (!actionResult.Success)
             {
                 continue;
@@ -380,10 +446,6 @@ public sealed class AgentLoop
 
         return actionResult.Message;
     }
-
-    private static bool IsRecoverableGateFailure(GateDecision gateDecision, bool? userApproved) =>
-        gateDecision.Outcome == GateOutcome.Deny ||
-        (gateDecision.Outcome == GateOutcome.RequireApproval && userApproved != true);
 
     private static string SerializeGateLog(GateDecision gateDecision, bool? userApproved) =>
         JsonSerializer.Serialize(new

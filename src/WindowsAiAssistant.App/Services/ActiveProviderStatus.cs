@@ -37,7 +37,7 @@ public sealed class ActiveProviderStatus : IActiveProviderStatus
 
     public string EffectiveActiveProfileId => _profile?.Id ?? string.Empty;
     public bool HasActiveProfile => _profile is not null;
-    public string DisplayName => _profile?.DisplayName ?? "Saglayici secilmedi";
+    public string DisplayName => _profile?.DisplayName ?? "Sağlayıcı seçilmedi";
     public string Model => _profile?.Model ?? "-";
     public string Kind => _profile?.Kind.ToString() ?? "-";
     public string BaseUrl => _profile?.BaseUrl ?? string.Empty;
@@ -54,12 +54,12 @@ public sealed class ActiveProviderStatus : IActiveProviderStatus
         {
             if (_profile is null)
             {
-                return "Aktif saglayici profili secilmedi.";
+                return "Aktif sağlayıcı profili seçilmedi.";
             }
 
             if (!_profile.IsEnabled)
             {
-                return "Profil devre disi.";
+                return "Profil devre dışı.";
             }
 
             if (string.IsNullOrWhiteSpace(_profile.BaseUrl) || string.IsNullOrWhiteSpace(_profile.Model))
@@ -70,12 +70,12 @@ public sealed class ActiveProviderStatus : IActiveProviderStatus
             if (_profile.RequiresApiKey && !_configurationService.IsProfileReady(_profile))
             {
                 var envHint = string.IsNullOrWhiteSpace(_profile.ApiKeyEnvVar)
-                    ? "API anahtari"
-                    : $"API anahtari ({_profile.ApiKeyEnvVar})";
-                return $"{envHint} ortam degiskeninde veya yerel ayarlarda bulunamadi.";
+                    ? "API anahtarı"
+                    : $"API anahtarı ({_profile.ApiKeyEnvVar})";
+                return $"{envHint} ortam değişkeninde veya yerel ayarlarda bulunamadı.";
             }
 
-            return "AgentLoop bu saglayici ile calismaya hazir.";
+            return "Asistan bu sağlayıcı ile çalışmaya hazır.";
         }
     }
 
@@ -93,7 +93,7 @@ public sealed class ActiveProviderStatus : IActiveProviderStatus
                 return "KAPALI";
             }
 
-            return IsReady ? "HAZIR" : "EKSIK";
+            return IsReady ? "HAZIR" : "EKSİK";
         }
     }
 

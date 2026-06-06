@@ -1,6 +1,6 @@
 # Windows AI Assistant
 
-Doğal dil komutlarını **tüm Windows masaüstünde** UI Automation ile yürüten bir yapay zekâ asistanı. Kullanıcı bir hedef yazar (örn. "Not defterini aç ve merhaba yaz"); agent gözlem yapar, bir LLM'den **strict JSON karar** alır, kararı `ActionExecutor` üzerinden çalıştırır ve adım adım ilerler.
+Doğal dil komutlarını **tüm Windows masaüstünde** yürüten bir yapay zekâ asistanı. Kullanıcı yalnızca **hedefi** yazar (örn. "Not defterini aç ve merhaba yaz"); yöntemi, sırayı ve araç seçimini **LLM'in kendisi** belirler. Agent her özellik için ayrı bir senaryo/handler'a bağlı değildir: LLM az sayıda **genel yetenek ailesini** (kabuk/terminal, UI Automation, sistem/başlatma) adım adım birleştirir, her adımda zengin gözlem geri beslemesini (pencereler, UI ağacı, son aksiyon sonucu, kabuk çıktısı) okuyarak stratejisini uyarlar. Runtime'ın görevi bu yetenekleri LLM'e sunmak ve çıktıyı **strict JSON karar** olarak güvenli biçimde çalıştırmaktır. Güvenlik ağırlıklı olarak system prompt ve kaba `ActionGate` politikasıyla sağlanır.
 
 ## Mimari
 
@@ -12,7 +12,7 @@ Tek yönlü bağımlılık: `App → Agent → Runtime`
 | `WindowsAiAssistant.Agent` | `AgentLoop`, `PromptBuilder`, `AiClient` (LLM), `DecisionParser`/`DecisionSchema` |
 | `WindowsAiAssistant.Runtime` | Gözlem (ekran/pencere/UIA), aksiyon handler'ları, UI Automation, giriş enjeksiyonu, loglama |
 
-Akış: **observe → decide (LLM, JSON) → execute → log** ve hedef tamamlanana ya da `MaxSteps`'e ulaşılana kadar tekrarlanır.
+Akış: **observe → decide (LLM, JSON) → execute → log** ve hedef tamamlanana ya da `MaxSteps`'e ulaşılana kadar tekrarlanır. Başarısız bir eylem akışı bitirmez; **geri bildirim olarak** bir sonraki adıma beslenir, böylece LLM alternatif bir yol dener (örn. `open_app` başarısızsa `shell` ile uygulamayı keşfedip `launch` eder). Yalnızca sağlayıcı/karar (altyapı) hataları akışı erken sonlandırır.
 
 ## Gereksinimler
 
@@ -22,10 +22,29 @@ Akış: **observe → decide (LLM, JSON) → execute → log** ve hedef tamamlan
 
 ## Derleme ve çalıştırma
 
+Derleme çıktıları varsayılan olarak **`%LOCALAPPDATA%\WindowsAiAssistantBuild`** altına yazılır (`Directory.Build.props`). Böylece proje klasöründeki `bin\Debug` DLL’leri antivirüs/sandbox tarafından kilitlenmez; Cursor/VS Code entegre terminalinden `dotnet build` güvenle çalışır.
+
 ```powershell
 dotnet build WindowsAiAssistant.sln
 dotnet run --project src/WindowsAiAssistant.App
 ```
+
+### Antivirüs / MSB3021 (DLL erişim reddedildi)
+
+Hata devam ederse (Controlled Folder Access veya agresif AV):
+
+1. **Cursor/VS Code görevleri:** `Terminal` → `Run Task` → `build` (`.vscode/tasks.json`).
+2. **Defender istisnaları (yönetici PowerShell):**
+   ```powershell
+   Set-ExecutionPolicy -Scope Process Bypass
+   .\scripts\Add-DevAntivirusExclusions.ps1
+   ```
+   Script proje klasörü, LocalAppData build çıktısı, `dotnet`, **Cursor.exe**, **Code.exe** ve MSBuild süreçlerini ekler.
+3. **Temiz derleme:** görev `clean build output (LocalAppData)` veya:
+   ```powershell
+   Remove-Item -Recurse -Force "$env:LOCALAPPDATA\WindowsAiAssistantBuild" -ErrorAction SilentlyContinue
+   dotnet build WindowsAiAssistant.sln
+   ```
 
 ## Yapılandırma
 

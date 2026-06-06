@@ -168,7 +168,7 @@ public sealed class ProviderConfigurationService : IProviderConfigurationService
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
         if (Profiles.All(profile => !profile.Id.Equals(profileId, StringComparison.OrdinalIgnoreCase)))
         {
-            throw new InvalidOperationException($"Profil bulunamadi: {profileId}");
+            throw new InvalidOperationException($"Profil bulunamadı: {profileId}");
         }
 
         _document.ActiveProfileId = profileId;
@@ -211,7 +211,7 @@ public sealed class ProviderConfigurationService : IProviderConfigurationService
 
         if (existing.IsBuiltIn)
         {
-            throw new InvalidOperationException("Yerlesik profiller silinemez.");
+            throw new InvalidOperationException("Yerleşik profiller silinemez.");
         }
 
         _document.Profiles.Remove(existing);

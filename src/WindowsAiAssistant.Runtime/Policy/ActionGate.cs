@@ -21,7 +21,17 @@ public sealed class ActionGate
         "click_element", "focus_element", "read_element", "set_value",
         "select_element", "expand_collapse", "invoke_toggle", "scroll",
         "focus_window", "window_state", "move_window", "list_windows", "launch",
-        "mouse_click", "mouse_scroll", "mouse_drag"
+        "mouse_click", "mouse_scroll", "mouse_drag", "shell"
+    };
+
+    private static readonly string[] DestructiveShellPatterns =
+    {
+        "rm ", "rmdir", "rd ", "del ", "erase ", "remove-item", "remove-itemproperty",
+        "clear-content", "format ", "format-volume", "diskpart", "shutdown",
+        "restart-computer", "stop-computer", "stop-process", "taskkill /f",
+        "reg delete", "cipher /w", "fsutil", "takeown", "icacls", "net user",
+        "bcdedit", "mkfs", "dd if=", "-verb runas", "runas ", "sc delete",
+        "schtasks /delete"
     };
 
     private readonly ActionPolicy _policy;
@@ -144,6 +154,7 @@ public sealed class ActionGate
             "press_key" or "press_shortcut" => ActionRisk.Sensitive,
             "mouse_drag" => ActionRisk.Sensitive,
             "mouse_click" => UsesFreeCoordinates(action) ? ActionRisk.Sensitive : ActionRisk.Normal,
+            "shell" => IsDestructiveShell(action) ? ActionRisk.Destructive : ActionRisk.Sensitive,
             "launch" => IsKnownLaunchTarget(action) ? ActionRisk.Normal : ActionRisk.Sensitive,
             "open_app" or "open_url" or "type_text" or "click_element" or "focus_element" or
             "select_element" or "expand_collapse" or "invoke_toggle" or "scroll" or
@@ -171,6 +182,19 @@ public sealed class ActionGate
                ActionParameterReader.TryGetInt(action, "y", out _);
     }
 
+    private static bool IsDestructiveShell(AgentAction action)
+    {
+        var command = ActionParameterReader.GetTargetOrParameter(action, "command", "cmd", "script");
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return false;
+        }
+
+        var normalized = command.ToLowerInvariant();
+        return DestructiveShellPatterns.Any(pattern =>
+            normalized.Contains(pattern, StringComparison.Ordinal));
+    }
+
     private static bool IsKnownLaunchTarget(AgentAction action)
     {
         var target = ActionParameterReader.GetTargetOrParameter(action, "app", "command", "uri");
@@ -179,9 +203,31 @@ public sealed class ActionGate
 
     private static string BuildApprovalKey(AgentAction action, ActionRisk risk)
     {
-        var target = action.Target ?? string.Empty;
-        var state = ActionParameterReader.GetTargetOrParameter(action, "state");
-        return $"{action.Action}|{risk}|{target}|{state}".ToLowerInvariant();
+        var target = BuildApprovalTarget(action);
+        return $"{action.Action}|{risk}|{target}".ToLowerInvariant();
+    }
+
+    private static string BuildApprovalTarget(AgentAction action)
+    {
+        return action.Action.ToLowerInvariant() switch
+        {
+            "shell" => ActionParameterReader.GetTargetOrParameter(action, "command", "cmd", "script") ?? string.Empty,
+            "launch" => ActionParameterReader.GetTargetOrParameter(action, "app", "command", "uri") ?? string.Empty,
+            "open_app" => ActionParameterReader.GetTargetOrParameter(action, "app") ?? string.Empty,
+            "open_url" => ActionParameterReader.GetTargetOrParameter(action, "url") ?? string.Empty,
+            "type_text" => ActionParameterReader.GetTargetOrParameter(action, "text") ?? string.Empty,
+            "press_key" => ActionParameterReader.GetTargetOrParameter(action, "key") ?? string.Empty,
+            "press_shortcut" => ActionParameterReader.GetTargetOrParameter(action, "shortcut", "keys") ?? string.Empty,
+            "window_state" => $"{ActionParameterReader.GetTargetOrParameter(action, "windowId", "title")}|state={ActionParameterReader.GetTargetOrParameter(action, "state")}",
+            "set_value" => $"{ActionParameterReader.GetTargetOrParameter(action, "elementId")}|value={ActionParameterReader.GetTargetOrParameter(action, "value", "text")}",
+            "mouse_click" => ActionParameterReader.GetTargetOrParameter(action, "elementId") ??
+                $"x={ActionParameterReader.GetTargetOrParameter(action, "x")},y={ActionParameterReader.GetTargetOrParameter(action, "y")}",
+            "mouse_drag" =>
+                $"from={ActionParameterReader.GetTargetOrParameter(action, "startX")},{ActionParameterReader.GetTargetOrParameter(action, "startY")};to={ActionParameterReader.GetTargetOrParameter(action, "endX")},{ActionParameterReader.GetTargetOrParameter(action, "endY")}",
+            "move_window" =>
+                $"{ActionParameterReader.GetTargetOrParameter(action, "windowId", "title")}|x={ActionParameterReader.GetTargetOrParameter(action, "x")},y={ActionParameterReader.GetTargetOrParameter(action, "y")},w={ActionParameterReader.GetTargetOrParameter(action, "width")},h={ActionParameterReader.GetTargetOrParameter(action, "height")}",
+            _ => action.Target ?? string.Empty
+        };
     }
 
     private static string BuildSummary(AgentAction action, ActionRisk risk)
@@ -192,6 +238,7 @@ public sealed class ActionGate
             "window_state" => ActionParameterReader.GetTargetOrParameter(action, "state"),
             "set_value" => ActionParameterReader.GetTargetOrParameter(action, "value"),
             "type_text" => ActionParameterReader.GetTargetOrParameter(action, "text"),
+            "shell" => ActionParameterReader.GetTargetOrParameter(action, "command", "cmd", "script"),
             "press_shortcut" or "press_key" => target,
             "mouse_click" when UsesFreeCoordinates(action) =>
                 $"x={ActionParameterReader.GetTargetOrParameter(action, "x")}, y={ActionParameterReader.GetTargetOrParameter(action, "y")}",

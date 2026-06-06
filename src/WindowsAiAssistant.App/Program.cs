@@ -69,6 +69,7 @@ public static class AppServices
         services.AddSingleton<IActionHandler, MouseClickActionHandler>();
         services.AddSingleton<IActionHandler, MouseScrollActionHandler>();
         services.AddSingleton<IActionHandler, MouseDragActionHandler>();
+        services.AddSingleton<IActionHandler, ShellActionHandler>();
         services.AddSingleton<ActionExecutor>();
         services.AddSingleton<RunLogger>();
         services.AddSingleton<RunLogReader>();

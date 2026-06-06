@@ -11,114 +11,93 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Spacing="6">
-            <TextBlock Text="Asistan" Style="{StaticResource PageTitleTextBlockStyle}" />
-            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource PageSubtitleTextBlockStyle}" />
-
-            <Border Style="{StaticResource CardBorderStyle}"
-                    Padding="12,8">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <FontIcon Grid.Column="0"
-                              Glyph="&#xE7B5;"
-                              FontFamily="{StaticResource SymbolThemeFontFamily}"
-                              FontSize="18"
-                              VerticalAlignment="Center"
-                              Margin="0,0,10,0" />
-
-                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock>
-                            <Run Text="Aktif sağlayıcı: " Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <Run Text="{Binding ProviderStatus.DisplayName, Mode=OneWay}" FontWeight="SemiBold" />
-                        </TextBlock>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding ProviderStatus.Kind, Mode=OneWay}" FontSize="11" Opacity="0.7" />
-                            <TextBlock Text="·" FontSize="11" Opacity="0.45" />
-                            <TextBlock Text="{Binding ProviderStatus.Model, Mode=OneWay}" FontSize="11" Opacity="0.85" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <Border Grid.Column="2"
-                            Style="{StaticResource BadgeBorderStyle}"
-                            Margin="8,0,8,0"
-                            Background="{Binding ProviderStatus.ReadyBadge, Mode=OneWay, Converter={StaticResource StatusToBrushConverter}}">
-                        <TextBlock Text="{Binding ProviderStatus.ReadyBadge, Mode=OneWay}"
-                                   Foreground="White"
-                                   FontSize="11"
-                                   FontWeight="SemiBold" />
-                    </Border>
-
-                    <Button Grid.Column="3"
-                            Command="{Binding OpenSettingsCommand}"
-                            ToolTipService.ToolTip="Sağlayıcı ayarlarına git">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE713;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
-                            <TextBlock Text="Sağlayıcıyı Değiştir" />
-                        </StackPanel>
-                    </Button>
-                </Grid>
-            </Border>
-        </StackPanel>
+        <Grid Grid.Row="0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+                <TextBlock Text="Asistan" Style="{StaticResource PageTitleTextBlockStyle}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Ellipse Style="{StaticResource StatusDotStyle}"
+                             Fill="{Binding ProviderStatus.ReadyBadge, Mode=OneWay, Converter={StaticResource StatusToBrushConverter}}" />
+                    <TextBlock Text="{Binding UserFriendlyStatus}" FontSize="13" Opacity="0.85" TextWrapping="WrapWholeWords" />
+                </StackPanel>
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Style="{StaticResource GhostButtonStyle}"
+                    Command="{Binding OpenSettingsCommand}"
+                    VerticalAlignment="Top"
+                    ToolTipService.ToolTip="Model ve bağlantı ayarları">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE713;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                    <TextBlock Text="Ayarlar" />
+                </StackPanel>
+            </Button>
+        </Grid>
 
         <Border Grid.Row="1"
                 Style="{StaticResource CardBorderStyle}"
-                Padding="16,12">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <ScrollViewer x:Name="ConversationScrollViewer"
-                              Grid.Row="0"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollMode="Disabled"
-                              VerticalScrollMode="Enabled">
-                    <Grid>
-                        <StackPanel Spacing="12"
-                                    Visibility="{Binding HasConversation, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
-                            <FontIcon Glyph="&#xE99A;"
-                                      FontFamily="{StaticResource SymbolThemeFontFamily}"
-                                      FontSize="40"
-                                      Opacity="0.45"
-                                      HorizontalAlignment="Center" />
-                            <TextBlock Text="Henüz bir komut göndermediniz"
-                                       HorizontalAlignment="Center"
-                                       FontWeight="SemiBold"
-                                       Opacity="0.75" />
-                            <TextBlock Text="Aşağıdaki kutuya komutunuzu yazın. Yanıtlar, onaylar ve sonuçlar burada zaman akışı olarak görünecek."
-                                       HorizontalAlignment="Center"
-                                       TextWrapping="Wrap"
-                                       MaxWidth="420"
-                                       TextAlignment="Center"
-                                       Opacity="0.6" />
+                Padding="12,10"
+                HorizontalAlignment="Stretch">
+            <ScrollViewer x:Name="ConversationScrollViewer"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          HorizontalAlignment="Stretch">
+                <Grid MinHeight="320" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="16"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Margin="24"
+                                MaxWidth="520"
+                                Visibility="{Binding HasConversation, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                        <FontIcon Glyph="&#xE799;"
+                                  FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                  FontSize="48"
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                  HorizontalAlignment="Center" />
+                        <TextBlock Text="Nasıl yardımcı olabilirim?"
+                                   HorizontalAlignment="Center"
+                                   FontSize="22"
+                                   FontWeight="SemiBold"
+                                   TextAlignment="Center" />
+                        <TextBlock Text="Bilgisayarınızdaki işleri doğal dille tarif edin. Asistan ne yapacağını kendisi planlar; siz süreci burada anlık izlersiniz."
+                                   Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                   TextAlignment="Center"
+                                   TextWrapping="WrapWholeWords" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,4,0,0">
+                            <Button Style="{StaticResource ChipButtonStyle}" Tag="Ekranda ne var?" Click="Chip_Click">
+                                <TextBlock Text="Ekranda ne var?" />
+                            </Button>
+                            <Button Style="{StaticResource ChipButtonStyle}" Tag="Not defterini aç" Click="Chip_Click">
+                                <TextBlock Text="Not defterini aç" />
+                            </Button>
+                            <Button Style="{StaticResource ChipButtonStyle}" Tag="Açık pencereleri özetle" Click="Chip_Click">
+                                <TextBlock Text="Açık pencereleri özetle" />
+                            </Button>
                         </StackPanel>
+                    </StackPanel>
 
-                        <ItemsControl x:Name="ConversationList"
-                                      ItemsSource="{Binding Conversation}"
-                                      ItemTemplateSelector="{StaticResource ConversationTemplateSelector}"
-                                      Visibility="{Binding HasConversation, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Spacing="2" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                    </Grid>
-                </ScrollViewer>
-            </Grid>
+                    <ItemsControl x:Name="ConversationList"
+                                  ItemsSource="{Binding Conversation}"
+                                  ItemTemplateSelector="{StaticResource ConversationTemplateSelector}"
+                                  HorizontalAlignment="Stretch"
+                                  Visibility="{Binding HasConversation, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="4" HorizontalAlignment="Stretch" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </Grid>
+            </ScrollViewer>
         </Border>
 
         <Border Grid.Row="2"
                 Style="{StaticResource CardBorderStyle}"
-                Padding="14,12">
-            <Grid>
+                Padding="14,12"
+                HorizontalAlignment="Stretch">
+            <Grid ColumnSpacing="10" RowSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -130,10 +109,10 @@
 
                 <TextBox x:Name="CommandInputTextBox"
                          Grid.Row="0" Grid.Column="0"
-                         PlaceholderText="Komutunuzu yazın (Ctrl+Enter ile gönder)"
+                         PlaceholderText="Mesajınızı yazın… Enter gönderir, Shift+Enter yeni satır."
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
-                         MinHeight="60"
+                         MinHeight="56"
                          MaxHeight="160"
                          Text="{Binding CommandInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          KeyDown="CommandInputTextBox_KeyDown"
@@ -143,46 +122,41 @@
                             Orientation="Horizontal"
                             VerticalAlignment="Bottom"
                             Spacing="6"
-                            Margin="10,0,0,0">
+                            Margin="4,0,0,0">
                     <muxc:ProgressRing Width="22"
                                        Height="22"
                                        IsActive="{Binding IsBusy}"
                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
+                    <Button IsEnabled="{Binding IsNotBusy}"
+                            Click="VoiceButton_Click"
+                            ToolTipService.ToolTip="Sesli komut penceresini aç">
+                        <FontIcon Glyph="&#xE720;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" />
+                    </Button>
                     <Button x:Name="SubmitButton"
                             Style="{ThemeResource AccentButtonStyle}"
                             Command="{Binding SubmitCommand}"
-                            ToolTipService.ToolTip="Komutu gönder (Ctrl+Enter)">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE724;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="14" />
-                            <TextBlock Text="Gönder" />
-                        </StackPanel>
+                            ToolTipService.ToolTip="Gönder (Enter)">
+                        <FontIcon Glyph="&#xE724;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" />
                     </Button>
                     <Button Command="{Binding CancelRunCommand}"
                             IsEnabled="{Binding IsBusy}"
-                            ToolTipService.ToolTip="Çalışan agent isteğini iptal et">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
-                            <TextBlock Text="Durdur" />
-                        </StackPanel>
+                            ToolTipService.ToolTip="Durdur (Esc)">
+                        <FontIcon Glyph="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="14" />
                     </Button>
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Grid.ColumnSpan="2"
                             Orientation="Horizontal"
-                            Spacing="8"
-                            Margin="0,8,0,0">
-                    <Button Command="{Binding ClearSessionCommand}">
+                            Spacing="8">
+                    <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding ClearSessionCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE74D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
-                            <TextBlock Text="Oturumu Temizle" />
+                            <FontIcon Glyph="&#xE894;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Sohbeti temizle" />
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding OpenSettingsCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE713;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
-                            <TextBlock Text="Sağlayıcı Ayarları" />
-                        </StackPanel>
-                    </Button>
+                    <TextBlock Text="Esc ile durdur · Ctrl+L odak"
+                               Style="{StaticResource ChatMetaTextBlockStyle}"
+                               VerticalAlignment="Center" />
                 </StackPanel>
             </Grid>
         </Border>

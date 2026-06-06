@@ -4,75 +4,187 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
-    <Grid Padding="{StaticResource PagePadding}" RowSpacing="12">
+    <Grid Padding="{StaticResource PagePadding}" RowSpacing="14">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Spacing="2">
-            <TextBlock Text="Gecmis ve Debug" Style="{StaticResource PageTitleTextBlockStyle}" />
-            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource PageSubtitleTextBlockStyle}" />
+        <!-- Başlık -->
+        <StackPanel Grid.Row="0" Spacing="4" HorizontalAlignment="Stretch">
+            <TextBlock Text="Geçmiş" Style="{StaticResource PageTitleTextBlockStyle}" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource PageSubtitleTextBlockStyle}" TextWrapping="WrapWholeWords" />
         </StackPanel>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
-            <Button Style="{ThemeResource AccentButtonStyle}" Command="{Binding RefreshCommand}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE72C;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
-                    <TextBlock Text="Yenile" />
-                </StackPanel>
-            </Button>
-            <Button Command="{Binding LoadToAssistantCommand}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE8A7;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
-                    <TextBlock Text="Asistan'a Yukle" />
-                </StackPanel>
-            </Button>
-            <Button Command="{Binding OpenLogFileCommand}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE8A5;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
-                    <TextBlock Text="Logu Ac" />
-                </StackPanel>
-            </Button>
-            <TextBox PlaceholderText="Ara (hedef metin, durum, tetikleyici...)"
-                     Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     MinWidth="200"
-                     VerticalAlignment="Center" />
-            <ComboBox PlaceholderText="Tetikleyici"
-                       ItemsSource="{Binding TriggerFilterOptions}"
-                       SelectedItem="{Binding TriggerFilter, Mode=TwoWay}"
-                       MinWidth="140"
-                       VerticalAlignment="Center" />
-            <ComboBox PlaceholderText="Durum"
-                       ItemsSource="{Binding StatusFilterOptions}"
-                       SelectedItem="{Binding StatusFilter, Mode=TwoWay}"
-                       MinWidth="120"
-                       VerticalAlignment="Center" />
-            <muxc:ProgressRing Width="20"
-                               Height="20"
-                               VerticalAlignment="Center"
-                               IsActive="{Binding IsRefreshing}"
-                               Visibility="{Binding IsRefreshing, Converter={StaticResource BoolToVisibilityConverter}}" />
-        </StackPanel>
-
-        <Grid Grid.Row="2" ColumnSpacing="12">
+        <!-- Özet kartları -->
+        <Grid Grid.Row="1" ColumnSpacing="12" HorizontalAlignment="Stretch">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.4*" MinWidth="220" />
-                <ColumnDefinition Width="1*" MinWidth="180" />
-                <ColumnDefinition Width="2.2*" MinWidth="280" />
+                <ColumnDefinition Width="*" MinWidth="120" />
+                <ColumnDefinition Width="*" MinWidth="120" />
+                <ColumnDefinition Width="*" MinWidth="120" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Style="{StaticResource SettingsCardBorderStyle}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Toplam kayıt" Style="{StaticResource LabelTextBlockStyle}" />
+                    <TextBlock Text="{Binding TotalRunCount}" FontSize="24" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Style="{StaticResource SettingsCardBorderStyle}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Başarılı" Style="{StaticResource LabelTextBlockStyle}" />
+                    <TextBlock Text="{Binding SuccessfulRunCount}" FontSize="24" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Style="{StaticResource SettingsCardBorderStyle}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Sorunlu / engelli" Style="{StaticResource LabelTextBlockStyle}" />
+                    <TextBlock Text="{Binding ProblemRunCount}" FontSize="24" FontWeight="SemiBold"
+                               Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Filtre ve işlemler -->
+        <Border Grid.Row="2" Style="{StaticResource SettingsCardBorderStyle}" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Ara ve filtrele" FontWeight="SemiBold" />
+                <TextBlock Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                           Text="Komut metni, sonuç veya kaynak türüne göre geçmişi daraltın." />
+
+                <Grid ColumnSpacing="12" RowSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*" MinWidth="180" />
+                        <ColumnDefinition Width="*" MinWidth="140" />
+                        <ColumnDefinition Width="*" MinWidth="140" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             Header="Arama"
+                             PlaceholderText="Komut veya sonuçta ara…"
+                             Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             HorizontalAlignment="Stretch" />
+                    <ComboBox Grid.Column="1"
+                              Header="Kaynak"
+                              ItemsSource="{Binding TriggerFilterOptions}"
+                              DisplayMemberPath="Label"
+                              SelectedValuePath="Value"
+                              SelectedValue="{Binding TriggerFilter, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" />
+                    <ComboBox Grid.Column="2"
+                              Header="Durum"
+                              ItemsSource="{Binding StatusFilterOptions}"
+                              DisplayMemberPath="Label"
+                              SelectedValuePath="Value"
+                              SelectedValue="{Binding StatusFilter, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" />
+                </Grid>
+
+                <Grid ColumnSpacing="8" RowSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Style="{ThemeResource AccentButtonStyle}" Command="{Binding RefreshCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE72C;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Yenile" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="1" Command="{Binding LoadToAssistantCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8A7;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Asistan'da aç" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="2" Command="{Binding CopyCommandCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8C8;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Komutu kopyala" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="3" Command="{Binding CopyResultCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8C8;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Sonucu kopyala" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="4" Click="DeleteSelected_OnClick" IsEnabled="{Binding HasSelection}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE74D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Seçileni sil" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="6" Click="ClearAll_OnClick" IsEnabled="{Binding CanClearHistory}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE894;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Tüm geçmişi temizle" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Command="{Binding ClearFiltersCommand}" IsEnabled="{Binding HasActiveFilters}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE894;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Filtreleri sıfırla" />
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{Binding OpenLogFileCommand}"
+                            Visibility="{Binding DeveloperModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE8A5;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Log dosyasını aç" />
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{Binding OpenLogsFolderCommand}"
+                            Visibility="{Binding DeveloperModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE838;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                            <TextBlock Text="Log klasörü" />
+                        </StackPanel>
+                    </Button>
+                    <muxc:ProgressRing Width="20" Height="20" VerticalAlignment="Center"
+                                       IsActive="{Binding IsRefreshing}"
+                                       Visibility="{Binding IsRefreshing, Converter={StaticResource BoolToVisibilityConverter}}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Ana içerik -->
+        <Grid Grid.Row="3" ColumnSpacing="14" HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="260" />
+                <ColumnDefinition Width="1.35*" MinWidth="300" />
+                <ColumnDefinition Width="1.8*" MinWidth="280" />
             </Grid.ColumnDefinitions>
 
-            <!-- Run list -->
-            <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="6">
+            <!-- Kayıt listesi -->
+            <Border Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="6" HorizontalAlignment="Stretch">
                 <Grid>
-                    <TextBlock Text="Liste bos. 'Yenile' ile yukleyin."
-                               Margin="14"
-                               Opacity="0.65"
-                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibilityConverter}}" />
+                    <StackPanel Spacing="8"
+                                Margin="14"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <FontIcon Glyph="&#xE81C;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="36" Opacity="0.4" HorizontalAlignment="Center" />
+                        <TextBlock Text="Gösterilecek kayıt yok" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="Asistan bir komut çalıştırdığında burada listelenir. Filtreleri kontrol edin veya yenileyin."
+                                   Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                   TextAlignment="Center"
+                                   MaxWidth="260"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
                     <ListView ItemsSource="{Binding Items}"
                               SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
-                              SelectionMode="Single">
+                              SelectionMode="Single"
+                              HorizontalAlignment="Stretch">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -81,33 +193,38 @@
                         </ListView.ItemContainerStyle>
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Spacing="2">
-                                    <Grid>
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0"
-                                                   Text="{Binding CommandText}"
+                                                   Text="{Binding ConversationTitle}"
                                                    FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis"
                                                    MaxLines="2" />
                                         <Border Grid.Column="1"
                                                 Style="{StaticResource BadgeBorderStyle}"
-                                                Margin="8,0,0,0"
-                                                Background="{Binding FinalStatus, Converter={StaticResource StatusToBrushConverter}}">
-                                            <TextBlock Text="{Binding FinalStatus}"
+                                                Background="{Binding StatusBadgeDisplay, Converter={StaticResource StatusToBrushConverter}}">
+                                            <TextBlock Text="{Binding StatusBadgeDisplay}"
                                                        Foreground="White"
                                                        FontSize="10"
                                                        FontWeight="SemiBold" />
                                         </Border>
                                     </Grid>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Text="{Binding TimestampDisplay}" FontSize="11" Opacity="0.65" />
-                                        <TextBlock Text=" · " FontSize="11" Opacity="0.65" />
+                                    <TextBlock Text="{Binding CommandPreview}"
+                                               FontSize="12"
+                                               Opacity="0.75"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxLines="2" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding RelativeTimeDisplay}" FontSize="11" Opacity="0.65" />
+                                        <TextBlock Text="·" FontSize="11" Opacity="0.45" />
+                                        <TextBlock Text="{Binding TriggerDisplay}" FontSize="11" Opacity="0.65" />
+                                        <TextBlock Text="·" FontSize="11" Opacity="0.45" />
                                         <TextBlock Text="{Binding StepCountDisplay}" FontSize="11" Opacity="0.65" />
                                     </StackPanel>
-                                    <TextBlock Text="{Binding TriggerDisplay}" FontSize="11" Opacity="0.55" />
                                 </StackPanel>
                             </DataTemplate>
                         </ListView.ItemTemplate>
@@ -115,16 +232,141 @@
                 </Grid>
             </Border>
 
-            <!-- Step list -->
-            <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}" Padding="6">
+            <!-- Kullanıcı detay paneli -->
+            <Border Grid.Column="1"
+                    Grid.ColumnSpan="2"
+                    Style="{StaticResource CardBorderStyle}"
+                    HorizontalAlignment="Stretch"
+                    Visibility="{Binding DeveloperModeEnabled, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                <Grid Padding="4">
+                    <StackPanel Spacing="10"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                        <FontIcon Glyph="&#xE8A5;"
+                                  FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                  FontSize="40"
+                                  Opacity="0.45"
+                                  HorizontalAlignment="Center" />
+                        <TextBlock Text="Detay için bir kayıt seçin"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="Seçtiğiniz komutu asistanda yeniden çalıştırabilir, sonucu okuyabilir veya panoya kopyalayabilirsiniz."
+                                   Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                   TextAlignment="Center"
+                                   MaxWidth="460"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Spacing="14">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="6">
+                                    <TextBlock Text="{Binding SelectedItem.ConversationTitle}"
+                                               FontSize="20"
+                                               FontWeight="SemiBold"
+                                               TextWrapping="WrapWholeWords" />
+                                    <TextBlock Text="{Binding SelectedItem.CommandText}"
+                                               FontSize="13"
+                                               Opacity="0.8"
+                                               TextWrapping="WrapWholeWords" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding SelectedItem.RelativeTimeDisplay}" FontSize="12" Opacity="0.65" />
+                                        <TextBlock Text="·" FontSize="12" Opacity="0.45" />
+                                        <TextBlock Text="{Binding SelectedItem.TriggerDisplay}" FontSize="12" Opacity="0.65" />
+                                        <TextBlock Text="·" FontSize="12" Opacity="0.45" />
+                                        <TextBlock Text="{Binding SelectedItem.StepCountDisplay}" FontSize="12" Opacity="0.65" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <Border Grid.Column="1"
+                                        Style="{StaticResource BadgeBorderStyle}"
+                                        VerticalAlignment="Top"
+                                        Background="{Binding SelectedItem.StatusBadgeDisplay, Converter={StaticResource StatusToBrushConverter}}">
+                                    <TextBlock Text="{Binding SelectedItem.StatusBadgeDisplay}"
+                                               Foreground="White"
+                                               FontSize="11"
+                                               FontWeight="SemiBold" />
+                                </Border>
+                            </Grid>
+
+                            <Border Style="{StaticResource SettingsCardBorderStyle}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Asistan yanıtı" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding SelectedItem.LastResultDisplay}"
+                                               TextWrapping="WrapWholeWords"
+                                               Opacity="0.9" />
+                                </StackPanel>
+                            </Border>
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource SettingsCardBorderStyle}">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Son yapılan işlem" Style="{StaticResource LabelTextBlockStyle}" />
+                                        <TextBlock Text="{Binding SelectedItem.SelectedToolDisplay}"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="WrapWholeWords" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource SettingsCardBorderStyle}">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Nereden başlatıldı" Style="{StaticResource LabelTextBlockStyle}" />
+                                        <TextBlock Text="{Binding SelectedItem.TriggerDisplay}"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="WrapWholeWords" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Style="{ThemeResource AccentButtonStyle}" Command="{Binding LoadToAssistantCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE8A7;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                                        <TextBlock Text="Asistan'da yeniden dene" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Command="{Binding CopyCommandCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE8C8;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                                        <TextBlock Text="Komutu kopyala" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Click="DeleteSelected_OnClick">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE74D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
+                                        <TextBlock Text="Bu kaydı sil" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Geliştirici: adım listesi -->
+            <Border Grid.Column="1"
+                    Style="{StaticResource CardBorderStyle}"
+                    Padding="6"
+                    HorizontalAlignment="Stretch"
+                    Visibility="{Binding DeveloperModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
                 <Grid>
-                    <TextBlock Text="Run secin."
+                    <TextBlock Text="Adımları görmek için bir kayıt seçin."
                                Margin="14"
                                Opacity="0.65"
                                Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}" />
                     <ListView ItemsSource="{Binding Steps}"
                               SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
                               SelectionMode="Single"
+                              HorizontalAlignment="Stretch"
                               Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibilityConverter}}">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
@@ -160,8 +402,11 @@
                 </Grid>
             </Border>
 
-            <!-- Step debug detail -->
-            <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}">
+            <!-- Geliştirici: adım detayı -->
+            <Border Grid.Column="2"
+                    Style="{StaticResource CardBorderStyle}"
+                    HorizontalAlignment="Stretch"
+                    Visibility="{Binding DeveloperModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="10"
                                 Padding="4"
@@ -177,42 +422,42 @@
                             </Border>
                         </StackPanel>
 
-                        <muxc:Expander Header="ActionGate" IsExpanded="True">
+                        <muxc:Expander Header="Güvenlik kararı (ActionGate)" IsExpanded="True" HorizontalAlignment="Stretch">
                             <TextBlock Text="{Binding SelectedStep.GateDecision}"
                                        FontFamily="Consolas"
                                        FontSize="12"
-                                       TextWrapping="Wrap" />
+                                       TextWrapping="WrapWholeWords" />
                         </muxc:Expander>
 
-                        <muxc:Expander Header="Parsed decision" IsExpanded="True">
+                        <muxc:Expander Header="Model kararı" IsExpanded="True" HorizontalAlignment="Stretch">
                             <TextBlock Text="{Binding SelectedStep.ParsedDecision}"
                                        FontFamily="Consolas"
                                        FontSize="12"
-                                       TextWrapping="Wrap" />
+                                       TextWrapping="WrapWholeWords" />
                         </muxc:Expander>
 
-                        <muxc:Expander Header="Action result" IsExpanded="True">
+                        <muxc:Expander Header="İşlem sonucu" IsExpanded="True" HorizontalAlignment="Stretch">
                             <TextBlock Text="{Binding SelectedStep.ActionResult}"
                                        FontFamily="Consolas"
                                        FontSize="12"
-                                       TextWrapping="Wrap" />
+                                       TextWrapping="WrapWholeWords" />
                         </muxc:Expander>
 
-                        <muxc:Expander Header="Observation">
+                        <muxc:Expander Header="Gözlem özeti" HorizontalAlignment="Stretch">
                             <TextBlock Text="{Binding SelectedStep.ObservationSummary}"
                                        FontFamily="Consolas"
                                        FontSize="12"
-                                       TextWrapping="Wrap" />
+                                       TextWrapping="WrapWholeWords" />
                         </muxc:Expander>
 
-                        <muxc:Expander Header="Windows ozeti">
+                        <muxc:Expander Header="Pencere özeti" HorizontalAlignment="Stretch">
                             <TextBlock Text="{Binding SelectedStep.WindowsSummary}"
                                        FontFamily="Consolas"
                                        FontSize="12"
-                                       TextWrapping="Wrap" />
+                                       TextWrapping="WrapWholeWords" />
                         </muxc:Expander>
 
-                        <muxc:Expander Header="UI element agaci">
+                        <muxc:Expander Header="UI öğe ağacı" HorizontalAlignment="Stretch">
                             <StackPanel Spacing="6">
                                 <StackPanel Orientation="Horizontal" Spacing="8"
                                             Visibility="{Binding SelectedStep.UiTreeTruncated, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -220,7 +465,7 @@
                                               FontFamily="{StaticResource SymbolThemeFontFamily}"
                                               FontSize="13"
                                               Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                    <TextBlock Text="UI agaci kesilmis" FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
+                                    <TextBlock Text="Ağaç kesilmiş — tam metin için kopyala." FontSize="12" Opacity="0.8" VerticalAlignment="Center" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding SelectedStep.UiTreeCharInfo}"
                                            FontSize="11"
@@ -228,7 +473,6 @@
                                            Visibility="{Binding SelectedStep.UiTreeCharInfo, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
                                 <muxc:Expander Header="{Binding SelectedStep.UiTreeElementsHeader}"
                                                HorizontalAlignment="Stretch"
-                                               HorizontalContentAlignment="Stretch"
                                                Visibility="{Binding SelectedStep.HasUiTreeElements, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <ListView ItemsSource="{Binding SelectedStep.UiTreeElements}"
                                               SelectionMode="None"
@@ -251,28 +495,26 @@
                                                                FontFamily="Consolas"
                                                                FontSize="10.5"
                                                                Opacity="0.7"
-                                                               TextWrapping="Wrap"
+                                                               TextWrapping="WrapWholeWords"
                                                                Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibilityConverter}}" />
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ListView.ItemTemplate>
                                     </ListView>
                                 </muxc:Expander>
-                                <muxc:Expander Header="Ham JSON"
-                                               HorizontalAlignment="Stretch"
-                                               HorizontalContentAlignment="Stretch">
+                                <muxc:Expander Header="Ham JSON" HorizontalAlignment="Stretch">
                                     <TextBlock Text="{Binding SelectedStep.UiTreeSummary}"
                                                FontFamily="Consolas"
                                                FontSize="12"
-                                               TextWrapping="Wrap" />
+                                               TextWrapping="WrapWholeWords" />
                                 </muxc:Expander>
-                                <Button Content="UI Agaci Kopyala"
+                                <Button Content="UI ağacını kopyala"
                                         Command="{Binding CopyUiTreeCommand}"
                                         Visibility="{Binding SelectedStep.UiTreeCharInfo, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
                             </StackPanel>
                         </muxc:Expander>
 
-                        <muxc:Expander Header="Screenshot">
+                        <muxc:Expander Header="Ekran görüntüsü" HorizontalAlignment="Stretch">
                             <StackPanel Spacing="8">
                                 <Image Source="{Binding SelectedStep.ScreenshotPath, Converter={StaticResource FilePathToImageSourceConverter}}"
                                        MaxHeight="220"
@@ -281,19 +523,19 @@
                                 <TextBlock Text="{Binding SelectedStep.ScreenshotPath}"
                                            FontFamily="Consolas"
                                            FontSize="11"
-                                           TextWrapping="Wrap"
+                                           TextWrapping="WrapWholeWords"
                                            Opacity="0.8" />
-                                <Button Content="Dosyayi goster"
+                                <Button Content="Dosyayı göster"
                                         Command="{Binding OpenScreenshotCommand}"
                                         Visibility="{Binding SelectedStep.HasScreenshot, Converter={StaticResource BoolToVisibilityConverter}}" />
                             </StackPanel>
                         </muxc:Expander>
 
-                        <muxc:Expander Header="LLM raw output">
+                        <muxc:Expander Header="Ham model çıktısı" HorizontalAlignment="Stretch">
                             <TextBlock Text="{Binding SelectedStep.LlmRawOutput}"
                                        FontFamily="Consolas"
                                        FontSize="11"
-                                       TextWrapping="Wrap" />
+                                       TextWrapping="WrapWholeWords" />
                         </muxc:Expander>
                     </StackPanel>
                 </ScrollViewer>

@@ -33,9 +33,7 @@ public sealed class NavigationService : INavigationService
 
     public void NavigateToAssistant() => SelectMenu("Assistant", typeof(AssistantPage));
     public void NavigateToHistory() => SelectMenu("History", typeof(HistoryPage));
-    public void NavigateToCapabilities() => SelectMenu("Capabilities", typeof(CapabilitiesPage));
-    public void NavigateToSettings() => SelectMenu("Settings", typeof(SettingsPage));
-    public void NavigateToAppSettings() => SelectMenu("AppSettings", typeof(AppSettingsPage));
+    public void NavigateToSettings() => SelectMenu("Settings", typeof(UnifiedSettingsPage));
 
     private void SelectMenu(string tag, Type pageType)
     {

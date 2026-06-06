@@ -8,6 +8,7 @@ public sealed class ConversationTemplateSelector : DataTemplateSelector
 {
     public DataTemplate? UserMessageTemplate { get; set; }
     public DataTemplate? AssistantStatusTemplate { get; set; }
+    public DataTemplate? LiveActivityTemplate { get; set; }
     public DataTemplate? PendingApprovalTemplate { get; set; }
     public DataTemplate? ResultCardTemplate { get; set; }
     public DataTemplate? ErrorCardTemplate { get; set; }
@@ -17,6 +18,7 @@ public sealed class ConversationTemplateSelector : DataTemplateSelector
         return item switch
         {
             ConversationItem { Kind: ConversationItemKind.UserMessage } => UserMessageTemplate,
+            ConversationItem { Kind: ConversationItemKind.LiveActivity } => LiveActivityTemplate,
             ConversationItem { Kind: ConversationItemKind.AssistantStatus } => AssistantStatusTemplate,
             ConversationItem { Kind: ConversationItemKind.PendingApproval } => PendingApprovalTemplate,
             ConversationItem { Kind: ConversationItemKind.ResultCard } => ResultCardTemplate,

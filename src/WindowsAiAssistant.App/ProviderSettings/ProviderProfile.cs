@@ -66,9 +66,9 @@ public sealed class ConnectionTestSummary
 
     public string Title => Status switch
     {
-        ProviderConnectionTestStatus.Success => "Baglanti basarili",
+        ProviderConnectionTestStatus.Success => "Bağlantı başarılı",
         ProviderConnectionTestStatus.Cancelled => "Test iptal edildi",
-        _ => "Baglanti basarisiz"
+        _ => "Bağlantı başarısız"
     };
 
     public string CompletedDisplay => CompletedAt.ToLocalTime().ToString("HH:mm:ss");
