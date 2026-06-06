@@ -238,6 +238,71 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         EditingDraft = new ProviderProfileDraft { Id = SuggestNewId() };
     }
 
+    public void BeginFromPreset(string presetKey)
+    {
+        _isEditingNew = true;
+        EditingDraft = presetKey switch
+        {
+            "openai" => new ProviderProfileDraft
+            {
+                Id = SuggestNewId("openai"),
+                DisplayName = "OpenAI (GPT-4.1)",
+                Kind = ModelProviderKind.OpenAICompatible,
+                BaseUrl = "https://api.openai.com/v1",
+                Model = "gpt-4.1-mini",
+                EndpointStyle = ModelEndpointStyle.OpenAiChatCompletions,
+                EndpointPath = "chat/completions",
+                RequiresApiKey = true,
+                ApiKeyEnvVar = "OPENAI_API_KEY",
+                ApiKeyHeaderName = "Authorization",
+                AuthScheme = ModelAuthScheme.Bearer,
+                IsEnabled = true
+            },
+            "gemini" => new ProviderProfileDraft
+            {
+                Id = SuggestNewId("gemini"),
+                DisplayName = "Google Gemini",
+                Kind = ModelProviderKind.Gemini,
+                BaseUrl = "https://generativelanguage.googleapis.com",
+                Model = "gemini-2.0-flash",
+                EndpointStyle = ModelEndpointStyle.GeminiGenerateContent,
+                EndpointPath = "v1beta/models/{model}:generateContent",
+                RequiresApiKey = true,
+                ApiKeyEnvVar = "GEMINI_API_KEY",
+                ApiKeyHeaderName = "x-goog-api-key",
+                AuthScheme = ModelAuthScheme.Raw,
+                IsEnabled = true
+            },
+            "ollama" => new ProviderProfileDraft
+            {
+                Id = SuggestNewId("ollama"),
+                DisplayName = "Ollama (yerel)",
+                Kind = ModelProviderKind.Local,
+                BaseUrl = "http://localhost:11434/v1",
+                Model = "llama3.2",
+                EndpointStyle = ModelEndpointStyle.OpenAiChatCompletions,
+                EndpointPath = "chat/completions",
+                RequiresApiKey = false,
+                AuthScheme = ModelAuthScheme.None,
+                IsEnabled = true
+            },
+            "lmstudio" => new ProviderProfileDraft
+            {
+                Id = SuggestNewId("lmstudio"),
+                DisplayName = "LM Studio (yerel)",
+                Kind = ModelProviderKind.Local,
+                BaseUrl = "http://localhost:1234/v1",
+                Model = "local-model",
+                EndpointStyle = ModelEndpointStyle.OpenAiChatCompletions,
+                EndpointPath = "chat/completions",
+                RequiresApiKey = false,
+                AuthScheme = ModelAuthScheme.None,
+                IsEnabled = true
+            },
+            _ => new ProviderProfileDraft { Id = SuggestNewId() }
+        };
+    }
+
     public void BeginEditCurrent()
     {
         if (SelectedProfile is null)
@@ -366,11 +431,12 @@ public sealed class ProviderSettingsViewModel : ObservableObject
                                     !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(active.ApiKeyEnvVar)))));
     }
 
-    private string SuggestNewId()
+    private string SuggestNewId(string? prefix = null)
     {
+        prefix ??= "custom-provider";
         for (var i = 1; i < 1000; i++)
         {
-            var candidate = i == 1 ? "custom-provider" : $"custom-provider-{i}";
+            var candidate = i == 1 ? prefix : $"{prefix}-{i}";
             if (Profiles.All(profile => !profile.Id.Equals(candidate, StringComparison.OrdinalIgnoreCase)))
             {
                 return candidate;

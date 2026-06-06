@@ -30,7 +30,23 @@ public static class DecisionSchema
         "open_url",
         "type_text",
         "press_key",
-        "press_shortcut"
+        "press_shortcut",
+        "click_element",
+        "focus_element",
+        "read_element",
+        "set_value",
+        "select_element",
+        "expand_collapse",
+        "invoke_toggle",
+        "scroll",
+        "focus_window",
+        "window_state",
+        "move_window",
+        "list_windows",
+        "launch",
+        "mouse_click",
+        "mouse_scroll",
+        "mouse_drag"
     };
 
     public const string JsonSchemaExample = """

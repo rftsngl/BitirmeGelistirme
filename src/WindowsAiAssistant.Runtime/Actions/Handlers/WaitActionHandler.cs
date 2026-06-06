@@ -15,7 +15,8 @@ public sealed class WaitActionHandler : IActionHandler
         {
             delayMs = Math.Min(seconds * 1000, 30_000);
         }
-        else if (action.Parameters.TryGetValue("durationMs", out var msText) &&
+        else if ((action.Parameters.TryGetValue("ms", out var msText) ||
+                  action.Parameters.TryGetValue("durationMs", out msText)) &&
                  int.TryParse(msText, out var durationMs) &&
                  durationMs > 0)
         {

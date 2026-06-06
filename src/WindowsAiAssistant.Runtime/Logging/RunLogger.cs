@@ -14,11 +14,26 @@ public sealed class RunLogger
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
+    public string LogsDirectoryFullPath => Path.GetFullPath(_options.LogsDirectory);
+
     public string GetLogFilePath(string runId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
-        var directory = Path.GetFullPath(_options.LogsDirectory);
-        return Path.Combine(directory, $"{runId}.jsonl");
+        return Path.Combine(LogsDirectoryFullPath, $"{runId}.jsonl");
+    }
+
+    public IReadOnlyList<string> ListRunFilePaths(int maxCount = 50)
+    {
+        var directory = LogsDirectoryFullPath;
+        if (!Directory.Exists(directory))
+        {
+            return Array.Empty<string>();
+        }
+
+        return Directory.EnumerateFiles(directory, "*.jsonl")
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .Take(Math.Clamp(maxCount, 1, 500))
+            .ToList();
     }
 
     public Task AppendAsync(AgentRunLog entry, CancellationToken cancellationToken = default)

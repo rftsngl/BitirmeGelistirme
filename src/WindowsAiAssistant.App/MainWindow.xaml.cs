@@ -3,6 +3,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.App.Services;
 using WindowsAiAssistant.App.Views;
 
@@ -11,11 +12,14 @@ namespace WindowsAiAssistant.App;
 public sealed partial class MainWindow : Window
 {
     private readonly NavigationService _navigationService;
+    private readonly AudioOptions _audioOptions;
+    private bool _allowClose;
 
-    public MainWindow(INavigationService navigationService)
+    public MainWindow(INavigationService navigationService, AudioOptions audioOptions)
     {
         _navigationService = (NavigationService)navigationService
             ?? throw new ArgumentNullException(nameof(navigationService));
+        _audioOptions = audioOptions ?? throw new ArgumentNullException(nameof(audioOptions));
 
         InitializeComponent();
 
@@ -25,6 +29,32 @@ public sealed partial class MainWindow : Window
 
         _navigationService.Initialize(ContentFrame, ShellNav);
         Activated += OnActivated;
+        AppWindow.Closing += OnAppWindowClosing;
+    }
+
+    public void HideToTray() => AppWindow.Hide();
+
+    public void ShowFromTray()
+    {
+        AppWindow.Show();
+        Activate();
+    }
+
+    public void RequestExit()
+    {
+        _allowClose = true;
+        Close();
+    }
+
+    private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_allowClose || !_audioOptions.BackgroundModeEnabled)
+        {
+            return;
+        }
+
+        args.Cancel = true;
+        HideToTray();
     }
 
     private void OnActivated(object sender, WindowActivatedEventArgs args)

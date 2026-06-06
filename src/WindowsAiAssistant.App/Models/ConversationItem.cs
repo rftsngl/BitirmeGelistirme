@@ -63,6 +63,13 @@ public sealed class ConversationItem : ObservableObject
         }
     }
 
+    private bool _allowForSession;
+    public bool AllowForSession
+    {
+        get => _allowForSession;
+        set => SetField(ref _allowForSession, value);
+    }
+
     public bool IsApprovalActionable =>
         Kind == ConversationItemKind.PendingApproval && !IsApprovalResolved;
 }

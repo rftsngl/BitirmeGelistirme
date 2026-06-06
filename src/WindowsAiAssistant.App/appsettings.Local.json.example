@@ -1,0 +1,46 @@
+{
+  "_comment": "Bu dosyayi 'appsettings.Local.json' olarak kopyalayin. Yerel override icindir, git'e dahil edilmez. Gercek API anahtari KOYMAYIN; anahtari ortam degiskeninden veya uygulama ici Saglayici Ayarlari'ndan verin.",
+
+  "_ornek_lmstudio": "LM Studio / Ollama gibi yerel bir OpenAI-uyumlu sunucu icin asagidaki Agent blogunu kullanin.",
+
+  "Agent": {
+    "MaxSteps": 5,
+    "MaxPriorStepsInPrompt": 5,
+    "Model": {
+      "Provider": "OpenAICompatible",
+      "BaseUrl": "http://localhost:1234/v1",
+      "Endpoint": "/chat/completions",
+      "Model": "local-model",
+      "ApiKeyEnvironmentVariable": "",
+      "RequestTimeoutSeconds": 120
+    }
+  },
+
+  "Runtime": {
+    "LogsDirectory": "logs/runs",
+    "ScreenshotsDirectory": "logs/screenshots",
+    "UiAutomation": {
+      "MaxDepth": 4,
+      "MaxElementsPerStep": 80,
+      "CaptureTimeoutMs": 8000
+    },
+    "ActionPolicy": {
+      "Normal": "Allow",
+      "Sensitive": "RequireApproval",
+      "Destructive": "RequireApproval",
+      "AllowSessionRemember": false
+    }
+  },
+
+  "_ornek_ses": "Sesli popup ve tray icin Audio blogu. Wake word icin Porcupine AccessKey + .ppn dosya yollarini appsettings.Local.json'a ekleyin.",
+
+  "Audio": {
+    "BackgroundModeEnabled": true,
+    "StartMinimizedToTray": true,
+    "WakeWordEnabled": false,
+    "PorcupineAccessKey": "",
+    "PorcupineKeywordPath": "",
+    "GlobalHotKey": "Ctrl+Alt+A",
+    "SpeechLanguage": "tr-TR"
+  }
+}

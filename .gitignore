@@ -23,6 +23,7 @@ _ReSharper*/
 
 # VS Code local workspace files
 .vscode/*
+.cursor/
 !.vscode/extensions.json
 !.vscode/tasks.json
 !.vscode/launch.json

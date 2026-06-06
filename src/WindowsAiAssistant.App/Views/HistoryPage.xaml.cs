@@ -11,7 +11,14 @@ public sealed partial class HistoryPage : Page
         InitializeComponent();
         ViewModel = App.Services.GetRequiredService<HistoryViewModel>();
         DataContext = ViewModel;
+        Loaded += OnLoaded;
     }
 
     public HistoryViewModel ViewModel { get; }
+
+    private async void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        Loaded -= OnLoaded;
+        await ViewModel.RefreshAsync().ConfigureAwait(true);
+    }
 }

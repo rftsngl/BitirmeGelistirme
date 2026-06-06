@@ -103,6 +103,30 @@ public sealed partial class SettingsPage : Page
         await ShowProfileEditorAsync().ConfigureAwait(true);
     }
 
+    private async void PresetOpenAi_OnClick(object sender, RoutedEventArgs e)
+    {
+        ViewModel.BeginFromPreset("openai");
+        await ShowProfileEditorAsync().ConfigureAwait(true);
+    }
+
+    private async void PresetGemini_OnClick(object sender, RoutedEventArgs e)
+    {
+        ViewModel.BeginFromPreset("gemini");
+        await ShowProfileEditorAsync().ConfigureAwait(true);
+    }
+
+    private async void PresetOllama_OnClick(object sender, RoutedEventArgs e)
+    {
+        ViewModel.BeginFromPreset("ollama");
+        await ShowProfileEditorAsync().ConfigureAwait(true);
+    }
+
+    private async void PresetLmStudio_OnClick(object sender, RoutedEventArgs e)
+    {
+        ViewModel.BeginFromPreset("lmstudio");
+        await ShowProfileEditorAsync().ConfigureAwait(true);
+    }
+
     private async void EditProfile_OnClick(object sender, RoutedEventArgs e)
     {
         ViewModel.BeginEditCurrent();

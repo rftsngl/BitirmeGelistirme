@@ -19,6 +19,10 @@ public sealed class StatusToBrushConverter : IValueConverter
             "BLOCKED" => new SolidColorBrush(Color.FromArgb(255, 0xC4, 0x2B, 0x1C)),
             "ERROR" => new SolidColorBrush(Color.FromArgb(255, 0xC4, 0x2B, 0x1C)),
             "FAILED" => new SolidColorBrush(Color.FromArgb(255, 0xC4, 0x2B, 0x1C)),
+            "TAMAMLANDI" => new SolidColorBrush(Color.FromArgb(255, 0x10, 0x88, 0x47)),
+            "ONAY REDDEDILDI" => new SolidColorBrush(Color.FromArgb(255, 0xCA, 0x80, 0x00)),
+            "GATE ENGELI" => new SolidColorBrush(Color.FromArgb(255, 0xC4, 0x2B, 0x1C)),
+            "SON ADIM BASARISIZ" => new SolidColorBrush(Color.FromArgb(255, 0xC4, 0x2B, 0x1C)),
             _ => new SolidColorBrush(Color.FromArgb(255, 0x60, 0x60, 0x60))
         };
     }

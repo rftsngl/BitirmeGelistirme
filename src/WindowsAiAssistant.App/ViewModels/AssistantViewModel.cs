@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows.Input;
 using WindowsAiAssistant.Agent;
 using WindowsAiAssistant.App.Models;
@@ -11,6 +13,7 @@ public sealed class AssistantViewModel : ObservableObject
 {
     private readonly INavigationService _navigation;
     private readonly AgentLoop _agentLoop;
+    private readonly ActionApprovalCoordinator _approvalCoordinator;
     private CancellationTokenSource? _runCts;
     private bool _isBusy;
     private string _commandInput = string.Empty;
@@ -19,17 +22,22 @@ public sealed class AssistantViewModel : ObservableObject
     public AssistantViewModel(
         INavigationService navigation,
         IActiveProviderStatus providerStatus,
-        AgentLoop agentLoop)
+        AgentLoop agentLoop,
+        ActionApprovalCoordinator approvalCoordinator)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         ProviderStatus = providerStatus ?? throw new ArgumentNullException(nameof(providerStatus));
         _agentLoop = agentLoop ?? throw new ArgumentNullException(nameof(agentLoop));
+        _approvalCoordinator = approvalCoordinator ?? throw new ArgumentNullException(nameof(approvalCoordinator));
 
         Conversation = [];
-        SubmitCommand = new AsyncRelayCommand(SubmitAsync, () => !IsBusy && !string.IsNullOrWhiteSpace(CommandInput));
+        SubmitCommand = new AsyncRelayCommand(SubmitAsync, CanSubmit);
         CancelRunCommand = new RelayCommand(CancelRun, () => IsBusy);
         ClearSessionCommand = new RelayCommand(ClearSession, () => Conversation.Count > 0 || !string.IsNullOrWhiteSpace(CommandInput));
         OpenSettingsCommand = new RelayCommand(() => _navigation.NavigateToSettings());
+
+        ProviderStatus.PropertyChanged += OnProviderStatusChanged;
+        _approvalCoordinator.ApprovalRequested += OnApprovalRequested;
     }
 
     public IActiveProviderStatus ProviderStatus { get; }
@@ -72,7 +80,17 @@ public sealed class AssistantViewModel : ObservableObject
 
     public bool IsNotBusy => !IsBusy;
     public bool HasConversation => Conversation.Count > 0;
-    public bool HasPendingApproval => false;
+
+    private bool CanSubmit() =>
+        !IsBusy && !string.IsNullOrWhiteSpace(CommandInput) && ProviderStatus.IsReady;
+
+    private void OnProviderStatusChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(IActiveProviderStatus.IsReady) or nameof(IActiveProviderStatus.ReadyBadge) or "")
+        {
+            RaiseCanExecuteChanged();
+        }
+    }
 
     public void LoadCommand(string commandText)
     {
@@ -105,6 +123,21 @@ public sealed class AssistantViewModel : ObservableObject
             return;
         }
 
+        if (!ProviderStatus.IsReady)
+        {
+            Conversation.Add(new ConversationItem
+            {
+                Kind = ConversationItemKind.ErrorCard,
+                Title = "Saglayici hazir degil",
+                Body = ProviderStatus.ReadyReason,
+                PrimaryCommand = OpenSettingsCommand,
+                PrimaryCommandLabel = "Saglayici Ayarlari"
+            });
+            OnPropertyChanged(nameof(HasConversation));
+            StatusMessage = ProviderStatus.ReadyReason;
+            return;
+        }
+
         _runCts?.Cancel();
         _runCts?.Dispose();
         _runCts = new CancellationTokenSource();
@@ -127,16 +160,19 @@ public sealed class AssistantViewModel : ObservableObject
         try
         {
             var result = await _agentLoop
-                .RunAsync(commandText, _runCts.Token, progress)
+                .RunAsync(commandText, _runCts.Token, progress, "chat")
                 .ConfigureAwait(true);
 
             if (!result.Success)
             {
+                var isProviderError = result.ErrorKind == AgentErrorKind.Provider;
                 Conversation.Add(new ConversationItem
                 {
                     Kind = ConversationItemKind.ErrorCard,
-                    Title = "Agent hatasi",
-                    Body = result.ErrorMessage ?? "Istek tamamlanamadi."
+                    Title = ResolveErrorTitle(result.ErrorKind),
+                    Body = result.ErrorMessage ?? "Istek tamamlanamadi.",
+                    PrimaryCommand = isProviderError ? OpenSettingsCommand : null,
+                    PrimaryCommandLabel = isProviderError ? "Saglayici Ayarlari" : string.Empty
                 });
                 StatusMessage = result.ErrorMessage ?? "Istek tamamlanamadi.";
                 return;
@@ -161,20 +197,41 @@ public sealed class AssistantViewModel : ObservableObject
                 }
             }
 
-            var badge = result.ReachedMaxSteps ? "Adim limiti" : "Tamamlandi";
+            var physicalSteps = result.Session.Steps
+                .Count(step => step.ParsedDecision?.Action is not ("respond" or "ask_user" or "stop"));
+            var hasRespondStep = result.Session.Steps
+                .Any(step => step.ParsedDecision?.Action is "respond" or "ask_user");
+            string stepInfoText;
+            if (hasRespondStep && physicalSteps > 0)
+            {
+                stepInfoText = $"{physicalSteps} fiziksel adim + yanit";
+            }
+            else if (physicalSteps == 0 && hasRespondStep)
+            {
+                stepInfoText = "Dogrudan yanit (fiziksel adim yok)";
+            }
+            else
+            {
+                stepInfoText = $"{physicalSteps} adim";
+            }
+
+            var badge = result.ReachedMaxSteps ? $"Adim limiti ({result.Session.Steps.Count}/{result.Session.Steps.Count})" : "Tamamlandi";
+            var logPath = result.LogFilePath ?? string.Empty;
             Conversation.Add(new ConversationItem
             {
                 Kind = ConversationItemKind.ResultCard,
                 Title = "Asistan",
                 Body = result.AssistantMessage ?? string.Empty,
                 StatusBadge = badge,
-                StepInfo = $"{result.Session.Steps.Count} adim calistirildi",
+                StepInfo = stepInfoText,
                 ObservationSummary = result.ObservationSummary ?? "(gozlem yok)",
-                LogPath = result.LogFilePath ?? string.Empty
+                LogPath = logPath,
+                PrimaryCommand = string.IsNullOrWhiteSpace(logPath) ? null : new RelayCommand(() => OpenLog(logPath)),
+                PrimaryCommandLabel = string.IsNullOrWhiteSpace(logPath) ? string.Empty : "Logu Ac"
             });
             StatusMessage = result.ReachedMaxSteps
-                ? $"Adim limitine ulasildi ({result.Session.Steps.Count} adim). Log: {result.LogFilePath}"
-                : $"Tamamlandi — {result.Session.Steps.Count} adim. Log: {result.LogFilePath}";
+                ? $"Adim limitine ulasildi ({result.Session.Steps.Count} adim, {physicalSteps} fiziksel). Log: {result.LogFilePath}"
+                : $"Tamamlandi — {stepInfoText}. Log: {result.LogFilePath}";
         }
         catch (OperationCanceledException)
         {
@@ -211,6 +268,77 @@ public sealed class AssistantViewModel : ObservableObject
         StatusMessage = string.IsNullOrWhiteSpace(progress.Detail)
             ? $"Adim {stepNumber}/{progress.MaxSteps}: {progress.Phase}"
             : $"Adim {stepNumber}/{progress.MaxSteps}: {progress.Phase} — {progress.Detail}";
+    }
+
+    private void OnApprovalRequested(object? sender, PendingApprovalRequest request)
+    {
+        ConversationItem? item = null;
+        item = new ConversationItem
+        {
+            Kind = ConversationItemKind.PendingApproval,
+            Title = "Islem onayi gerekli",
+            Body = $"{request.GateDecision.Reason}{Environment.NewLine}{request.GateDecision.Summary}",
+            SelectedTool = request.Action.Action,
+            RiskLevel = ActionRiskDisplay.ToUiLabel(request.GateDecision.Risk),
+            StatusBadge = "BEKLIYOR",
+            PrimaryCommandLabel = "Onayla",
+            SecondaryCommandLabel = "Reddet",
+            PrimaryCommand = new RelayCommand(() => ResolveApproval(request, item!, approved: true)),
+            SecondaryCommand = new RelayCommand(() => ResolveApproval(request, item!, approved: false))
+        };
+
+        Conversation.Add(item);
+        OnPropertyChanged(nameof(HasConversation));
+        StatusMessage = $"Onay bekleniyor: {request.GateDecision.Summary}";
+    }
+
+    private static void ResolveApproval(PendingApprovalRequest request, ConversationItem item, bool approved)
+    {
+        item.IsApprovalResolved = true;
+        item.StatusBadge = approved ? "ONAYLANDI" : "REDDEDILDI";
+        item.ResolutionNote = approved ? "Devam ediliyor..." : "Islem reddedildi.";
+        if (approved)
+        {
+            request.Approve(rememberForSession: item.AllowForSession);
+        }
+        else
+        {
+            request.Deny();
+        }
+    }
+
+    private static string ResolveErrorTitle(AgentErrorKind errorKind) => errorKind switch
+    {
+        AgentErrorKind.Provider => "Saglayici / baglanti hatasi",
+        AgentErrorKind.Decision => "Karar cozumlenemedi",
+        AgentErrorKind.Action => "Eylem basarisiz",
+        _ => "Agent hatasi"
+    };
+
+    private static void OpenLog(string logPath)
+    {
+        try
+        {
+            if (File.Exists(logPath))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{logPath}\"")
+                {
+                    UseShellExecute = true
+                });
+            }
+            else
+            {
+                var directory = Path.GetDirectoryName(logPath);
+                if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+                {
+                    Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort; log path remains visible/selectable in the card.
+        }
     }
 
     private void ClearSession()

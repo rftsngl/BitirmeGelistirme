@@ -165,6 +165,46 @@ public sealed class DecisionParser
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "shortcut")) &&
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "keys")) =>
                 "press_shortcut icin target veya parameters.shortcut gerekli.",
+            "click_element" or "focus_element" or "read_element" or
+            "select_element" or "expand_collapse" or "invoke_toggle" or "scroll" when
+                string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "elementId")) =>
+                $"'{action}' icin target veya parameters.elementId gerekli.",
+            "set_value" when string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "elementId")) =>
+                "set_value icin target veya parameters.elementId gerekli.",
+            "set_value" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "value")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "text")) =>
+                "set_value icin parameters.value gerekli.",
+            "focus_window" when string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "windowId")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "title")) =>
+                "focus_window icin target veya parameters.windowId/title gerekli.",
+            "window_state" when string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "windowId")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "title")) =>
+                "window_state icin target veya parameters.windowId/title gerekli.",
+            "window_state" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "state")) =>
+                "window_state icin parameters.state gerekli (minimize|maximize|restore|close).",
+            "launch" when string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "app")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "command")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "uri")) =>
+                "launch icin target veya parameters.app/command/uri gerekli.",
+            "mouse_click" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "elementId")) &&
+                (string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "x")) ||
+                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "y"))) =>
+                "mouse_click icin parameters.elementId veya parameters.x + parameters.y gerekli.",
+            "move_window" when string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "windowId")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "title")) =>
+                "move_window icin target veya parameters.windowId/title gerekli.",
+            "mouse_drag" when
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "startX")) ||
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "startY")) ||
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "endX")) ||
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "endY")) =>
+                "mouse_drag icin parameters.startX, startY, endX, endY gerekli.",
             _ => null
         };
     }

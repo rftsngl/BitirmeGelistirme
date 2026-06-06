@@ -12,7 +12,27 @@ internal static class AppLaunchCatalog
             ["calc.exe"] = "calc.exe",
             ["paint"] = "mspaint.exe",
             ["mspaint"] = "mspaint.exe",
-            ["explorer"] = "explorer.exe"
+            ["explorer"] = "explorer.exe",
+            ["explorer.exe"] = "explorer.exe",
+            ["cmd"] = "cmd.exe",
+            ["cmd.exe"] = "cmd.exe",
+            ["komut istemi"] = "cmd.exe",
+            ["powershell"] = "powershell.exe",
+            ["powershell.exe"] = "powershell.exe",
+            ["terminal"] = "wt.exe",
+            ["windows terminal"] = "wt.exe",
+            ["wordpad"] = "write.exe",
+            ["write"] = "write.exe",
+            ["snippingtool"] = "snippingtool.exe",
+            ["snipping tool"] = "snippingtool.exe",
+            ["ekran alintisi"] = "snippingtool.exe",
+            ["taskmgr"] = "taskmgr.exe",
+            ["task manager"] = "taskmgr.exe",
+            ["gorev yoneticisi"] = "taskmgr.exe",
+            ["control"] = "control.exe",
+            ["denetim masasi"] = "control.exe",
+            ["regedit"] = "regedit.exe",
+            ["charmap"] = "charmap.exe"
         };
 
     public static bool TryResolve(string? target, out string executable, out string? error)

@@ -6,7 +6,7 @@ namespace WindowsAiAssistant.App.Configuration;
 
 public static class AppConfiguration
 {
-    public static (AgentOptions Agent, RuntimeOptions Runtime) Load()
+    public static (AgentOptions Agent, RuntimeOptions Runtime, AudioOptions Audio) Load()
     {
         var configuration = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
@@ -21,6 +21,9 @@ public static class AppConfiguration
         var runtime = new RuntimeOptions();
         configuration.GetSection("Runtime").Bind(runtime);
 
-        return (agent, runtime);
+        var audio = new AudioOptions();
+        configuration.GetSection("Audio").Bind(audio);
+
+        return (agent, runtime, audio);
     }
 }

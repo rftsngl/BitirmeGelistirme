@@ -64,6 +64,20 @@
                         <TextBlock Text="Yeni Profil" />
                     </StackPanel>
                 </Button>
+                <Button Click="PresetOpenAi_OnClick" ToolTipService.ToolTip="OpenAI (GPT-4.1-mini) profili hazırla">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="OpenAI" />
+                    </StackPanel>
+                </Button>
+                <Button Click="PresetGemini_OnClick" ToolTipService.ToolTip="Google Gemini profili hazırla">
+                    <TextBlock Text="Gemini" />
+                </Button>
+                <Button Click="PresetOllama_OnClick" ToolTipService.ToolTip="Ollama (yerel) profili hazırla">
+                    <TextBlock Text="Ollama" />
+                </Button>
+                <Button Click="PresetLmStudio_OnClick" ToolTipService.ToolTip="LM Studio (yerel) profili hazırla">
+                    <TextBlock Text="LM Studio" />
+                </Button>
                 <Button Click="EditProfile_OnClick" IsEnabled="{Binding EditEnabled}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon Glyph="&#xE70F;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
