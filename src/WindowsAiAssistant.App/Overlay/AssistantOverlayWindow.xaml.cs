@@ -2,6 +2,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using System.Runtime.InteropServices;
 using Windows.Graphics;
 using WindowsAiAssistant.App.Overlay;
@@ -21,6 +22,7 @@ public sealed partial class AssistantOverlayWindow : Window
         InitializeComponent();
         Root.DataContext = _viewModel;
         ConfigureChrome();
+        Activated += OnActivated;
         Closed += (_, _) => _sessionRunner.CancelActiveSession();
     }
 
@@ -28,6 +30,53 @@ public sealed partial class AssistantOverlayWindow : Window
     {
         PositionBottomCenter();
         Activate();
+        PlayShowAnimation();
+    }
+
+    private void PlayShowAnimation()
+    {
+        RootTranslate.Y = 28;
+        RootBorder.Opacity = 0;
+
+        var storyboard = new Storyboard();
+
+        var fade = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(180))
+        };
+        Storyboard.SetTarget(fade, RootBorder);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+
+        var slide = new DoubleAnimation
+        {
+            From = 28,
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(220)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        Storyboard.SetTarget(slide, RootTranslate);
+        Storyboard.SetTargetProperty(slide, "Y");
+
+        storyboard.Children.Add(fade);
+        storyboard.Children.Add(slide);
+        storyboard.Begin();
+    }
+
+    private void OnActivated(object sender, WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState != WindowActivationState.Deactivated)
+        {
+            return;
+        }
+
+        // Dis tikla kapatma yalnizca sonuc/hata gibi terminal fazlarda guvenli;
+        // agent calisirken baska pencerelere odak verdiginde overlay kapanmamali.
+        if (_viewModel.CanDismissOnFocusLoss)
+        {
+            HideOverlay();
+        }
     }
 
     public void HideOverlay()
@@ -118,6 +167,9 @@ public sealed partial class AssistantOverlayWindow : Window
 
     private void DenyButton_Click(object sender, RoutedEventArgs e) =>
         _sessionRunner.DenyOverlayPending();
+
+    private void ManualSubmitButton_Click(object sender, RoutedEventArgs e) =>
+        _sessionRunner.SubmitManualInput(_viewModel.ManualInputText);
 
     // P/Invoke for cursor-based monitor detection
     private const int MONITOR_DEFAULTTONEAREST = 2;

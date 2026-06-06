@@ -4,9 +4,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
-    <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+    <Border x:Name="RootBorder"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
             CornerRadius="16"
-            Padding="20,16">
+            Padding="20,16"
+            Opacity="0"
+            RenderTransformOrigin="0.5,1">
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="RootTranslate" Y="28" />
+        </Border.RenderTransform>
         <Grid x:Name="Root" KeyDown="Root_KeyDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -58,6 +64,17 @@
                                Height="28"
                                HorizontalAlignment="Left"
                                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+            <StackPanel Spacing="8"
+                        Visibility="{Binding ShowManualInput, Converter={StaticResource BoolToVisibilityConverter}}">
+                <TextBox x:Name="ManualInputBox"
+                         PlaceholderText="Komutunuzu yazin..."
+                         Text="{Binding ManualInputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <Button Content="Gonder"
+                        Style="{ThemeResource AccentButtonStyle}"
+                        Click="ManualSubmitButton_Click"
+                        HorizontalAlignment="Right" />
+            </StackPanel>
         </StackPanel>
 
         <TextBlock Grid.Row="3"

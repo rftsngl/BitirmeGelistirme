@@ -102,6 +102,7 @@ public sealed partial class MainWindow : Window
             "History" => typeof(HistoryPage),
             "Capabilities" => typeof(CapabilitiesPage),
             "Settings" => typeof(SettingsPage),
+            "AppSettings" => typeof(AppSettingsPage),
             _ => typeof(AssistantPage)
         };
 

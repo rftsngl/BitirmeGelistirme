@@ -15,4 +15,25 @@ public sealed class AudioOptions
     public string SpeechLanguage { get; set; } = "tr-TR";
     public int SpeechListenTimeoutSeconds { get; set; } = 12;
     public int OverlayAutoCloseSeconds { get; set; } = 10;
+    public bool StartWithWindows { get; set; }
+
+    /// <summary>
+    /// Overlay ActionGate onay ekraninda kisa STT ile "evet/hayir" sesli onayi etkin.
+    /// </summary>
+    public bool VoiceApprovalEnabled { get; set; } = true;
+
+    /// <summary>
+    /// STT motoru: "windows" (varsayilan) veya "whisper" (yerel Whisper.net modeli).
+    /// </summary>
+    public string SpeechEngine { get; set; } = "windows";
+
+    /// <summary>
+    /// Whisper.net ggml model dosyasinin tam yolu (SpeechEngine=whisper icin gerekli).
+    /// </summary>
+    public string WhisperModelPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Yakalama yapilacak mikrofon cihaz indeksi. -1 = varsayilan cihaz.
+    /// </summary>
+    public int InputDeviceIndex { get; set; } = -1;
 }

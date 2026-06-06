@@ -190,4 +190,6 @@ public sealed partial class SettingsPage : Page
     {
         ViewModel.CancelEdit();
     }
+
+    private void TryInAssistant_OnClick(object sender, RoutedEventArgs e) => ViewModel.NavigateToAssistant();
 }

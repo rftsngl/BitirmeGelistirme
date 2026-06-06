@@ -41,6 +41,10 @@ public sealed class HistoryStepItem
     public string LlmRawOutput { get; init; } = string.Empty;
     public string? ScreenshotPath { get; init; }
     public string UiTreeRawJson { get; init; } = string.Empty;
+    public IReadOnlyList<UiTreeElementRow> UiTreeElements { get; init; } = Array.Empty<UiTreeElementRow>();
+    public bool HasUiTreeElements => UiTreeElements.Count > 0;
+    public string UiTreeElementsHeader =>
+        UiTreeElements.Count > 0 ? $"Elementler ({UiTreeElements.Count})" : "Elementler";
     public bool HasScreenshot => !string.IsNullOrWhiteSpace(ScreenshotPath) && File.Exists(ScreenshotPath);
     public string StatusBadge => Success ? "OK" : "FAIL";
     public bool UiTreeTruncated => UiTreeRawJson.Contains("\"truncated\":true", StringComparison.Ordinal);
@@ -53,4 +57,49 @@ public sealed class HistoryStepItem
         "Destructive" => "critical",
         _ => GateRisk.ToLowerInvariant()
     };
+}
+
+public sealed class UiTreeElementRow
+{
+    public string ElementId { get; init; } = string.Empty;
+    public string ControlType { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Value { get; init; } = string.Empty;
+    public bool IsEnabled { get; init; } = true;
+
+    public string Display
+    {
+        get
+        {
+            var label = string.IsNullOrWhiteSpace(Name) ? "(adsiz)" : Name;
+            var type = string.IsNullOrWhiteSpace(ControlType) ? "Element" : ControlType;
+            return $"{type} · {label}";
+        }
+    }
+
+    public string Detail
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(ElementId))
+            {
+                parts.Add($"id={ElementId}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(Value))
+            {
+                parts.Add($"value={Value}");
+            }
+
+            if (!IsEnabled)
+            {
+                parts.Add("disabled");
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public bool HasDetail => Detail.Length > 0;
 }

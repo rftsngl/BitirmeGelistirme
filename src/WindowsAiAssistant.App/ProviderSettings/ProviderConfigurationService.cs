@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WindowsAiAssistant.Agent;
+using WindowsAiAssistant.App.Services;
 using WindowsAiAssistant.Runtime.Config;
 
 namespace WindowsAiAssistant.App.ProviderSettings;
@@ -232,7 +233,7 @@ public sealed class ProviderConfigurationService : IProviderConfigurationService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
         ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
-        _document.ApiKeys[profileId] = apiKey.Trim();
+        _document.ApiKeys[profileId] = SecretProtector.Protect(apiKey.Trim());
         Save();
         if (profileId.Equals(_document.ActiveProfileId, StringComparison.OrdinalIgnoreCase))
         {
@@ -270,7 +271,14 @@ public sealed class ProviderConfigurationService : IProviderConfigurationService
         if (_document.ApiKeys.TryGetValue(profile.Id, out var savedKey) &&
             !string.IsNullOrWhiteSpace(savedKey))
         {
-            return savedKey.Trim();
+            try
+            {
+                return SecretProtector.Unprotect(savedKey).Trim();
+            }
+            catch
+            {
+                return savedKey.Trim();
+            }
         }
 
         return null;
@@ -342,6 +350,28 @@ public sealed class ProviderConfigurationService : IProviderConfigurationService
         _document.Profiles ??= [];
         _document.ApiKeys ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         EnsureBuiltInProfiles();
+        MigratePlaintextApiKeys();
+    }
+
+    private void MigratePlaintextApiKeys()
+    {
+        var migrated = false;
+        foreach (var key in _document.ApiKeys.Keys.ToList())
+        {
+            var value = _document.ApiKeys[key];
+            if (string.IsNullOrWhiteSpace(value) || value.StartsWith("dpapi:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            _document.ApiKeys[key] = SecretProtector.Protect(value);
+            migrated = true;
+        }
+
+        if (migrated)
+        {
+            Save();
+        }
     }
 
     private ProviderSettingsDocument CreateDefaultDocument()

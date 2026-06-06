@@ -10,6 +10,7 @@ public enum OverlayPhase
     Transcribing,
     Running,
     ApprovalPending,
+    ManualInput,
     Result,
     Error
 }
@@ -21,6 +22,7 @@ public sealed class OverlayViewModel : ObservableObject
     private string _detailText = string.Empty;
     private string _transcriptText = string.Empty;
     private string _resultText = string.Empty;
+    private string _manualInputText = string.Empty;
     private bool _isBusy;
 
     public OverlayPhase Phase
@@ -32,6 +34,7 @@ public sealed class OverlayViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(IsListening));
                 OnPropertyChanged(nameof(IsRunning));
+                OnPropertyChanged(nameof(ShowManualInput));
             }
         }
     }
@@ -69,12 +72,36 @@ public sealed class OverlayViewModel : ObservableObject
     public bool IsListening => Phase == OverlayPhase.Listening;
     public bool IsRunning => Phase is OverlayPhase.Transcribing or OverlayPhase.Running;
     public bool IsAwaitingApproval => Phase == OverlayPhase.ApprovalPending;
+    public bool ShowManualInput => Phase == OverlayPhase.ManualInput;
 
-    public void SetApprovalPending(PendingApprovalRequest request)
+    /// <summary>
+    /// Overlay dis tikla yalnizca terminal goruntuleme fazlarinda kapatilabilir; agent
+    /// calisirken veya onay beklerken odak kaybinda kapanmamali.
+    /// </summary>
+    public bool CanDismissOnFocusLoss => Phase is OverlayPhase.Result or OverlayPhase.Error;
+
+    public string ManualInputText
+    {
+        get => _manualInputText;
+        set => SetField(ref _manualInputText, value);
+    }
+
+    public void SetManualInputPrompt(string detail)
+    {
+        Phase = OverlayPhase.ManualInput;
+        StatusText = "Metin girin";
+        DetailText = detail;
+        ManualInputText = string.Empty;
+        IsBusy = false;
+    }
+
+    public void SetApprovalPending(PendingApprovalRequest request, bool voiceApprovalEnabled = false)
     {
         Phase = OverlayPhase.ApprovalPending;
         StatusText = "Onay gerekli";
-        DetailText = request.GateDecision.Summary;
+        DetailText = voiceApprovalEnabled
+            ? $"{request.GateDecision.Summary}\n(\"Onayla\" / \"Reddet\" diyebilir veya butonu kullanabilirsiniz.)"
+            : request.GateDecision.Summary;
         ResultText = request.GateDecision.Reason;
         IsBusy = false;
     }

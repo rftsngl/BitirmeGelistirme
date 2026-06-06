@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows.Input;
 using WindowsAiAssistant.Agent;
+using WindowsAiAssistant.App.Audio;
+using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.App.Models;
 using WindowsAiAssistant.App.Mvvm;
 using WindowsAiAssistant.App.Services;
@@ -14,6 +16,9 @@ public sealed class AssistantViewModel : ObservableObject
     private readonly INavigationService _navigation;
     private readonly AgentLoop _agentLoop;
     private readonly ActionApprovalCoordinator _approvalCoordinator;
+    private readonly AgentRunCoordinator _runCoordinator;
+    private readonly VoiceApprovalService _voiceApproval;
+    private readonly AudioOptions _audioOptions;
     private CancellationTokenSource? _runCts;
     private bool _isBusy;
     private string _commandInput = string.Empty;
@@ -23,12 +28,18 @@ public sealed class AssistantViewModel : ObservableObject
         INavigationService navigation,
         IActiveProviderStatus providerStatus,
         AgentLoop agentLoop,
-        ActionApprovalCoordinator approvalCoordinator)
+        ActionApprovalCoordinator approvalCoordinator,
+        AgentRunCoordinator runCoordinator,
+        VoiceApprovalService voiceApproval,
+        AudioOptions audioOptions)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         ProviderStatus = providerStatus ?? throw new ArgumentNullException(nameof(providerStatus));
         _agentLoop = agentLoop ?? throw new ArgumentNullException(nameof(agentLoop));
         _approvalCoordinator = approvalCoordinator ?? throw new ArgumentNullException(nameof(approvalCoordinator));
+        _runCoordinator = runCoordinator ?? throw new ArgumentNullException(nameof(runCoordinator));
+        _voiceApproval = voiceApproval ?? throw new ArgumentNullException(nameof(voiceApproval));
+        _audioOptions = audioOptions ?? throw new ArgumentNullException(nameof(audioOptions));
 
         Conversation = [];
         SubmitCommand = new AsyncRelayCommand(SubmitAsync, CanSubmit);
@@ -112,6 +123,7 @@ public sealed class AssistantViewModel : ObservableObject
         }
 
         _runCts.Cancel();
+        _voiceApproval.Cancel();
         StatusMessage = "Iptal istendi...";
     }
 
@@ -135,6 +147,12 @@ public sealed class AssistantViewModel : ObservableObject
             });
             OnPropertyChanged(nameof(HasConversation));
             StatusMessage = ProviderStatus.ReadyReason;
+            return;
+        }
+
+        if (!_runCoordinator.TryEnterRun())
+        {
+            StatusMessage = "Baska bir agent oturumu (sesli popup) calisiyor. Lutfen bekleyin.";
             return;
         }
 
@@ -258,6 +276,7 @@ public sealed class AssistantViewModel : ObservableObject
             _runCts?.Dispose();
             _runCts = null;
             IsBusy = false;
+            _runCoordinator.ExitRun();
             RaiseCanExecuteChanged();
         }
     }
@@ -273,11 +292,17 @@ public sealed class AssistantViewModel : ObservableObject
     private void OnApprovalRequested(object? sender, PendingApprovalRequest request)
     {
         ConversationItem? item = null;
+        var body = $"{request.GateDecision.Reason}{Environment.NewLine}{request.GateDecision.Summary}";
+        if (_audioOptions.VoiceApprovalEnabled)
+        {
+            body += $"{Environment.NewLine}(\"Onayla\" / \"Reddet\" diyebilir veya butonu kullanabilirsiniz.)";
+        }
+
         item = new ConversationItem
         {
             Kind = ConversationItemKind.PendingApproval,
             Title = "Islem onayi gerekli",
-            Body = $"{request.GateDecision.Reason}{Environment.NewLine}{request.GateDecision.Summary}",
+            Body = body,
             SelectedTool = request.Action.Action,
             RiskLevel = ActionRiskDisplay.ToUiLabel(request.GateDecision.Risk),
             StatusBadge = "BEKLIYOR",
@@ -290,10 +315,24 @@ public sealed class AssistantViewModel : ObservableObject
         Conversation.Add(item);
         OnPropertyChanged(nameof(HasConversation));
         StatusMessage = $"Onay bekleniyor: {request.GateDecision.Summary}";
+
+        _ = _voiceApproval.ListenForDecisionAsync(
+            approved =>
+            {
+                ResolveApproval(request, item!, approved);
+                return Task.CompletedTask;
+            },
+            _runCts?.Token ?? CancellationToken.None);
     }
 
-    private static void ResolveApproval(PendingApprovalRequest request, ConversationItem item, bool approved)
+    private void ResolveApproval(PendingApprovalRequest request, ConversationItem item, bool approved)
     {
+        if (item.IsApprovalResolved)
+        {
+            return;
+        }
+
+        _voiceApproval.Cancel();
         item.IsApprovalResolved = true;
         item.StatusBadge = approved ? "ONAYLANDI" : "REDDEDILDI";
         item.ResolutionNote = approved ? "Devam ediliyor..." : "Islem reddedildi.";

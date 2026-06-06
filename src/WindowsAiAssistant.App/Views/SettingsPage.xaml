@@ -283,6 +283,11 @@
                                     <Run Text="Test edildi: " />
                                     <Run Text="{Binding LastConnectionTest.CompletedDisplay, Mode=OneWay}" />
                                 </TextBlock>
+                                <Button Content="Asistan'da dene"
+                                        Click="TryInAssistant_OnClick"
+                                        IsEnabled="{Binding CanTryInAssistant, Mode=OneWay}"
+                                        HorizontalAlignment="Left"
+                                        Margin="0,6,0,0" />
                             </StackPanel>
                         </Border>
 
@@ -417,6 +422,12 @@
 
                     <ToggleSwitch Header="Vision destegi (Faz 9)"
                                   IsOn="{Binding VisionEnabled, Mode=TwoWay}" />
+
+                    <muxc:InfoBar Title="Gizlilik"
+                                  Severity="Warning"
+                                  IsOpen="{Binding VisionEnabled, Mode=OneWay}"
+                                  IsClosable="False"
+                                  Message="Vision acikken ekran goruntuleri secilen API saglayicisina gonderilebilir. Yerel endpoint veya vision kapali profil kullanmayi dusunun." />
 
                     <ToggleSwitch Header="API anahtarı gerekiyor"
                                   IsOn="{Binding RequiresApiKey, Mode=TwoWay}" />

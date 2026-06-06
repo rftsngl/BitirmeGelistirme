@@ -1,6 +1,7 @@
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
+using FlaUI.UIA2;
 using FlaUI.UIA3;
 using WindowsAiAssistant.Runtime.Config;
 using WindowsAiAssistant.Runtime.Input;
@@ -71,8 +72,50 @@ public sealed class UiAutomationService
             return null;
         }
 
+        if (_options.EnableChromiumAccessibility)
+        {
+            AutomationNativeMethods.TryWakeAccessibility(windowHandle);
+        }
+
+        var primary = CaptureWithEngine(windowHandle, useUia2: false);
+
+        if (_options.EnableUia2Fallback &&
+            (primary is null || primary.Value.Tree.Elements.Count < Math.Max(1, _options.Uia2FallbackMinElements)))
+        {
+            (UiElementTree Tree, List<UiElementReference> References)? fallback = null;
+            try
+            {
+                fallback = CaptureWithEngine(windowHandle, useUia2: true);
+            }
+            catch
+            {
+                fallback = null;
+            }
+
+            if (fallback is not null &&
+                fallback.Value.Tree.Elements.Count > (primary?.Tree.Elements.Count ?? 0))
+            {
+                primary = fallback;
+            }
+        }
+
         _registry.Clear();
-        using var automation = new UIA3Automation();
+        if (primary is null)
+        {
+            return null;
+        }
+
+        foreach (var reference in primary.Value.References)
+        {
+            _registry.Register(reference);
+        }
+
+        return primary.Value.Tree;
+    }
+
+    private (UiElementTree Tree, List<UiElementReference> References)? CaptureWithEngine(nint windowHandle, bool useUia2)
+    {
+        using AutomationBase automation = useUia2 ? new UIA2Automation() : new UIA3Automation();
         var window = automation.FromHandle(windowHandle);
         if (window is null)
         {
@@ -80,10 +123,11 @@ public sealed class UiAutomationService
         }
 
         var snapshots = new List<UiElementSnapshot>();
+        var references = new List<UiElementReference>();
         var truncated = false;
-        WalkElement(window, window, depth: 0, snapshots, ref truncated);
+        WalkElement(window, window, depth: 0, snapshots, references, useUia2, ref truncated);
 
-        return new UiElementTree
+        var tree = new UiElementTree
         {
             WindowHandle = windowHandle,
             WindowTitle = window.Name ?? string.Empty,
@@ -91,6 +135,8 @@ public sealed class UiAutomationService
             Truncated = truncated,
             TotalCaptured = snapshots.Count
         };
+
+        return (tree, references);
     }
 
     private void WalkElement(
@@ -98,6 +144,8 @@ public sealed class UiAutomationService
         AutomationElement element,
         int depth,
         List<UiElementSnapshot> snapshots,
+        List<UiElementReference> references,
+        bool useUia2,
         ref bool truncated)
     {
         if (depth > Math.Clamp(_options.MaxDepth, 1, 12))
@@ -124,11 +172,12 @@ public sealed class UiAutomationService
             var bounds = element.BoundingRectangle;
             var value = ReadValueSafe(element);
 
-            _registry.Register(new UiElementReference
+            references.Add(new UiElementReference
             {
                 ElementId = elementId,
                 WindowHandle = rootWindow.Properties.NativeWindowHandle.ValueOrDefault,
                 RuntimeId = runtimeId,
+                UsedUia2 = useUia2,
                 X = (int)bounds.X,
                 Y = (int)bounds.Y,
                 Width = (int)bounds.Width,
@@ -154,7 +203,7 @@ public sealed class UiAutomationService
                 return;
             }
 
-            WalkElement(rootWindow, child, depth + 1, snapshots, ref truncated);
+            WalkElement(rootWindow, child, depth + 1, snapshots, references, useUia2, ref truncated);
         }
     }
 
@@ -342,7 +391,7 @@ public sealed class UiAutomationService
                 $"Element bulunamadi: '{elementId}'. Gozlem yenilendi; yalnizca mevcut listedeki elementId kullanin.");
         }
 
-        using var automation = new UIA3Automation();
+        using AutomationBase automation = reference.UsedUia2 ? new UIA2Automation() : new UIA3Automation();
         var window = automation.FromHandle(reference.WindowHandle)
                    ?? throw new InvalidOperationException("Hedef pencere bulunamadi.");
 

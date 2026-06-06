@@ -10,6 +10,7 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     private readonly ActiveProviderStatus _providerStatus;
     private readonly IProviderConfigurationService _configurationService;
     private readonly ProviderConnectionTester _connectionTester;
+    private readonly INavigationService _navigation;
     private ProviderProfile? _selectedProfile;
     private ProviderProfileDraft? _editingDraft;
     private ConnectionTestSummary? _lastConnectionTest;
@@ -21,11 +22,13 @@ public sealed class ProviderSettingsViewModel : ObservableObject
     public ProviderSettingsViewModel(
         ActiveProviderStatus providerStatus,
         IProviderConfigurationService configurationService,
-        ProviderConnectionTester connectionTester)
+        ProviderConnectionTester connectionTester,
+        INavigationService navigation)
     {
         _providerStatus = providerStatus ?? throw new ArgumentNullException(nameof(providerStatus));
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _connectionTester = connectionTester ?? throw new ArgumentNullException(nameof(connectionTester));
+        _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         Profiles = [];
         ProfileItems = [];
     }
@@ -118,11 +121,15 @@ public sealed class ProviderSettingsViewModel : ObservableObject
             if (SetField(ref _lastConnectionTest, value))
             {
                 OnPropertyChanged(nameof(HasLastConnectionTest));
+                OnPropertyChanged(nameof(CanTryInAssistant));
             }
         }
     }
 
     public bool HasLastConnectionTest => LastConnectionTest is not null;
+
+    public bool CanTryInAssistant =>
+        LastConnectionTest?.Status == ProviderConnectionTestStatus.Success && IsCurrentActive;
 
     public bool IsTestingConnection
     {
@@ -446,6 +453,8 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         return $"custom-provider-{Guid.NewGuid():N}";
     }
 
+    public void NavigateToAssistant() => _navigation.NavigateToAssistant();
+
     private void NotifySelectionChanged()
     {
         OnPropertyChanged(nameof(SelectedProfile));
@@ -483,5 +492,6 @@ public sealed class ProviderSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(DisabledBannerVisibility));
         OnPropertyChanged(nameof(NoKeyMessageVisibility));
         OnPropertyChanged(nameof(SavedKeyRowVisibility));
+        OnPropertyChanged(nameof(CanTryInAssistant));
     }
 }

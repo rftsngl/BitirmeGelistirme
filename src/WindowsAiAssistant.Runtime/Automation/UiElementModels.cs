@@ -50,6 +50,7 @@ public sealed class UiElementReference
     public required string ElementId { get; init; }
     public nint WindowHandle { get; init; }
     public int[] RuntimeId { get; init; } = Array.Empty<int>();
+    public bool UsedUia2 { get; init; }
     public int X { get; init; }
     public int Y { get; init; }
     public int Width { get; init; }

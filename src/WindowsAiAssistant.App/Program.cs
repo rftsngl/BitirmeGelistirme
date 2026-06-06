@@ -32,6 +32,8 @@ public static class AppServices
         services.AddSingleton<ActionGate>();
         services.AddSingleton<ActionApprovalCoordinator>();
         services.AddSingleton<IActionApprovalHandler>(sp => sp.GetRequiredService<ActionApprovalCoordinator>());
+        services.AddSingleton<AgentRunCoordinator>();
+        services.AddSingleton<LocalAppSettingsService>();
         services.AddSingleton(audioOptions);
         services.AddSingleton(agentOptions.Model);
         services.AddSingleton<IProviderConfigurationService, ProviderConfigurationService>();
@@ -80,17 +82,34 @@ public static class AppServices
         services.AddSingleton<ActiveProviderStatus>();
         services.AddSingleton<IActiveProviderStatus>(sp => sp.GetRequiredService<ActiveProviderStatus>());
         services.AddSingleton<ProviderSettingsViewModel>();
+        services.AddSingleton<AppSettingsViewModel>();
         services.AddSingleton<AssistantViewModel>();
         services.AddSingleton<HistoryViewModel>();
         services.AddSingleton<CapabilitiesViewModel>();
         services.AddSingleton<MainWindow>();
 
-        services.AddSingleton<ISpeechToTextService, WindowsSpeechToTextService>();
+        services.AddSingleton<MicrophoneDeviceService>();
+        services.AddSingleton<VoiceApprovalService>();
+        services.AddSingleton<ISpeechToTextService>(sp =>
+        {
+            var options = sp.GetRequiredService<AudioOptions>();
+            if (string.Equals(options.SpeechEngine, "whisper", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(options.WhisperModelPath) &&
+                File.Exists(options.WhisperModelPath))
+            {
+                return new WhisperSpeechToTextService(options);
+            }
+
+            return new WindowsSpeechToTextService(options);
+        });
         services.AddSingleton<ITextToSpeechService, WindowsTextToSpeechService>();
         services.AddSingleton<IWakeWordService>(sp =>
         {
             var options = sp.GetRequiredService<AudioOptions>();
-            if (options.WakeWordEnabled && !string.IsNullOrWhiteSpace(options.PorcupineAccessKey))
+            if (options.WakeWordEnabled &&
+                !string.IsNullOrWhiteSpace(options.PorcupineAccessKey) &&
+                !string.IsNullOrWhiteSpace(options.PorcupineKeywordPath) &&
+                File.Exists(options.PorcupineKeywordPath))
             {
                 return new PorcupineWakeWordService(options);
             }

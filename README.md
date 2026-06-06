@@ -8,7 +8,7 @@ Tek yönlü bağımlılık: `App → Agent → Runtime`
 
 | Proje | Sorumluluk |
 |-------|------------|
-| `WindowsAiAssistant.App` | WinUI 3 arayüz (sohbet, sağlayıcı ayarları, yetenekler, geçmiş), DI kökü |
+| `WindowsAiAssistant.App` | WinUI 3 arayüz (sohbet, sağlayıcı ayarları, **Ses ve Güvenlik**, yetenekler, geçmiş), tray, sesli overlay, DI kökü |
 | `WindowsAiAssistant.Agent` | `AgentLoop`, `PromptBuilder`, `AiClient` (LLM), `DecisionParser`/`DecisionSchema` |
 | `WindowsAiAssistant.Runtime` | Gözlem (ekran/pencere/UIA), aksiyon handler'ları, UI Automation, giriş enjeksiyonu, loglama |
 
@@ -45,6 +45,14 @@ Ayarlar şu sırayla çözülür:
 | Yerel (LM Studio / Ollama) | `http://localhost:1234/v1` | API anahtarı gerekmez |
 
 Vision (ekran görüntüsü) yalnızca profilde etkinse ve model multimodal ise kullanılır.
+
+### Ses, tray ve overlay
+
+- **Ses ve Güvenlik** sayfası (`AppSettingsPage`): hotkey, TTS, STT motoru (`windows` veya `whisper`), mikrofon cihazı, Porcupine wake-word, ActionGate politikası, UI otomasyon seçenekleri.
+- **Tray + arka plan:** `BackgroundModeEnabled` ile sistem tepsisinde çalışır; `Ctrl+Alt+A` (varsayılan) ile sesli overlay açılır.
+- **Wake-word:** Porcupine AccessKey + `.ppn` dosyası gerekir. AccessKey kayıtta DPAPI ile korunur; mikrofon `InputDeviceIndex` ile seçilir.
+- **Whisper STT:** `SpeechEngine=whisper` ve geçerli `WhisperModelPath` (ggml `.bin`) gerekir; yoksa Windows STT kullanılır. [Whisper.ggml modelleri](https://huggingface.co/ggerganov/whisper.cpp/tree/main) indirilebilir.
+- **Yeniden başlatma:** Hotkey, wake-word, STT motoru ve UI otomasyon ayarları singleton servislerde tutulur; kayıttan sonra uygulama yeniden başlatılmadan etkinleşmez.
 
 ## Loglar
 

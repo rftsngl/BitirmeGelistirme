@@ -96,13 +96,16 @@ public sealed class AgentLoop
             var lastStep = session.Steps.LastOrDefault();
             Report(progress, stepIndex, maxSteps, "gozlem", "Masaustu durumu ve ekran goruntusu aliniyor");
 
+            var previousObservation = lastObservation;
             var observation = await _observationService.CaptureAsync(
                 new ObservationCaptureOptions
                 {
                     LastUserGoal = session.UserGoal,
                     LastActionResult = lastStep?.ActionResult?.Message,
                     RunId = session.RunId,
-                    StepIndex = stepIndex
+                    StepIndex = stepIndex,
+                    PreviousActiveWindowTitle = previousObservation?.ActiveWindowTitle,
+                    PreviousActiveProcessName = previousObservation?.ActiveProcessName
                 },
                 cancellationToken).ConfigureAwait(false);
             lastObservation = observation;

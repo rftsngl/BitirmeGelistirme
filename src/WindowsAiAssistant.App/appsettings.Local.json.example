@@ -22,7 +22,10 @@
     "UiAutomation": {
       "MaxDepth": 4,
       "MaxElementsPerStep": 80,
-      "CaptureTimeoutMs": 8000
+      "CaptureTimeoutMs": 8000,
+      "EnableChromiumAccessibility": true,
+      "EnableUia2Fallback": true,
+      "Uia2FallbackMinElements": 3
     },
     "ActionPolicy": {
       "Normal": "Allow",
@@ -32,15 +35,26 @@
     }
   },
 
-  "_ornek_ses": "Sesli popup ve tray icin Audio blogu. Wake word icin Porcupine AccessKey + .ppn dosya yollarini appsettings.Local.json'a ekleyin.",
+  "_ornek_ses": "Sesli popup, tray, STT ve wake-word. Porcupine AccessKey kayit sirasinda DPAPI ile korunur (dpapi:...). Whisper icin ggml model dosyasi indirip WhisperModelPath'e yazin.",
 
   "Audio": {
     "BackgroundModeEnabled": true,
     "StartMinimizedToTray": true,
+    "StartWithWindows": false,
     "WakeWordEnabled": false,
     "PorcupineAccessKey": "",
     "PorcupineKeywordPath": "",
+    "PorcupineModelPath": "",
+    "PorcupineSensitivity": 0.5,
+    "GlobalHotKeyEnabled": true,
     "GlobalHotKey": "Ctrl+Alt+A",
-    "SpeechLanguage": "tr-TR"
+    "TextToSpeechEnabled": true,
+    "SpeechLanguage": "tr-TR",
+    "SpeechListenTimeoutSeconds": 12,
+    "OverlayAutoCloseSeconds": 10,
+    "VoiceApprovalEnabled": true,
+    "SpeechEngine": "windows",
+    "WhisperModelPath": "",
+    "InputDeviceIndex": -1
   }
 }

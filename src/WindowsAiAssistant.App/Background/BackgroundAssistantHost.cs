@@ -2,6 +2,7 @@ using WindowsAiAssistant.App.Audio;
 using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.App.HotKeys;
 using WindowsAiAssistant.App.Overlay;
+using WindowsAiAssistant.App.Services;
 using WindowsAiAssistant.App.Tray;
 
 namespace WindowsAiAssistant.App.Background;
@@ -59,6 +60,12 @@ public sealed class BackgroundAssistantHost : IDisposable
         _wakeWord.WakeWordDetected += OnActivateOverlay;
         _hotKeys.Start();
         _ = _wakeWord.StartAsync();
+        _tray.SetListeningEnabled(_audioOptions.GlobalHotKeyEnabled || _audioOptions.WakeWordEnabled);
+
+        if (_audioOptions.StartWithWindows)
+        {
+            WindowsStartupService.SetEnabled(true);
+        }
 
         if (_audioOptions.StartMinimizedToTray)
         {

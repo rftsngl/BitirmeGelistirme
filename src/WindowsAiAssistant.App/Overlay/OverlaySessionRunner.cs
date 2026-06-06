@@ -16,8 +16,11 @@ public sealed class OverlaySessionRunner
     private readonly IActiveProviderStatus _providerStatus;
     private readonly AudioOptions _audioOptions;
     private readonly ActionApprovalCoordinator _approvalCoordinator;
+    private readonly AgentRunCoordinator _runCoordinator;
+    private readonly VoiceApprovalService _voiceApproval;
     private CancellationTokenSource? _sessionCts;
     private PendingApprovalRequest? _overlayApprovalRequest;
+    private TaskCompletionSource<string?>? _manualInputTcs;
 
     public OverlaySessionRunner(
         OverlayViewModel viewModel,
@@ -26,7 +29,9 @@ public sealed class OverlaySessionRunner
         ITextToSpeechService textToSpeech,
         IActiveProviderStatus providerStatus,
         AudioOptions audioOptions,
-        ActionApprovalCoordinator approvalCoordinator)
+        ActionApprovalCoordinator approvalCoordinator,
+        AgentRunCoordinator runCoordinator,
+        VoiceApprovalService voiceApproval)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _agentLoop = agentLoop ?? throw new ArgumentNullException(nameof(agentLoop));
@@ -35,10 +40,18 @@ public sealed class OverlaySessionRunner
         _providerStatus = providerStatus ?? throw new ArgumentNullException(nameof(providerStatus));
         _audioOptions = audioOptions ?? throw new ArgumentNullException(nameof(audioOptions));
         _approvalCoordinator = approvalCoordinator ?? throw new ArgumentNullException(nameof(approvalCoordinator));
+        _runCoordinator = runCoordinator ?? throw new ArgumentNullException(nameof(runCoordinator));
+        _voiceApproval = voiceApproval ?? throw new ArgumentNullException(nameof(voiceApproval));
     }
+
+    public void SubmitManualInput(string? text) => _manualInputTcs?.TrySetResult(text);
+
+    public void CancelManualInput() => _manualInputTcs?.TrySetResult(null);
 
     public void CancelActiveSession()
     {
+        CancelManualInput();
+        _voiceApproval.Cancel();
         _sessionCts?.Cancel();
         _textToSpeech.StopSpeaking();
     }
@@ -55,6 +68,20 @@ public sealed class OverlaySessionRunner
         _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         var token = _sessionCts.Token;
+
+        if (!_runCoordinator.TryEnterRun())
+        {
+            await window.DispatcherQueue.EnqueueAsync(() =>
+            {
+                _viewModel.SetError("Baska bir agent oturumu calisiyor. Lutfen bekleyin.");
+                return Task.CompletedTask;
+            }).ConfigureAwait(true);
+            await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
+            return;
+        }
+
+        try
+        {
         await window.DispatcherQueue.EnqueueAsync(() =>
         {
             _viewModel.ResetForSession();
@@ -94,16 +121,37 @@ public sealed class OverlaySessionRunner
             }).ConfigureAwait(true);
             return;
         }
+        catch (Exception ex) when (!token.IsCancellationRequested)
+        {
+            await window.DispatcherQueue.EnqueueAsync(() =>
+            {
+                _viewModel.SetManualInputPrompt(
+                    $"Ses tanima basarisiz: {ex.Message}. Komutu yazarak gonderebilirsiniz.");
+                return Task.CompletedTask;
+            }).ConfigureAwait(true);
+            transcript = await WaitForManualInputAsync(token).ConfigureAwait(true);
+        }
 
         if (string.IsNullOrWhiteSpace(transcript))
         {
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
-                _viewModel.SetError("Konusma algilanamadi. Tekrar deneyin veya Ctrl+Alt+A ile acin.");
+                _viewModel.SetManualInputPrompt(
+                    "Konusma algilanamadi. Komutu asagiya yazin ve Gonder'e basin. Mikrofon izni ve tr-TR dil paketini kontrol edin.");
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
-            await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
-            return;
+
+            transcript = await WaitForManualInputAsync(token).ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(transcript))
+            {
+                await window.DispatcherQueue.EnqueueAsync(() =>
+                {
+                    _viewModel.SetHidden();
+                    window.HideOverlay();
+                    return Task.CompletedTask;
+                }).ConfigureAwait(true);
+                return;
+            }
         }
 
         await window.DispatcherQueue.EnqueueAsync(() =>
@@ -181,6 +229,27 @@ public sealed class OverlaySessionRunner
         }
 
         await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
+        }
+        finally
+        {
+            _runCoordinator.ExitRun();
+        }
+    }
+
+    private async Task<string?> WaitForManualInputAsync(CancellationToken token)
+    {
+        _manualInputTcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var registration = token.Register(() => _manualInputTcs.TrySetResult(null));
+        try
+        {
+            var result = await _manualInputTcs.Task.ConfigureAwait(true);
+            return result?.Trim();
+        }
+        finally
+        {
+            registration.Dispose();
+            _manualInputTcs = null;
+        }
     }
 
     private void OnOverlayApprovalRequested(object? sender, PendingApprovalRequest request)
@@ -192,12 +261,42 @@ public sealed class OverlaySessionRunner
             return;
         }
 
-        window.DispatcherQueue.TryEnqueue(() => _viewModel.SetApprovalPending(request));
+        window.DispatcherQueue.TryEnqueue(() =>
+            _viewModel.SetApprovalPending(request, _audioOptions.VoiceApprovalEnabled));
+
+        if (_audioOptions.VoiceApprovalEnabled)
+        {
+            _ = _voiceApproval.ListenForDecisionAsync(
+                approved =>
+                {
+                    window.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (approved)
+                        {
+                            _viewModel.ApprovePending(request);
+                        }
+                        else
+                        {
+                            _viewModel.DenyPending(request);
+                        }
+                    });
+                    return Task.CompletedTask;
+                },
+                _sessionCts?.Token ?? CancellationToken.None);
+        }
     }
 
-    public void ApproveOverlayPending() => _viewModel.ApprovePending(_overlayApprovalRequest);
+    public void ApproveOverlayPending()
+    {
+        _voiceApproval.Cancel();
+        _viewModel.ApprovePending(_overlayApprovalRequest);
+    }
 
-    public void DenyOverlayPending() => _viewModel.DenyPending(_overlayApprovalRequest);
+    public void DenyOverlayPending()
+    {
+        _voiceApproval.Cancel();
+        _viewModel.DenyPending(_overlayApprovalRequest);
+    }
 
     private async Task ScheduleAutoCloseAsync(AssistantOverlayWindow window, CancellationToken token)
     {

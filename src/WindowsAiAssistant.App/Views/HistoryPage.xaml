@@ -37,8 +37,18 @@
             </Button>
             <TextBox PlaceholderText="Ara (hedef metin, durum, tetikleyici...)"
                      Text="{Binding FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     MinWidth="220"
+                     MinWidth="200"
                      VerticalAlignment="Center" />
+            <ComboBox PlaceholderText="Tetikleyici"
+                       ItemsSource="{Binding TriggerFilterOptions}"
+                       SelectedItem="{Binding TriggerFilter, Mode=TwoWay}"
+                       MinWidth="140"
+                       VerticalAlignment="Center" />
+            <ComboBox PlaceholderText="Durum"
+                       ItemsSource="{Binding StatusFilterOptions}"
+                       SelectedItem="{Binding StatusFilter, Mode=TwoWay}"
+                       MinWidth="120"
+                       VerticalAlignment="Center" />
             <muxc:ProgressRing Width="20"
                                Height="20"
                                VerticalAlignment="Center"
@@ -216,10 +226,46 @@
                                            FontSize="11"
                                            Opacity="0.65"
                                            Visibility="{Binding SelectedStep.UiTreeCharInfo, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
-                                <TextBlock Text="{Binding SelectedStep.UiTreeSummary}"
-                                           FontFamily="Consolas"
-                                           FontSize="12"
-                                           TextWrapping="Wrap" />
+                                <muxc:Expander Header="{Binding SelectedStep.UiTreeElementsHeader}"
+                                               HorizontalAlignment="Stretch"
+                                               HorizontalContentAlignment="Stretch"
+                                               Visibility="{Binding SelectedStep.HasUiTreeElements, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <ListView ItemsSource="{Binding SelectedStep.UiTreeElements}"
+                                              SelectionMode="None"
+                                              MaxHeight="260">
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="Padding" Value="8,4" />
+                                                <Setter Property="MinHeight" Value="0" />
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Spacing="1">
+                                                    <TextBlock Text="{Binding Display}"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Detail}"
+                                                               FontFamily="Consolas"
+                                                               FontSize="10.5"
+                                                               Opacity="0.7"
+                                                               TextWrapping="Wrap"
+                                                               Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </muxc:Expander>
+                                <muxc:Expander Header="Ham JSON"
+                                               HorizontalAlignment="Stretch"
+                                               HorizontalContentAlignment="Stretch">
+                                    <TextBlock Text="{Binding SelectedStep.UiTreeSummary}"
+                                               FontFamily="Consolas"
+                                               FontSize="12"
+                                               TextWrapping="Wrap" />
+                                </muxc:Expander>
                                 <Button Content="UI Agaci Kopyala"
                                         Command="{Binding CopyUiTreeCommand}"
                                         Visibility="{Binding SelectedStep.UiTreeCharInfo, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using WindowsAiAssistant.Agent;
+using WindowsAiAssistant.App.Services;
 using WindowsAiAssistant.Runtime.Config;
 
 namespace WindowsAiAssistant.App.Configuration;
@@ -23,6 +24,10 @@ public static class AppConfiguration
 
         var audio = new AudioOptions();
         configuration.GetSection("Audio").Bind(audio);
+        if (!string.IsNullOrWhiteSpace(audio.PorcupineAccessKey))
+        {
+            audio.PorcupineAccessKey = SecretProtector.Unprotect(audio.PorcupineAccessKey);
+        }
 
         return (agent, runtime, audio);
     }

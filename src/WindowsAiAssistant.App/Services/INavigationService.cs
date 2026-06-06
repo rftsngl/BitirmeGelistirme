@@ -7,4 +7,5 @@ public interface INavigationService
     void NavigateToHistory();
     void NavigateToCapabilities();
     void NavigateToSettings();
+    void NavigateToAppSettings();
 }

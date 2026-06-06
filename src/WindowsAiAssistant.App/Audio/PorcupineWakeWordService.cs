@@ -1,18 +1,18 @@
+using Pv;
 using WindowsAiAssistant.App.Configuration;
+using WindowsAiAssistant.App.Services;
 
 namespace WindowsAiAssistant.App.Audio;
 
 /// <summary>
-/// Porcupine wake-word listener. Requires AccessKey + .ppn keyword + .pv model paths in AudioOptions.
-/// Falls back silently when configuration is incomplete.
+/// Porcupine wake-word listener. AccessKey + .ppn keyword + opsiyonel .pv model gerekir.
+/// Mikrofon: <see cref="AudioOptions.InputDeviceIndex"/> (-1 = varsayilan).
 /// </summary>
 public sealed class PorcupineWakeWordService : IWakeWordService
 {
     private readonly AudioOptions _options;
     private CancellationTokenSource? _listenCts;
     private Task? _listenTask;
-    private object? _porcupine;
-    private object? _recorder;
 
     public PorcupineWakeWordService(AudioOptions options) =>
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -64,71 +64,39 @@ public sealed class PorcupineWakeWordService : IWakeWordService
         _listenCts.Dispose();
         _listenCts = null;
         _listenTask = null;
-        DisposeNative();
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await StopAsync().ConfigureAwait(false);
-        DisposeNative();
-    }
+    public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
 
     private async Task ListenLoopAsync(CancellationToken cancellationToken)
     {
+        Porcupine? porcupine = null;
+        PvRecorder? recorder = null;
+
         try
         {
-            var porcupineType = Type.GetType("Pv.Porcupine, Porcupine");
-            var recorderType = Type.GetType("Pv.PvRecorder, PvRecorder");
-            if (porcupineType is null || recorderType is null)
-            {
-                return;
-            }
-
+            var accessKey = SecretProtector.Unprotect(_options.PorcupineAccessKey.Trim());
             var keywordPaths = new[] { Path.GetFullPath(_options.PorcupineKeywordPath) };
-            var modelPath = string.IsNullOrWhiteSpace(_options.PorcupineModelPath) ||
-                            !File.Exists(_options.PorcupineModelPath)
+            var sensitivities = new[] { Math.Clamp(_options.PorcupineSensitivity, 0.01f, 1f) };
+            string? modelPath = string.IsNullOrWhiteSpace(_options.PorcupineModelPath) ||
+                                !File.Exists(_options.PorcupineModelPath)
                 ? null
                 : Path.GetFullPath(_options.PorcupineModelPath);
 
-            var sensitivities = new[] { Math.Clamp(_options.PorcupineSensitivity, 0.01f, 1f) };
+            porcupine = Porcupine.FromKeywordPaths(
+                accessKey,
+                keywordPaths,
+                modelPath,
+                sensitivities);
 
-            var fromKeywordPaths = porcupineType.GetMethod("FromKeywordPaths",
-                [typeof(string), typeof(IEnumerable<string>), typeof(IEnumerable<float>), typeof(string)]);
-            if (fromKeywordPaths is null)
-            {
-                return;
-            }
+            var deviceIndex = _options.InputDeviceIndex >= 0 ? _options.InputDeviceIndex : -1;
+            recorder = PvRecorder.Create(porcupine.FrameLength, deviceIndex);
+            recorder.Start();
 
-            _porcupine = fromKeywordPaths.Invoke(null,
-                [_options.PorcupineAccessKey.Trim(), keywordPaths, sensitivities, modelPath]);
-            if (_porcupine is null)
-            {
-                return;
-            }
-
-            var frameLength = (int)(porcupineType.GetProperty("FrameLength")?.GetValue(_porcupine) ?? 512);
-            var sampleRate = (int)(porcupineType.GetProperty("SampleRate")?.GetValue(_porcupine) ?? 16000);
-
-            var recorderCtor = recorderType.GetConstructor([typeof(int), typeof(int)]);
-            _recorder = recorderCtor?.Invoke([frameLength, 1]);
-            if (_recorder is null)
-            {
-                return;
-            }
-
-            recorderType.GetMethod("Start")?.Invoke(_recorder, null);
-            var readMethod = recorderType.GetMethod("Read");
-            var processMethod = porcupineType.GetMethod("Process", [typeof(short[])]);
-            if (readMethod is null || processMethod is null)
-            {
-                return;
-            }
-
-            var frame = new short[frameLength];
             while (!cancellationToken.IsCancellationRequested)
             {
-                readMethod.Invoke(_recorder, [frame]);
-                var index = (int)(processMethod.Invoke(_porcupine, [frame]) ?? -1);
+                var frame = recorder.Read();
+                var index = porcupine.Process(frame);
                 if (index >= 0)
                 {
                     WakeWordDetected?.Invoke(this, EventArgs.Empty);
@@ -144,43 +112,28 @@ public sealed class PorcupineWakeWordService : IWakeWordService
         }
         catch (Exception)
         {
-            // Porcupine not configured or native load failed — hotkey remains fallback.
+            // Porcupine yapilandirilmadi veya native yukleme basarisiz — hotkey fallback kalir.
         }
         finally
         {
-            DisposeNative();
-        }
-    }
-
-    private void DisposeNative()
-    {
-        try
-        {
-            if (_recorder is not null)
+            try
             {
-                var recorderType = _recorder.GetType();
-                recorderType.GetMethod("Stop")?.Invoke(_recorder, null);
-                recorderType.GetMethod("Dispose")?.Invoke(_recorder, null);
+                recorder?.Stop();
+                recorder?.Dispose();
+            }
+            catch
+            {
+                // ignore
+            }
+
+            try
+            {
+                porcupine?.Dispose();
+            }
+            catch
+            {
+                // ignore
             }
         }
-        catch
-        {
-            // ignore
-        }
-
-        try
-        {
-            if (_porcupine is not null)
-            {
-                _porcupine.GetType().GetMethod("Dispose")?.Invoke(_porcupine, null);
-            }
-        }
-        catch
-        {
-            // ignore
-        }
-
-        _recorder = null;
-        _porcupine = null;
     }
 }

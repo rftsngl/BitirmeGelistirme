@@ -16,6 +16,8 @@ public sealed class DesktopObservation
     public int CursorY { get; init; }
     public string? LastActionResult { get; init; }
     public string? LastUserGoal { get; init; }
+    public string? PreviousActiveWindowTitle { get; init; }
+    public bool ActiveWindowChanged { get; init; }
     public ScreenshotObservation? Screenshot { get; init; }
     public IReadOnlyList<WindowInfo> Windows { get; init; } = Array.Empty<WindowInfo>();
     public UiElementTree? UiTree { get; init; }
@@ -44,6 +46,9 @@ public sealed class DesktopObservation
         builder.AppendLine($"cursorY: {CursorY}");
         builder.AppendLine($"lastUserGoal: {LastUserGoal ?? "(none)"}");
         builder.AppendLine($"lastActionResult: {LastActionResult ?? "(none)"}");
+        builder.AppendLine(ActiveWindowChanged
+            ? $"activeWindowChanged: yes (onceki: {PreviousActiveWindowTitle ?? "(none)"})"
+            : "activeWindowChanged: no");
         builder.AppendLine($"screenshotPath: {Screenshot?.FilePath ?? "(none)"}");
         builder.AppendLine(
             $"screenshotSize: {(Screenshot is null ? "(none)" : $"{Screenshot.Width}x{Screenshot.Height}")}");
@@ -129,6 +134,8 @@ public sealed class DesktopObservation
             cursorY = CursorY,
             lastUserGoal = LastUserGoal,
             lastActionResult = LastActionResult,
+            activeWindowChanged = ActiveWindowChanged,
+            previousActiveWindowTitle = PreviousActiveWindowTitle,
             screenshotPath = Screenshot?.FilePath,
             screenshotWidth = Screenshot?.Width,
             screenshotHeight = Screenshot?.Height,

@@ -7,6 +7,11 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250205002" />
+    <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="Porcupine" Version="3.0.2" />
+    <PackageReference Include="PvRecorder" Version="1.2.2" />
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
   </ItemGroup>
 
   <ItemGroup>

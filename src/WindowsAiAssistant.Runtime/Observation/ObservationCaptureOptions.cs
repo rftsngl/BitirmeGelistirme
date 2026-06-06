@@ -6,4 +6,10 @@ public sealed class ObservationCaptureOptions
     public string? LastActionResult { get; init; }
     public string? RunId { get; init; }
     public int? StepIndex { get; init; }
+
+    /// <summary>Bir onceki adimda aktif olan pencere basligi (action sonrasi diff icin).</summary>
+    public string? PreviousActiveWindowTitle { get; init; }
+
+    /// <summary>Bir onceki adimda aktif olan surec adi (action sonrasi diff icin).</summary>
+    public string? PreviousActiveProcessName { get; init; }
 }

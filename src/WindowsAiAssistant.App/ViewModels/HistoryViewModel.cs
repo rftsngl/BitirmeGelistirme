@@ -20,6 +20,8 @@ public sealed class HistoryViewModel : ObservableObject
     private HistoryStepItem? _selectedStep;
     private bool _isRefreshing;
     private string _filterText = string.Empty;
+    private string _triggerFilter = string.Empty;
+    private string _statusFilter = string.Empty;
     private string _statusMessage = "Calistirilan run kayitlari logs/runs altinda listelenir.";
 
     public HistoryViewModel(
@@ -56,6 +58,36 @@ public sealed class HistoryViewModel : ObservableObject
         set
         {
             if (SetField(ref _filterText, value ?? string.Empty))
+            {
+                ApplyFilter();
+            }
+        }
+    }
+
+    public IReadOnlyList<string> TriggerFilterOptions { get; } =
+        ["", "chat", "voice_overlay", "hotkey"];
+
+    public IReadOnlyList<string> StatusFilterOptions { get; } =
+        ["", "success", "error", "max_steps", "cancelled", "gate"];
+
+    public string TriggerFilter
+    {
+        get => _triggerFilter;
+        set
+        {
+            if (SetField(ref _triggerFilter, value ?? string.Empty))
+            {
+                ApplyFilter();
+            }
+        }
+    }
+
+    public string StatusFilter
+    {
+        get => _statusFilter;
+        set
+        {
+            if (SetField(ref _statusFilter, value ?? string.Empty))
             {
                 ApplyFilter();
             }
@@ -158,12 +190,27 @@ public sealed class HistoryViewModel : ObservableObject
     {
         Items.Clear();
         var query = _filterText.Trim();
-        var source = string.IsNullOrWhiteSpace(query)
-            ? _allItems
-            : _allItems.Where(item =>
+        IEnumerable<HistoryViewItem> source = _allItems;
+
+        if (!string.IsNullOrWhiteSpace(_triggerFilter))
+        {
+            source = source.Where(item =>
+                item.TriggerSource.Equals(_triggerFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_statusFilter))
+        {
+            source = source.Where(item =>
+                item.FinalStatus.Contains(_statusFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            source = source.Where(item =>
                 item.CommandText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 item.FinalStatus.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 item.TriggerSource.Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
 
         foreach (var item in source)
         {
@@ -171,11 +218,26 @@ public sealed class HistoryViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(IsEmpty));
+        var filterParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(_triggerFilter))
+        {
+            filterParts.Add($"tetik: {_triggerFilter}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_statusFilter))
+        {
+            filterParts.Add($"durum: {_statusFilter}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            filterParts.Add($"metin: \"{query}\"");
+        }
+
+        var filterLabel = filterParts.Count > 0 ? $" ({string.Join(", ", filterParts)})" : string.Empty;
         StatusMessage = _allItems.Count == 0
             ? $"Kayit yok. Dizin: {_runLogger.LogsDirectoryFullPath}"
-            : string.IsNullOrWhiteSpace(query)
-                ? $"{_allItems.Count} run listelendi."
-                : $"{Items.Count} / {_allItems.Count} sonuc gosteriliyor (filtre: \"{query}\").";
+            : $"{Items.Count} / {_allItems.Count} run listelendi{filterLabel}.";
     }
 
     private void LoadStepsForSelection()
@@ -209,6 +271,7 @@ public sealed class HistoryViewModel : ObservableObject
                 WindowsSummary = FormatJsonForDisplay(step.WindowsSummaryJson),
                 UiTreeSummary = FormatUiTreeForDisplay(step.UiTreeSummaryJson),
                 UiTreeRawJson = step.UiTreeSummaryJson ?? string.Empty,
+                UiTreeElements = ParseUiTreeElements(step.UiTreeSummaryJson),
                 ParsedDecision = FormatJsonForDisplay(step.ParsedDecisionJson),
                 GateDecision = FormatJsonForDisplay(step.GateDecisionJson),
                 ActionResult = FormatJsonForDisplay(step.ActionResultJson),
@@ -274,6 +337,61 @@ public sealed class HistoryViewModel : ObservableObject
         {
             return raw;
         }
+    }
+
+    private static IReadOnlyList<UiTreeElementRow> ParseUiTreeElements(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return Array.Empty<UiTreeElementRow>();
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            if (!document.RootElement.TryGetProperty("elements", out var elements) ||
+                elements.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<UiTreeElementRow>();
+            }
+
+            var rows = new List<UiTreeElementRow>();
+            foreach (var element in elements.EnumerateArray())
+            {
+                rows.Add(new UiTreeElementRow
+                {
+                    ElementId = ReadProp(element, "ElementId"),
+                    ControlType = ReadProp(element, "ControlType"),
+                    Name = ReadProp(element, "Name"),
+                    Value = ReadProp(element, "Value"),
+                    IsEnabled = !string.Equals(ReadProp(element, "IsEnabled"), "false", StringComparison.OrdinalIgnoreCase)
+                });
+            }
+
+            return rows;
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<UiTreeElementRow>();
+        }
+    }
+
+    private static string ReadProp(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out var value))
+        {
+            return string.Empty;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? string.Empty,
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.Null => string.Empty,
+            _ => value.GetRawText()
+        };
     }
 
     private void CopyUiTree()

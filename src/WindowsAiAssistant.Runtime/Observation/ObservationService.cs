@@ -33,6 +33,12 @@ public sealed class ObservationService
 
         var (windowTitle, processName, processId) = _foregroundWindow.GetForegroundInfo();
         var (screenWidth, screenHeight, cursorX, cursorY) = _screenInfo.GetScreenAndCursor();
+
+        var previousWindowTitle = options?.PreviousActiveWindowTitle;
+        var previousProcessName = options?.PreviousActiveProcessName;
+        var windowChanged = previousWindowTitle is not null &&
+            (!string.Equals(previousWindowTitle, windowTitle, StringComparison.Ordinal) ||
+             !string.Equals(previousProcessName, processName, StringComparison.Ordinal));
         var windows = _windowManager.ListVisibleWindows();
         var monitors = _screenInfo.GetMonitorInfos();
 
@@ -70,6 +76,8 @@ public sealed class ObservationService
             CursorY = cursorY,
             LastUserGoal = options?.LastUserGoal,
             LastActionResult = options?.LastActionResult,
+            PreviousActiveWindowTitle = previousWindowTitle,
+            ActiveWindowChanged = windowChanged,
             Screenshot = screenshot,
             Windows = windows,
             UiTree = uiTree,
