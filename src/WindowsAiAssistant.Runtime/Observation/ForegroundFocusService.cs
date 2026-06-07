@@ -14,9 +14,25 @@ public sealed class ForegroundFocusService : IDisposable
     private readonly WindowManager _windowManager;
     private ForegroundFocusSnapshot? _captured;
     private ForegroundFocusSnapshot? _lastExternal;
+    private string? _sessionUserGoal;
     private IntPtr _hookHandle;
     private NativeMethods.WinEventDelegate? _winEventDelegate;
     private bool _disposed;
+
+    private static readonly (string[] Keywords, string[] ProcessNames, string[] TitleHints)[] GoalAppHints =
+    [
+        (["cursor"], ["Cursor"], ["Cursor"]),
+        (["word", "winword", "belge", "belgesi", "belgeye"], ["WINWORD"], ["Word", "Belge"]),
+        (["chrome"], ["chrome"], ["Chrome", "Google Chrome"]),
+        (["edge", "msedge"], ["msedge"], ["Edge", "Microsoft Edge"]),
+        (["firefox"], ["firefox"], ["Firefox"]),
+        (["vscode", "visual studio code"], ["Code"], ["Visual Studio Code"]),
+        (["notepad", "not defteri"], ["notepad"], ["Not Defteri", "Notepad"]),
+        (["discord"], ["Discord"], ["Discord"]),
+        (["spotify"], ["Spotify"], ["Spotify"]),
+        (["excel"], ["EXCEL"], ["Excel"]),
+        (["powerpoint"], ["POWERPNT"], ["PowerPoint"]),
+    ];
 
     public ForegroundFocusService(WindowManager windowManager) =>
         _windowManager = windowManager ?? throw new ArgumentNullException(nameof(windowManager));
@@ -73,11 +89,13 @@ public sealed class ForegroundFocusService : IDisposable
         return _windowManager.FocusWindow(_captured.Handle);
     }
 
+    public void BeginAutomationSession(string? userGoal) => _sessionUserGoal = userGoal;
+
     /// <summary>
-    /// Asistan odaktayken once oturum yakalamasi, yoksa son dis pencereye odagi geri verir.
+    /// Asistan odaktayken once oturum yakalamasi, son dis pencere ve kullanici hedefindeki uygulamayi dener.
     /// Zaten dis bir uygulama odaktaysa true doner.
     /// </summary>
-    public bool TryRestoreForDesktopAutomation()
+    public bool TryPrepareForDesktopAutomation()
     {
         if (!IsAssistantForeground())
         {
@@ -94,10 +112,19 @@ public sealed class ForegroundFocusService : IDisposable
             return true;
         }
 
+        if (TryFocusWindowFromUserGoal(_sessionUserGoal))
+        {
+            return true;
+        }
+
         return false;
     }
 
-    public void Clear() => _captured = null;
+    public void Clear()
+    {
+        _captured = null;
+        _sessionUserGoal = null;
+    }
 
     public void Dispose()
     {
@@ -141,6 +168,49 @@ public sealed class ForegroundFocusService : IDisposable
             _lastExternal = snapshot;
         }
     }
+
+    private bool TryFocusWindowFromUserGoal(string? userGoal)
+    {
+        if (string.IsNullOrWhiteSpace(userGoal))
+        {
+            return false;
+        }
+
+        var normalizedGoal = NormalizeGoalText(userGoal);
+        var windows = _windowManager.ListVisibleWindows()
+            .Where(window => !AgentSelfWindow.IsAssistantProcess(window.ProcessName))
+            .ToList();
+
+        foreach (var hint in GoalAppHints)
+        {
+            if (!hint.Keywords.Any(keyword => normalizedGoal.Contains(NormalizeGoalText(keyword), StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            var match = windows.FirstOrDefault(window =>
+                hint.ProcessNames.Any(process =>
+                    window.ProcessName.Equals(process, StringComparison.OrdinalIgnoreCase)) ||
+                hint.TitleHints.Any(title =>
+                    window.Title.Contains(title, StringComparison.OrdinalIgnoreCase)));
+
+            if (match is not null && _windowManager.FocusWindow(match.Handle))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeGoalText(string text) =>
+        text.Trim().ToLowerInvariant()
+            .Replace('ı', 'i')
+            .Replace('ğ', 'g')
+            .Replace('ü', 'u')
+            .Replace('ş', 's')
+            .Replace('ö', 'o')
+            .Replace('ç', 'c');
 
     private static ForegroundFocusSnapshot? CreateExternalSnapshot(IntPtr handle)
     {

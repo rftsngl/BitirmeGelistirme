@@ -146,7 +146,7 @@ public sealed class OverlaySessionRunner
                     }
                 }
 
-                _foregroundFocus.TryRestoreForDesktopAutomation();
+                _foregroundFocus.TryPrepareForDesktopAutomation();
 
                 var result = await ExecuteAgentAsync(window, transcript, token).ConfigureAwait(true);
                 if (result is null)

@@ -134,7 +134,8 @@ public sealed class PromptBuilder
         {
             builder.AppendLine("Trigger context: chat UI. The user typed in the assistant window.");
             builder.AppendLine("- Greetings and casual chat are conversation-only — respond in Turkish, no desktop automation.");
-            builder.AppendLine("- Desktop automation in OTHER applications is allowed. If activeProcessName is WindowsAiAssistant, call focus_window first, then type_text/click in the target app.");
+            builder.AppendLine("- Desktop automation in OTHER applications is allowed. If activeProcessName is WindowsAiAssistant, call focus_window to the named app (e.g. Cursor, Word) before type_text/click.");
+            builder.AppendLine("- Multi-step goals (web search + write to document) need efficient steps: shell/curl or clipboard for long text, not many small type_text calls.");
             builder.AppendLine("- Never automate the assistant's own chat/input (process WindowsAiAssistant).");
             builder.AppendLine();
         }

@@ -187,7 +187,7 @@ public sealed class ActionGate
             return null;
         }
 
-        if (_foregroundFocus.TryRestoreForDesktopAutomation())
+        if (_foregroundFocus.TryPrepareForDesktopAutomation())
         {
             (_, processName, _) = _foregroundWindow.GetForegroundInfo();
             if (!AgentSelfWindow.IsAssistantProcess(processName))
@@ -202,8 +202,9 @@ public sealed class ActionGate
             Risk = ActionRisk.Normal,
             Reason =
                 "Windows AI Assistant penceresine fiziksel/UI otomasyonu uygulanamaz. " +
+                "Once focus_window ile hedef uygulamaya gec, sonra type_text/click dene. " +
                 "Kullaniciya respond ile Turkce don.",
-            Summary = $"{action.Action} engellendi (asistan penceresi odakta)"
+            Summary = $"{action.Action} engellendi (asistan penceresi odakta; hedef uygulama odaklanamadi)"
         };
     }
 

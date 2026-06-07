@@ -115,10 +115,8 @@ public sealed class AgentLoop
         _actionGate.BeginSession();
         Report(progress, 0, maxSteps, "basladi", session.UserGoal);
 
-        if (string.Equals(triggerSource, "chat", StringComparison.OrdinalIgnoreCase))
-        {
-            _foregroundFocus.TryRestoreForDesktopAutomation();
-        }
+        _foregroundFocus.BeginAutomationSession(session.UserGoal);
+        _foregroundFocus.TryPrepareForDesktopAutomation();
 
         DesktopObservation? lastObservation = null;
 
