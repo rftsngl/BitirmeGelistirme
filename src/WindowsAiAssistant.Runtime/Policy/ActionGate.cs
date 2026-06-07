@@ -65,12 +65,17 @@ public sealed class ActionGate
 
     private readonly ActionPolicy _policy;
     private readonly ForegroundWindowService _foregroundWindow;
+    private readonly ForegroundFocusService _foregroundFocus;
     private readonly HashSet<string> _sessionApprovals = new(StringComparer.OrdinalIgnoreCase);
 
-    public ActionGate(ActionPolicy policy, ForegroundWindowService foregroundWindow)
+    public ActionGate(
+        ActionPolicy policy,
+        ForegroundWindowService foregroundWindow,
+        ForegroundFocusService foregroundFocus)
     {
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _foregroundWindow = foregroundWindow ?? throw new ArgumentNullException(nameof(foregroundWindow));
+        _foregroundFocus = foregroundFocus ?? throw new ArgumentNullException(nameof(foregroundFocus));
     }
 
     public void BeginSession() => _sessionApprovals.Clear();
@@ -180,6 +185,15 @@ public sealed class ActionGate
         if (!AgentSelfWindow.IsAssistantProcess(processName))
         {
             return null;
+        }
+
+        if (_foregroundFocus.TryRestoreForDesktopAutomation())
+        {
+            (_, processName, _) = _foregroundWindow.GetForegroundInfo();
+            if (!AgentSelfWindow.IsAssistantProcess(processName))
+            {
+                return null;
+            }
         }
 
         return new GateDecision

@@ -70,6 +70,7 @@ public sealed class AgentLoop
     private readonly ActionGate _actionGate;
     private readonly IActionApprovalHandler _approvalHandler;
     private readonly RunLogger _runLogger;
+    private readonly ForegroundFocusService _foregroundFocus;
 
     public AgentLoop(
         AgentOptions options,
@@ -80,7 +81,8 @@ public sealed class AgentLoop
         ActionExecutor actionExecutor,
         ActionGate actionGate,
         IActionApprovalHandler approvalHandler,
-        RunLogger runLogger)
+        RunLogger runLogger,
+        ForegroundFocusService foregroundFocus)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _observationService = observationService ?? throw new ArgumentNullException(nameof(observationService));
@@ -91,6 +93,7 @@ public sealed class AgentLoop
         _actionGate = actionGate ?? throw new ArgumentNullException(nameof(actionGate));
         _approvalHandler = approvalHandler ?? throw new ArgumentNullException(nameof(approvalHandler));
         _runLogger = runLogger ?? throw new ArgumentNullException(nameof(runLogger));
+        _foregroundFocus = foregroundFocus ?? throw new ArgumentNullException(nameof(foregroundFocus));
     }
 
     public async Task<AgentLoopResult> RunAsync(
@@ -111,6 +114,11 @@ public sealed class AgentLoop
         var maxSteps = Math.Clamp(_options.MaxSteps, 1, 40);
         _actionGate.BeginSession();
         Report(progress, 0, maxSteps, "basladi", session.UserGoal);
+
+        if (string.Equals(triggerSource, "chat", StringComparison.OrdinalIgnoreCase))
+        {
+            _foregroundFocus.TryRestoreForDesktopAutomation();
+        }
 
         DesktopObservation? lastObservation = null;
 

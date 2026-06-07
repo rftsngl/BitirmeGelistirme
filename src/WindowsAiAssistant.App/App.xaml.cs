@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using WindowsAiAssistant.App.Background;
 using WindowsAiAssistant.App.Integrations;
 using WindowsAiAssistant.App.Services;
+using WindowsAiAssistant.Runtime.Observation;
 namespace WindowsAiAssistant.App;
 
 public partial class App : Application
@@ -71,6 +72,7 @@ public partial class App : Application
 
         _backgroundHost = Services.GetRequiredService<BackgroundAssistantHost>();
         _backgroundHost.Start(_mainWindow);
+        Services.GetRequiredService<ForegroundFocusService>().StartTracking();
         HandleJumpListActivation(args.Arguments);
     }
 
