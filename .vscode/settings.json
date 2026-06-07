@@ -2,5 +2,9 @@
   "terminal.integrated.env.windows": {
     "BITIRME_WORKSPACE": "${workspaceFolder}"
   },
-  "dotnet.defaultSolution": "WindowsAiAssistant.sln"
+  "dotnet.defaultSolution": "WindowsAiAssistant.sln",
+  "git.autoRepositoryDetection": true,
+  "git.detectSubmodules": false,
+  "git.pruneOnFetch": true,
+  "git.confirmSync": false
 }

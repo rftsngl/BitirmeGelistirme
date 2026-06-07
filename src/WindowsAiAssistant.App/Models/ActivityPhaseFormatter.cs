@@ -27,7 +27,7 @@ public static class ActivityPhaseFormatter
     {
         if (raw.Contains("|fail|", StringComparison.Ordinal))
         {
-            var parts = raw.Split("|fail|", 2, StringComparison.Ordinal);
+            var parts = raw.Split(new[] { "|fail|" }, 2, StringSplitOptions.None);
             var action = parts[0];
             var message = parts.Length > 1 ? parts[1] : string.Empty;
             return ("İşlem başarısız, yeniden deneniyor", $"{FormatActionDetail(action)} — {Truncate(message, 100)}");

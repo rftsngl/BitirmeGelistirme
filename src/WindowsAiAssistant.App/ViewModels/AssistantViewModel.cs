@@ -392,7 +392,7 @@ public sealed class AssistantViewModel : ObservableObject
             Detail = detail,
             State = TimelineEntryState.Active
         });
-        item.OnPropertyChanged(nameof(ConversationItem.HasTimeline));
+        item.NotifyTimelineChanged();
     }
 
     private void FinalizeLiveActivity(bool success)

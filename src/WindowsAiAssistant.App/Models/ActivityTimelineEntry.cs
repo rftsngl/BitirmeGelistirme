@@ -31,7 +31,15 @@ public sealed class ActivityTimelineEntry : ObservableObject
     public TimelineEntryState State
     {
         get => _state;
-        set => SetField(ref _state, value);
+        set
+        {
+            if (SetField(ref _state, value))
+            {
+                OnPropertyChanged(nameof(IsActive));
+                OnPropertyChanged(nameof(IsCompleted));
+                OnPropertyChanged(nameof(IsFailed));
+            }
+        }
     }
 
     public bool IsActive => State == TimelineEntryState.Active;

@@ -3,7 +3,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="using:WindowsAiAssistant.App.Converters"
     xmlns:templates="using:WindowsAiAssistant.App.Templates"
-    xmlns:models="using:WindowsAiAssistant.App.Models"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
     <converters:RiskLevelToBrushConverter x:Key="RiskLevelToBrushConverter" />
@@ -13,7 +12,7 @@
     <converters:BoolToSuccessBrushConverter x:Key="BoolToSuccessBrushConverter" />
     <converters:FilePathToImageSourceConverter x:Key="FilePathToImageSourceConverter" />
 
-    <DataTemplate x:Key="TimelineEntryTemplate" x:DataType="models:ActivityTimelineEntry">
+    <DataTemplate x:Key="TimelineEntryTemplate">
         <Grid ColumnSpacing="10" Margin="0,2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="20" />
@@ -23,24 +22,24 @@
                                Width="14"
                                Height="14"
                                IsActive="True"
-                               Visibility="{x:Bind IsActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                               Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}" />
             <FontIcon Grid.Column="0"
                       Glyph="&#xE73E;"
                       FontFamily="{StaticResource SymbolThemeFontFamily}"
                       FontSize="12"
                       Foreground="{ThemeResource SystemFillColorSuccessBrush}"
-                      Visibility="{x:Bind IsCompleted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                      Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibilityConverter}}" />
             <FontIcon Grid.Column="0"
                       Glyph="&#xE783;"
                       FontFamily="{StaticResource SymbolThemeFontFamily}"
                       FontSize="12"
                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                      Visibility="{x:Bind IsFailed, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                      Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibilityConverter}}" />
             <StackPanel Grid.Column="1" Spacing="1">
-                <TextBlock Text="{x:Bind Label}" FontSize="13" Opacity="0.92" />
-                <TextBlock Text="{x:Bind Detail}"
+                <TextBlock Text="{Binding Label}" FontSize="13" Opacity="0.92" />
+                <TextBlock Text="{Binding Detail}"
                            Style="{StaticResource SettingDescriptionTextBlockStyle}"
-                           Visibility="{x:Bind HasDetail, Mode=OneWay}" />
+                           Visibility="{Binding HasDetail, Converter={StaticResource BoolToVisibilityConverter}}" />
             </StackPanel>
         </Grid>
     </DataTemplate>

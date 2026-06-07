@@ -105,6 +105,8 @@ public sealed class ConversationItem : ObservableObject
 
     public bool HasTimeline => Timeline.Count > 0;
 
+    public void NotifyTimelineChanged() => OnPropertyChanged(nameof(HasTimeline));
+
     public string StatusBadge
     {
         get => _statusBadge;
