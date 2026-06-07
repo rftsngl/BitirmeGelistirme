@@ -10,6 +10,22 @@ internal static class GoalRoutingHints
 {
     internal sealed record AudioRoute(string Mode, int? Level);
 
+    internal static AgentDecision? TryBuildFastDecision(string userGoal)
+    {
+        if (!ShouldUseFastPath(userGoal))
+        {
+            return null;
+        }
+
+        return TryBuildFastAudioDecision(userGoal) ??
+               TryBuildFastNetworkDecision(userGoal) ??
+               TryBuildFastPerfDecision(userGoal);
+    }
+
+    internal static bool ShouldCompleteAfterFastRoute(string userGoal, string action) =>
+        TryBuildFastDecision(userGoal) is { } fast &&
+        string.Equals(fast.Action, action, StringComparison.OrdinalIgnoreCase);
+
     internal static AudioRoute? TryResolveAudioRoute(string userGoal)
     {
         if (string.IsNullOrWhiteSpace(userGoal))
@@ -77,6 +93,22 @@ internal static class GoalRoutingHints
             builder.AppendLine();
         }
 
+        if (TryBuildFastNetworkDecision(userGoal) is not null)
+        {
+            builder.AppendLine("MANDATORY — NETWORK STATUS GOAL:");
+            builder.AppendLine("- FIRST action MUST be network_status with parameters.mode=status (or adapters for adapter list).");
+            builder.AppendLine("- Do NOT open Settings UI or click network tray icons for a simple status query.");
+            builder.AppendLine();
+        }
+
+        if (TryBuildFastPerfDecision(userGoal) is not null)
+        {
+            builder.AppendLine("MANDATORY — PERFORMANCE SNAPSHOT GOAL:");
+            builder.AppendLine("- FIRST action MUST be perf_counter with parameters.mode=snapshot.");
+            builder.AppendLine("- Do NOT open Task Manager UI for a quick CPU/RAM/disk summary.");
+            builder.AppendLine();
+        }
+
         if (observation.UiCaptureSkipReason is not null &&
             observation.UiCaptureSkipReason.Contains("atlandi", StringComparison.OrdinalIgnoreCase))
         {
@@ -97,7 +129,7 @@ internal static class GoalRoutingHints
 
     internal static AgentDecision? TryBuildFastAudioDecision(string userGoal)
     {
-        if (!ShouldUseFastAudioPath(userGoal))
+        if (!ShouldUseFastPath(userGoal))
         {
             return null;
         }
@@ -127,9 +159,70 @@ internal static class GoalRoutingHints
         };
     }
 
-    private static bool ShouldUseFastAudioPath(string userGoal)
+    internal static AgentDecision? TryBuildFastNetworkDecision(string userGoal)
     {
-        if (TryResolveAudioRoute(userGoal) is null)
+        if (string.IsNullOrWhiteSpace(userGoal) || !ShouldUseFastPath(userGoal))
+        {
+            return null;
+        }
+
+        var text = Normalize(userGoal);
+        if (!MatchesAny(text,
+                "internet var mi", "internet var mı", "internet baglantisi", "internet bağlantısı",
+                "ag durumu", "ağ durumu", "wifi durumu", "wi-fi durumu", "bagli mi", "bağlı mı",
+                "ip adresim", "ip adresi", "network status", "online mi", "internete bagli"))
+        {
+            return null;
+        }
+
+        var mode = MatchesAny(text, "adaptor", "adapter", "ag karti", "ağ kartı")
+            ? "adapters"
+            : "status";
+
+        return new AgentDecision
+        {
+            DecisionType = AgentDecisionType.ExecuteAction,
+            Action = "network_status",
+            Reason = "Fast route: network status goal detected in user text.",
+            Parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["mode"] = mode
+            }
+        };
+    }
+
+    internal static AgentDecision? TryBuildFastPerfDecision(string userGoal)
+    {
+        if (string.IsNullOrWhiteSpace(userGoal) || !ShouldUseFastPath(userGoal))
+        {
+            return null;
+        }
+
+        var text = Normalize(userGoal);
+        if (!MatchesAny(text,
+                "cpu kullanimi", "cpu kullanımı", "ram kullanimi", "ram kullanımı", "bellek kullanimi",
+                "bellek kullanımı", "disk doluluk", "performans ozeti", "performans özeti",
+                "sistem yuku", "sistem yükü", "pc ne kadar yuklu", "pc ne kadar yüklü",
+                "task manager", "gorev yoneticisi", "görev yöneticisi"))
+        {
+            return null;
+        }
+
+        return new AgentDecision
+        {
+            DecisionType = AgentDecisionType.ExecuteAction,
+            Action = "perf_counter",
+            Reason = "Fast route: performance snapshot goal detected in user text.",
+            Parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["mode"] = "snapshot"
+            }
+        };
+    }
+
+    private static bool ShouldUseFastPath(string userGoal)
+    {
+        if (string.IsNullOrWhiteSpace(userGoal))
         {
             return false;
         }

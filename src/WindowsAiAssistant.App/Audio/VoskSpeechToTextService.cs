@@ -50,14 +50,18 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
             recognizer.SetWords(false);
 
             var maxWaitSeconds = Math.Clamp(listenTimeoutSeconds ?? _options.SpeechListenTimeoutSeconds, 3, 60);
-            var vad = new VoiceActivityDetector(_options.SilenceEndMilliseconds);
+            var vad = new VoiceActivityDetector(
+                _options.SilenceEndMilliseconds,
+                _options.VadSpeechMultiplier,
+                _options.VadCalibrationMilliseconds,
+                _options.VadMinSpeechMilliseconds);
             var deviceNumber = ResolveDeviceNumber(_options.InputDeviceIndex);
 
             waveIn = new WaveInEvent
             {
                 DeviceNumber = deviceNumber,
                 WaveFormat = new WaveFormat(16000, 16, 1),
-                BufferMilliseconds = 30
+                BufferMilliseconds = 50
             };
 
             waveIn.DataAvailable += (_, args) =>
@@ -70,6 +74,7 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
                 try
                 {
                     var span = args.Buffer.AsSpan(0, args.BytesRecorded);
+                    PcmAudioNormalizer.ApplyGain(span, _options.MicGainTargetPeak);
                     var (level, isSpeech) = vad.Process(span);
 
                     recognizer.AcceptWaveform(args.Buffer, args.BytesRecorded);
@@ -129,7 +134,20 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
             await captureDone.Task.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            return ExtractText(recognizer.FinalResult());
+            recognizer.AcceptWaveform(Array.Empty<byte>(), 0);
+            var final = ExtractText(recognizer.FinalResult());
+            if (SpeechTranscriptFilter.IsAcceptable(final, _options.SttMinTranscriptCharacters))
+            {
+                return final;
+            }
+
+            var partial = ExtractPartialText(recognizer.PartialResult());
+            if (SpeechTranscriptFilter.IsAcceptable(partial, _options.SttMinTranscriptCharacters))
+            {
+                return partial;
+            }
+
+            return null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

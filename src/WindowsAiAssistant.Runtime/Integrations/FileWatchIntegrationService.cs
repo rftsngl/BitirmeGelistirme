@@ -4,9 +4,10 @@ using WindowsAiAssistant.Runtime.Actions;
 
 namespace WindowsAiAssistant.Runtime.Integrations;
 
-public sealed class FileWatchIntegrationService : IFileWatchService
+public sealed class FileWatchIntegrationService : IFileWatchService, IDisposable
 {
     private readonly ConcurrentDictionary<string, WatchEntry> _watches = new(StringComparer.OrdinalIgnoreCase);
+    private bool _disposed;
 
     public ActionResult Execute(string mode, string? watchId = null, string? path = null, string? filter = null, bool recursive = false, int maxEvents = 32)
     {
@@ -86,6 +87,24 @@ public sealed class FileWatchIntegrationService : IFileWatchService
         }
 
         return IntegrationResultHelper.Ok(builder.Length == 0 ? "(aktif izleyici yok)" : builder.ToString());
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        foreach (var id in _watches.Keys.ToArray())
+        {
+            if (_watches.TryRemove(id, out var entry))
+            {
+                entry.Dispose();
+            }
+        }
+
+        _disposed = true;
     }
 
     private sealed class WatchEntry : IDisposable

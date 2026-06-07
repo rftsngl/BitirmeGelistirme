@@ -1,5 +1,6 @@
 using System.Text;
 using WindowsAiAssistant.Runtime.Actions;
+using WindowsAiAssistant.Runtime.Automation;
 
 namespace WindowsAiAssistant.Runtime.Integrations;
 
@@ -8,13 +9,13 @@ public sealed class ClipboardIntegrationService : IClipboardIntegrationService
     public ActionResult Execute(string mode, string? text = null)
     {
         var normalized = (mode ?? "read").Trim().ToLowerInvariant();
-        return normalized switch
+        return StaTaskRunner.RunAsync(() => normalized switch
         {
             "read" => Read(),
             "write" or "set" => Write(text),
             "clear" => Clear(),
             _ => IntegrationResultHelper.Fail($"Desteklenen modlar: read, write, clear. Verilen: {mode}")
-        };
+        }).GetAwaiter().GetResult();
     }
 
     private static ActionResult Read()

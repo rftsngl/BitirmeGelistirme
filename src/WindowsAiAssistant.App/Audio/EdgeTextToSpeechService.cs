@@ -1,5 +1,3 @@
-using Windows.Media.Core;
-using Windows.Media.Playback;
 using WindowsAiAssistant.App.Audio.EdgeTts;
 using WindowsAiAssistant.App.Configuration;
 
@@ -12,8 +10,7 @@ public sealed class EdgeTextToSpeechService : ITextToSpeechService
 {
     private readonly AudioOptions _options;
     private readonly EdgeTtsClient _client = new();
-    private readonly object _gate = new();
-    private MediaPlayer? _player;
+    private readonly NaudioAudioPlayback _playback = new();
 
     public EdgeTextToSpeechService(AudioOptions options) =>
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -49,7 +46,7 @@ public sealed class EdgeTextToSpeechService : ITextToSpeechService
                 throw new InvalidOperationException("Edge TTS ses dosyası oluşturulamadı.");
             }
 
-            await PlayMp3Async(tempPath, cancellationToken).ConfigureAwait(false);
+            await _playback.PlayFileAsync(tempPath, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -67,70 +64,7 @@ public sealed class EdgeTextToSpeechService : ITextToSpeechService
         }
     }
 
-    private async Task PlayMp3Async(string path, CancellationToken cancellationToken)
-    {
-        var player = new MediaPlayer();
-        var playbackFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        player.MediaEnded += (_, _) => playbackFinished.TrySetResult();
-        player.MediaFailed += (_, _) => playbackFinished.TrySetResult();
-        player.Source = MediaSource.CreateFromUri(new Uri(path));
-
-        lock (_gate)
-        {
-            _player?.Dispose();
-            _player = player;
-        }
-
-        player.Play();
-
-        using var registration = cancellationToken.Register(StopSpeaking);
-        try
-        {
-            await playbackFinished.Task.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            StopSpeaking();
-            throw;
-        }
-        finally
-        {
-            lock (_gate)
-            {
-                if (ReferenceEquals(_player, player))
-                {
-                    _player.Dispose();
-                    _player = null;
-                }
-            }
-        }
-    }
-
-    public void StopSpeaking()
-    {
-        lock (_gate)
-        {
-            if (_player is null)
-            {
-                return;
-            }
-
-            try
-            {
-                _player.Pause();
-                _player.Dispose();
-            }
-            catch
-            {
-                // ignore
-            }
-            finally
-            {
-                _player = null;
-            }
-        }
-    }
+    public void StopSpeaking() => _playback.Stop();
 
     private static string FormatSpeakingRate(double rate)
     {

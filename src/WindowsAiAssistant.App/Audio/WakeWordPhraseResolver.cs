@@ -16,7 +16,7 @@ internal static class WakeWordPhraseResolver
 
         return id.ToLowerInvariant() switch
         {
-            "asistan" => ["asistan", "hey asistan", "asistan dinle"],
+            "asistan" => ["asistan", "hey asistan"],
             "hey-asistan" => ["hey asistan", "asistan"],
             "bilgisayar" => ["bilgisayar", "hey bilgisayar"],
             "computer" => ["computer", "hey computer"],
@@ -33,4 +33,68 @@ internal static class WakeWordPhraseResolver
             .Append("\"[unk]\"");
         return $"[{string.Join(", ", values)}]";
     }
+
+    /// <summary>
+    /// Partial sonuclardaki yanlis pozitifleri azaltmak icin siki eslesme.
+    /// </summary>
+    public static bool MatchesAnyPhrase(string? recognizedText, IReadOnlyList<string> phrases)
+    {
+        if (string.IsNullOrWhiteSpace(recognizedText))
+        {
+            return false;
+        }
+
+        var normalized = Normalize(recognizedText);
+        foreach (var phrase in phrases)
+        {
+            var target = Normalize(phrase);
+            if (normalized == target)
+            {
+                return true;
+            }
+
+            if (IsFuzzyWakeMatch(normalized, target))
+            {
+                return true;
+            }
+
+            // Cok kelimeli ifadelerde kisa on ek: "eh hey asistan"
+            if (target.Contains(' ', StringComparison.Ordinal)
+                && normalized.EndsWith(target, StringComparison.Ordinal)
+                && normalized.Length <= target.Length + 6)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsFuzzyWakeMatch(string normalized, string target)
+    {
+        if (target.Length < 4)
+        {
+            return false;
+        }
+
+        if (normalized.Contains(target, StringComparison.Ordinal))
+        {
+            return normalized.Length <= target.Length + 8;
+        }
+
+        // Vosk TR modelinin sik urettigi varyantlar
+        if (target == "asistan")
+        {
+            return normalized is "assistan"
+                or "asistanım"
+                or "a sistem"
+                or "hey asistan"
+                or "hey assistan";
+        }
+
+        return false;
+    }
+
+    private static string Normalize(string value) =>
+        value.Trim().ToLowerInvariant();
 }

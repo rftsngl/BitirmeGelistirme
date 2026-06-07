@@ -1,12 +1,71 @@
 using System.Collections.ObjectModel;
+using WindowsAiAssistant.Agent;
 using WindowsAiAssistant.App.Models;
 using WindowsAiAssistant.App.Mvvm;
+using WindowsAiAssistant.Runtime.Actions;
 
 namespace WindowsAiAssistant.App.ViewModels;
 
 public sealed class CapabilitiesViewModel : ObservableObject
 {
-    private readonly List<CapabilityViewItem> _allItems =
+    private readonly List<CapabilityViewItem> _allItems;
+    private string _searchText = string.Empty;
+
+    public CapabilitiesViewModel(IEnumerable<IActionHandler> handlers)
+    {
+        ArgumentNullException.ThrowIfNull(handlers);
+
+        var registered = handlers
+            .Select(handler => handler.ActionName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        _allItems = BuildCatalog()
+            .Where(item => registered.Contains(item.Name) &&
+                           DecisionSchema.SupportedActions.Contains(item.Name))
+            .ToList();
+
+        Items = [];
+        ApplyFilter();
+    }
+
+    public ObservableCollection<CapabilityViewItem> Items { get; }
+    public int TotalCount => _allItems.Count;
+    public int VisibleCount => Items.Count;
+    public string CountSummary => $"{VisibleCount} / {TotalCount} destekli eylem gösteriliyor";
+
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetField(ref _searchText, value ?? string.Empty))
+            {
+                ApplyFilter();
+            }
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        Items.Clear();
+        var query = SearchText.Trim();
+        var source = string.IsNullOrWhiteSpace(query)
+            ? _allItems
+            : _allItems.Where(item =>
+                item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                item.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                item.TargetKindLabels.Any(label => label.Contains(query, StringComparison.OrdinalIgnoreCase)));
+
+        foreach (var item in source)
+        {
+            Items.Add(item);
+        }
+
+        OnPropertyChanged(nameof(VisibleCount));
+        OnPropertyChanged(nameof(CountSummary));
+    }
+
+    private static List<CapabilityViewItem> BuildCatalog() =>
     [
         NewItem("respond", "\uE8BD", "Kullanıcıya nihai metin yanıtı döndürür.", "Sohbet"),
         NewItem("ask_user", "\uE897", "Kullanıcıdan ek bilgi ister.", "Sohbet"),
@@ -20,7 +79,7 @@ public sealed class CapabilitiesViewModel : ObservableObject
         NewItem("notify", "\uEA8F", "Toast / Action Center bildirimi gösterir.", "Windows API"),
         NewItem("wmi_query", "\uE946", "WMI/WQL ile sistem sorgusu çalıştırır.", "Windows API"),
         NewItem("schedule_task", "\uE787", "Task Scheduler ile görev oluşturur/siler/listeler.", "Windows API"),
-        NewItem("jump_list", "\uE734", "Görev çubuğu Jump List günceller.", "Windows API"),
+        NewItem("jump_list", "\uE734", "Görev çubuğu Jump List günceller ve kısayol tıklamalarını açar.", "Windows API"),
         NewItem("com_invoke", "\uE8A5", "COM/OLE ProgID ile Office vb. otomasyon çağrısı.", "Windows API"),
         NewItem("verify_user", "\uE785", "Windows Hello ile kullanıcı doğrulaması ister.", "Windows API"),
         NewItem("global_hook", "\uE765", "Global klavye/fare hook başlatır/durdurur/okur.", "Windows API"),
@@ -33,7 +92,7 @@ public sealed class CapabilitiesViewModel : ObservableObject
         NewItem("audio_power", "\uE767", "Ses seviyesi, sessize alma ve uyku engelleme.", "Windows API"),
         NewItem("perf_counter", "\uE9D9", "CPU, bellek ve disk kullanım özeti.", "Windows API"),
         NewItem("file_search", "\uE721", "Windows Search ile dosya arar.", "Windows API"),
-        NewItem("notification_listen", "\uEA8F", "Action Center bildirimlerini okur (izin gerekir).", "Windows API"),
+        NewItem("notification_listen", "\uEA8F", "Shell/Action Center olay günlüklerinden bildirim geçmişi okur.", "Windows API"),
         NewItem("shell_session", "\uE756", "Kalıcı PowerShell oturumu (start/write/read/stop).", "Windows API"),
         NewItem("file_watch", "\uE7B8", "Klasörde dosya değişikliklerini izler.", "Windows API"),
         NewItem("credential_store", "\uE785", "Windows Credential Manager listeler/okur/yazar/siler.", "Windows API"),
@@ -56,56 +115,6 @@ public sealed class CapabilitiesViewModel : ObservableObject
         NewItem("mouse_scroll", "\uE962", "Mouse tekerleği ile kaydırır.", "Mouse"),
         NewItem("mouse_drag", "\uE962", "Mouse ile sürükle-bırak yapar (fallback).", "Mouse")
     ];
-
-    private string _searchText = string.Empty;
-
-    public CapabilitiesViewModel()
-    {
-        Items = [];
-        ApplyFilter();
-    }
-
-    public ObservableCollection<CapabilityViewItem> Items { get; }
-    public int TotalCount => _allItems.Count;
-    public int VisibleCount => Items.Count;
-    public string CountSummary => $"{VisibleCount} / {TotalCount} destekli eylem gösteriliyor";
-
-    public string SearchText
-    {
-        get => _searchText;
-        set
-        {
-            if (SetField(ref _searchText, value ?? string.Empty))
-            {
-                ApplyFilter();
-            }
-        }
-    }
-
-    public void ReloadFromRegistry()
-    {
-        ApplyFilter();
-    }
-
-    private void ApplyFilter()
-    {
-        Items.Clear();
-        var query = SearchText.Trim();
-        var source = string.IsNullOrWhiteSpace(query)
-            ? _allItems
-            : _allItems.Where(item =>
-                item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                item.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                item.TargetKindLabels.Any(label => label.Contains(query, StringComparison.OrdinalIgnoreCase)));
-
-        foreach (var item in source)
-        {
-            Items.Add(item);
-        }
-
-        OnPropertyChanged(nameof(VisibleCount));
-        OnPropertyChanged(nameof(CountSummary));
-    }
 
     private static CapabilityViewItem NewItem(string name, string icon, string description, string target) =>
         new()

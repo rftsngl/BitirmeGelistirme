@@ -5,9 +5,16 @@
 [Ll]ogs/
 out/
 publish/
+publish-*/
 AppPackages/
 BundleArtifacts/
 artifacts/
+
+# Publish / installer ciktisi (dotnet publish, Inno Setup, zip)
+/dist/
+installer/
+scripts/
+Directory.Build.props
 
 # Visual Studio / MSBuild
 .vs/
@@ -83,8 +90,10 @@ secrets.json
 # Not: "models/" kullanmayin — Windows'ta src/**/Models/ kaynak klasorunu de etkiler.
 /models/
 /whisper/
+**/Assets/Models/
 vosk-model*/
 ggml-*.bin
+*.gguf
 
 # Proje disi / kisisel klasorler
 BitirmeRapor/

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using WindowsAiAssistant.App.Services;
 
 namespace WindowsAiAssistant.App.Tray;
 
@@ -18,6 +19,8 @@ public sealed class TrayIconService : IDisposable
     private const uint MfString = 0x00000000;
     private const uint TpmRightButton = 0x0002;
     private const uint TpmReturnCmd = 0x0100;
+    private const uint LoadFromFile = 0x0010;
+    private const uint ImageIcon = 1;
 
     private const int CmdOpenMain = 1001;
     private const int CmdActivateOverlay = 1002;
@@ -58,7 +61,7 @@ public sealed class TrayIconService : IDisposable
             return;
         }
 
-        _iconHandle = LoadIcon(nint.Zero, new nint(32512)); // IDI_APPLICATION
+        _iconHandle = LoadCustomIcon() ?? LoadIcon(nint.Zero, new nint(32512));
         _iconData.hIcon = _iconHandle;
         Shell_NotifyIcon(NimAdd, ref _iconData);
         _initialized = true;
@@ -93,6 +96,17 @@ public sealed class TrayIconService : IDisposable
         }
 
         _messageWindow.Dispose();
+    }
+
+    private static nint? LoadCustomIcon()
+    {
+        if (!AppIconPaths.TryGetIcoPath(out var iconPath))
+        {
+            return null;
+        }
+
+        var handle = LoadImage(nint.Zero, iconPath, ImageIcon, 16, 16, LoadFromFile);
+        return handle == nint.Zero ? null : handle;
     }
 
     private void OnWindowMessage(uint msg, nint wParam, nint lParam)
@@ -188,6 +202,15 @@ public sealed class TrayIconService : IDisposable
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATAW lpData);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint LoadImage(
+        nint hInst,
+        string name,
+        uint type,
+        int cx,
+        int cy,
+        uint fuLoad);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern nint LoadIcon(nint hInstance, nint lpIconName);

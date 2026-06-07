@@ -3,7 +3,9 @@ using Microsoft.UI.Windowing;
 using WindowsAiAssistant.Agent;
 using WindowsAiAssistant.App.Audio;
 using WindowsAiAssistant.App.Configuration;
+using WindowsAiAssistant.App.Models;
 using WindowsAiAssistant.App.Services;
+using WindowsAiAssistant.Runtime.Observation;
 
 namespace WindowsAiAssistant.App.Overlay;
 
@@ -18,6 +20,7 @@ public sealed class OverlaySessionRunner
     private readonly ActionApprovalCoordinator _approvalCoordinator;
     private readonly AgentRunCoordinator _runCoordinator;
     private readonly VoiceApprovalService _voiceApproval;
+    private readonly ForegroundFocusService _foregroundFocus;
     private CancellationTokenSource? _sessionCts;
     private PendingApprovalRequest? _overlayApprovalRequest;
     private TaskCompletionSource<string?>? _manualInputTcs;
@@ -31,7 +34,8 @@ public sealed class OverlaySessionRunner
         AudioOptions audioOptions,
         ActionApprovalCoordinator approvalCoordinator,
         AgentRunCoordinator runCoordinator,
-        VoiceApprovalService voiceApproval)
+        VoiceApprovalService voiceApproval,
+        ForegroundFocusService foregroundFocus)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _agentLoop = agentLoop ?? throw new ArgumentNullException(nameof(agentLoop));
@@ -42,6 +46,7 @@ public sealed class OverlaySessionRunner
         _approvalCoordinator = approvalCoordinator ?? throw new ArgumentNullException(nameof(approvalCoordinator));
         _runCoordinator = runCoordinator ?? throw new ArgumentNullException(nameof(runCoordinator));
         _voiceApproval = voiceApproval ?? throw new ArgumentNullException(nameof(voiceApproval));
+        _foregroundFocus = foregroundFocus ?? throw new ArgumentNullException(nameof(foregroundFocus));
     }
 
     public void SubmitManualInput(string? text) => _manualInputTcs?.TrySetResult(text);
@@ -82,8 +87,11 @@ public sealed class OverlaySessionRunner
 
         try
         {
+            _foregroundFocus.CaptureExternalForeground();
+
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
+                _viewModel.ConfigureDeveloperMode(_audioOptions.DeveloperModeEnabled);
                 _viewModel.ResetForSession();
                 window.ShowAndPosition();
                 return Task.CompletedTask;
@@ -137,6 +145,8 @@ public sealed class OverlaySessionRunner
                         break;
                     }
                 }
+
+                _foregroundFocus.TryRestoreCaptured();
 
                 var result = await ExecuteAgentAsync(window, transcript, token).ConfigureAwait(true);
                 if (result is null)
@@ -211,6 +221,7 @@ public sealed class OverlaySessionRunner
         }
         finally
         {
+            _foregroundFocus.Clear();
             _activeWindow = null;
             _runCoordinator.ExitRun();
         }
@@ -282,7 +293,7 @@ public sealed class OverlaySessionRunner
         await window.DispatcherQueue.EnqueueAsync(() =>
         {
             _viewModel.SetCommandText(transcript);
-            _viewModel.SetRunning("İşlemi yapıyorum…");
+            _viewModel.SetTranscribing();
             return Task.CompletedTask;
         }).ConfigureAwait(true);
 
@@ -290,11 +301,11 @@ public sealed class OverlaySessionRunner
         {
             window.DispatcherQueue.TryEnqueue(() =>
             {
-                var step = Math.Min(update.StepIndex + 1, update.MaxSteps);
-                _viewModel.SetRunning(
-                    string.IsNullOrWhiteSpace(update.Detail)
-                        ? $"Adım {step}/{update.MaxSteps}: {update.Phase}"
-                        : $"Adım {step}/{update.MaxSteps}: {update.Phase} — {update.Detail}");
+                var (label, detail) = ActivityPhaseFormatter.Format(update);
+                var devDetail = _audioOptions.DeveloperModeEnabled
+                    ? ActivityPhaseFormatter.ForDeveloper(update)
+                    : null;
+                _viewModel.SetRunning(label, detail, devDetail);
             });
         });
 

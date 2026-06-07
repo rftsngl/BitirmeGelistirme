@@ -4,7 +4,6 @@ using Microsoft.UI.Xaml;
 using WindowsAiAssistant.App.Background;
 using WindowsAiAssistant.App.Integrations;
 using WindowsAiAssistant.App.Services;
-
 namespace WindowsAiAssistant.App;
 
 public partial class App : Application
@@ -15,9 +14,12 @@ public partial class App : Application
 
     public App()
     {
+        UnhandledException += OnUnhandledException;
+
         _singleInstanceMutex = new Mutex(true, "WindowsAiAssistant_SingleInstance_v1", out var isNewInstance);
         if (!isNewInstance)
         {
+            SingleInstanceCoordinator.TryNotifyPrimaryInstance("SHOW");
             _singleInstanceMutex.Dispose();
             _singleInstanceMutex = null;
             Current?.Exit();
@@ -26,7 +28,37 @@ public partial class App : Application
 
         Services = AppServices.BuildServiceProvider();
         AppNotificationIdentity.EnsureRegistered();
+        SingleInstanceCoordinator.StartListener(HandleSingleInstanceCommand);
         InitializeComponent();
+    }
+
+    private void HandleSingleInstanceCommand(string command)
+    {
+        if (Current is not App app || app._mainWindow is null)
+        {
+            return;
+        }
+
+        app._mainWindow.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (command.Equals("SHOW", StringComparison.OrdinalIgnoreCase) ||
+                command.Equals("ACTIVATE", StringComparison.OrdinalIgnoreCase))
+            {
+                app._mainWindow.ShowFromTray();
+                return;
+            }
+
+            if (command.Equals("OVERLAY", StringComparison.OrdinalIgnoreCase))
+            {
+                app._mainWindow.ShowFromTray();
+                app._backgroundHost?.RequestOverlayActivation();
+            }
+        });
+    }
+
+    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    {
+        CrashLog.Write(e.Exception, "UnhandledException");
     }
 
     public static IServiceProvider Services { get; private set; } = null!;
@@ -39,6 +71,29 @@ public partial class App : Application
 
         _backgroundHost = Services.GetRequiredService<BackgroundAssistantHost>();
         _backgroundHost.Start(_mainWindow);
+        HandleJumpListActivation(args.Arguments);
+    }
+
+    private void HandleJumpListActivation(string? arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments))
+        {
+            return;
+        }
+
+        var navigation = Services.GetRequiredService<INavigationService>();
+        _mainWindow?.ShowFromTray();
+
+        if (arguments.Contains("--jump settings", StringComparison.OrdinalIgnoreCase))
+        {
+            navigation.NavigateToSettings();
+            return;
+        }
+
+        if (arguments.Contains("--jump last", StringComparison.OrdinalIgnoreCase))
+        {
+            navigation.NavigateToHistory();
+        }
     }
 
     internal static void ShutdownApplication()
@@ -55,6 +110,7 @@ public partial class App : Application
         _singleInstanceMutex?.ReleaseMutex();
         _singleInstanceMutex?.Dispose();
         _singleInstanceMutex = null;
+        SingleInstanceCoordinator.StopListener();
         Current.Exit();
     }
 }

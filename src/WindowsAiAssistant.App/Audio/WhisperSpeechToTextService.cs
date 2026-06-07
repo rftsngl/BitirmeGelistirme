@@ -2,25 +2,33 @@ using System.Text;
 using NAudio.Wave;
 using Whisper.net;
 using WindowsAiAssistant.App.Configuration;
+using WindowsAiAssistant.App.Services;
 
 namespace WindowsAiAssistant.App.Audio;
 
 /// <summary>
-/// Yerel Whisper.net modeli ile STT. Mikrofonu 16kHz mono yakalar ve segmentleri
-/// metne donusturur. Model dosyasi yapilandirilmamissa null doner; cagiran taraf
-/// manuel girise duser.
+/// Yerel Whisper.net ile komut dinleme. VAD ile konusma bitince transkribe eder.
 /// </summary>
 public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposable
 {
     private readonly AudioOptions _options;
     private readonly SpeechReadinessService _readiness;
+    private readonly WhisperModelService _models;
+    private readonly MicrophoneSessionCoordinator _microphone;
     private readonly object _gate = new();
     private WhisperFactory? _factory;
+    private string? _loadedModelPath;
 
-    public WhisperSpeechToTextService(AudioOptions options, SpeechReadinessService readiness)
+    public WhisperSpeechToTextService(
+        AudioOptions options,
+        SpeechReadinessService readiness,
+        WhisperModelService models,
+        MicrophoneSessionCoordinator microphone)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
+        _models = models ?? throw new ArgumentNullException(nameof(models));
+        _microphone = microphone ?? throw new ArgumentNullException(nameof(microphone));
     }
 
     public async Task<string?> ListenOnceAsync(
@@ -34,14 +42,20 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         float[]? samples;
         try
         {
-            samples = await CaptureSamplesAsync(cancellationToken, listenTimeoutSeconds).ConfigureAwait(false);
+            samples = await CaptureSamplesAsync(cancellationToken, listenTimeoutSeconds, progress)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
-        catch (Exception)
+        catch (SpeechAccessException)
         {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write(ex, "WhisperSpeechToTextService.Capture");
             return null;
         }
 
@@ -64,58 +78,124 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
             }
 
             var text = builder.ToString().Trim();
-            return string.IsNullOrWhiteSpace(text) ? null : text;
+            return SpeechTranscriptFilter.IsAcceptable(text, _options.SttMinTranscriptCharacters)
+                ? text
+                : null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            CrashLog.Write(ex, "WhisperSpeechToTextService.Transcribe");
             return null;
         }
     }
 
-    private async Task<float[]?> CaptureSamplesAsync(CancellationToken cancellationToken, int? listenTimeoutSeconds = null)
+    private async Task<float[]?> CaptureSamplesAsync(
+        CancellationToken cancellationToken,
+        int? listenTimeoutSeconds,
+        IProgress<SpeechListenProgress>? progress)
     {
-        var timeoutSeconds = Math.Clamp(listenTimeoutSeconds ?? _options.SpeechListenTimeoutSeconds, 3, 60);
-        var deviceNumber = ResolveDeviceNumber(_options.InputDeviceIndex);
+        using var micSession = await _microphone.AcquireAsync(cancellationToken).ConfigureAwait(false);
+
+        var maxWaitSeconds = Math.Clamp(listenTimeoutSeconds ?? _options.SpeechListenTimeoutSeconds, 3, 60);
+        var vad = new VoiceActivityDetector(
+            _options.SilenceEndMilliseconds,
+            _options.VadSpeechMultiplier,
+            _options.VadCalibrationMilliseconds,
+            _options.VadMinSpeechMilliseconds,
+            speechOnsetFrames: 2);
+
         var pcm = new List<byte>();
+        var captureDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var capturePeak = 0.0;
+        var heardSpeech = false;
+        WaveInEvent? waveIn = null;
+        Pcm16Resampler? resampler = null;
+        var captureSampleRate = MicrophoneCapture.TargetSampleRate;
 
-        using var waveIn = new WaveInEvent
-        {
-            DeviceNumber = deviceNumber,
-            WaveFormat = new WaveFormat(16000, 16, 1),
-            BufferMilliseconds = 50
-        };
-
-        var stopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        waveIn.DataAvailable += (_, e) =>
-        {
-            lock (pcm)
-            {
-                pcm.AddRange(e.Buffer.Take(e.BytesRecorded));
-            }
-        };
-        waveIn.RecordingStopped += (_, _) => stopped.TrySetResult(true);
-
-        waveIn.StartRecording();
-
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
-            await Task.Delay(Timeout.Infinite, timeoutCts.Token).ConfigureAwait(false);
+            waveIn = MicrophoneCapture.OpenWaveIn(_options, bufferMilliseconds: 80, out captureSampleRate);
+            if (captureSampleRate != MicrophoneCapture.TargetSampleRate)
+            {
+                resampler = new Pcm16Resampler(captureSampleRate, MicrophoneCapture.TargetSampleRate);
+            }
+
+            waveIn.DataAvailable += (_, e) =>
+            {
+                if (e.BytesRecorded <= 0)
+                {
+                    return;
+                }
+
+                MicrophoneCapture.ProcessChunk(
+                    e.Buffer.AsSpan(0, e.BytesRecorded),
+                    captureSampleRate,
+                    resampler,
+                    _options,
+                    (chunk, level) =>
+                    {
+                        var (_, isSpeech) = vad.Process(chunk);
+                        capturePeak = Math.Max(capturePeak, level);
+                        if (vad.SpeechStarted || level >= 0.008)
+                        {
+                            heardSpeech = true;
+                        }
+
+                        lock (pcm)
+                        {
+                            pcm.AddRange(chunk);
+                        }
+
+                        progress?.Report(new SpeechListenProgress
+                        {
+                            AudioLevel = level,
+                            IsSpeaking = isSpeech || level >= 0.008,
+                            PartialTranscript = null
+                        });
+
+                        if (vad.ShouldEndAfterSpeech() || vad.ExceededMaxWait(maxWaitSeconds))
+                        {
+                            captureDone.TrySetResult();
+                        }
+                    });
+            };
+            waveIn.RecordingStopped += (_, _) => captureDone.TrySetResult();
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(maxWaitSeconds + 25));
+
+            var completed = await Task.WhenAny(
+                captureDone.Task,
+                Task.Delay(Timeout.Infinite, timeoutCts.Token)).ConfigureAwait(false);
+
+            if (completed != captureDone.Task && cancellationToken.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            waveIn.StopRecording();
+            await captureDone.Task.ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
         }
-        catch (OperationCanceledException)
+        finally
         {
-            // Sure doldu veya oturum iptal edildi; kaydi durdurup degerlendir.
+            if (waveIn is not null)
+            {
+                try
+                {
+                    waveIn.StopRecording();
+                    waveIn.Dispose();
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
         }
-
-        waveIn.StopRecording();
-        await stopped.Task.ConfigureAwait(false);
-
-        cancellationToken.ThrowIfCancellationRequested();
 
         byte[] buffer;
         lock (pcm)
@@ -123,17 +203,39 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
             buffer = pcm.ToArray();
         }
 
-        return ConvertPcm16ToFloat(buffer);
-    }
-
-    private static int ResolveDeviceNumber(int requested)
-    {
-        if (requested < 0)
+        if (buffer.Length < 1600)
         {
-            return -1;
+            return null;
         }
 
-        return requested < WaveInEvent.DeviceCount ? requested : -1;
+        if (!vad.SpeechStarted && !heardSpeech && capturePeak < 0.006)
+        {
+            return null;
+        }
+
+        return ConvertPcm16ToFloat(TrimLeadingSilence(buffer, capturePeak));
+    }
+
+    private static byte[] TrimLeadingSilence(byte[] pcm, double peakLevel)
+    {
+        if (pcm.Length < 3200)
+        {
+            return pcm;
+        }
+
+        var threshold = Math.Max(peakLevel * 0.12, 0.005);
+        var frameBytes = 320;
+        var start = 0;
+        for (var i = 0; i <= pcm.Length - frameBytes; i += frameBytes)
+        {
+            if (VoiceActivityDetector.MeasureLevel(pcm.AsSpan(i, frameBytes)) >= threshold)
+            {
+                start = Math.Max(0, i - frameBytes);
+                break;
+            }
+        }
+
+        return start == 0 ? pcm : pcm.AsSpan(start).ToArray();
     }
 
     private static float[] ConvertPcm16ToFloat(byte[] pcm)
@@ -162,9 +264,24 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
 
     private WhisperFactory GetFactory()
     {
+        var modelPath = _models.ResolveModelPathOrNull() ?? _options.WhisperModelPath;
+        if (string.IsNullOrWhiteSpace(modelPath) || !File.Exists(modelPath))
+        {
+            throw new SpeechAccessException("Whisper modeli bulunamadi.");
+        }
+
         lock (_gate)
         {
-            return _factory ??= WhisperFactory.FromPath(_options.WhisperModelPath);
+            if (_factory is not null &&
+                string.Equals(_loadedModelPath, modelPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return _factory;
+            }
+
+            _factory?.Dispose();
+            _factory = WhisperFactory.FromPath(modelPath);
+            _loadedModelPath = modelPath;
+            return _factory;
         }
     }
 
@@ -174,6 +291,7 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         {
             _factory?.Dispose();
             _factory = null;
+            _loadedModelPath = null;
         }
     }
 }

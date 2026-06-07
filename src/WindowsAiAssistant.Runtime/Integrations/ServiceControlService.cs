@@ -141,15 +141,29 @@ public sealed class ServiceControlService : IServiceControlService
     private static ServiceController? ResolveService(string serviceName)
     {
         var trimmed = serviceName.Trim();
-        var exact = ServiceController.GetServices()
-            .FirstOrDefault(s => s.ServiceName.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
-        if (exact is not null)
+        string? exactName = null;
+        string? displayMatch = null;
+
+        foreach (var service in ServiceController.GetServices())
         {
-            return exact;
+            using (service)
+            {
+                if (service.ServiceName.Equals(trimmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    exactName = service.ServiceName;
+                    break;
+                }
+
+                if (displayMatch is null &&
+                    service.DisplayName.Contains(trimmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    displayMatch = service.ServiceName;
+                }
+            }
         }
 
-        return ServiceController.GetServices()
-            .FirstOrDefault(s => s.DisplayName.Contains(trimmed, StringComparison.OrdinalIgnoreCase));
+        var matched = exactName ?? displayMatch;
+        return matched is null ? null : new ServiceController(matched);
     }
 
     private static bool MatchesFilter(ServiceController service, string? filter)

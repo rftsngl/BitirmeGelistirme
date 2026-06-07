@@ -1,6 +1,6 @@
-using Windows.Media.Core;
-using Windows.Media.Playback;
+using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Media.SpeechSynthesis;
+using Windows.Storage.Streams;
 using WindowsAiAssistant.App.Configuration;
 
 namespace WindowsAiAssistant.App.Audio;
@@ -8,8 +8,7 @@ namespace WindowsAiAssistant.App.Audio;
 public sealed class WindowsTextToSpeechService : ITextToSpeechService
 {
     private readonly AudioOptions _options;
-    private readonly object _gate = new();
-    private MediaPlayer? _player;
+    private readonly NaudioAudioPlayback _playback = new();
 
     public WindowsTextToSpeechService(AudioOptions options) =>
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -38,65 +37,21 @@ public sealed class WindowsTextToSpeechService : ITextToSpeechService
         synthesizer.Options.AudioVolume = 1.0;
 
         var stream = await synthesizer.SynthesizeTextToStreamAsync(spoken).AsTask().ConfigureAwait(false);
-        var player = new MediaPlayer();
-        var playbackFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var memory = new MemoryStream();
+        await CopyToMemoryStreamAsync(stream, memory, cancellationToken).ConfigureAwait(false);
+        memory.Position = 0;
 
-        player.MediaEnded += (_, _) => playbackFinished.TrySetResult();
-        player.MediaFailed += (_, _) => playbackFinished.TrySetResult();
-        player.Source = MediaSource.CreateFromStream(stream, stream.ContentType);
-        player.Play();
-
-        lock (_gate)
-        {
-            _player?.Dispose();
-            _player = player;
-        }
-
-        using var registration = cancellationToken.Register(StopSpeaking);
-        try
-        {
-            await playbackFinished.Task.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            StopSpeaking();
-            throw;
-        }
-        finally
-        {
-            lock (_gate)
-            {
-                if (ReferenceEquals(_player, player))
-                {
-                    _player.Dispose();
-                    _player = null;
-                }
-            }
-        }
+        await _playback.PlayWaveStreamAsync(memory, cancellationToken).ConfigureAwait(false);
     }
 
-    public void StopSpeaking()
-    {
-        lock (_gate)
-        {
-            if (_player is null)
-            {
-                return;
-            }
+    public void StopSpeaking() => _playback.Stop();
 
-            try
-            {
-                _player.Pause();
-                _player.Dispose();
-            }
-            catch
-            {
-                // ignore dispose races
-            }
-            finally
-            {
-                _player = null;
-            }
-        }
+    private static async Task CopyToMemoryStreamAsync(
+        IRandomAccessStreamWithContentType stream,
+        MemoryStream destination,
+        CancellationToken cancellationToken)
+    {
+        using var input = stream.AsStreamForRead();
+        await input.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
     }
 }

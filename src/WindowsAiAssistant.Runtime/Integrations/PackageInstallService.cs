@@ -14,6 +14,8 @@ public sealed class PackageInstallService : IPackageInstallService
         return normalized switch
         {
             "search" => RunWinget($"search \"{EscapeArg(packageId)}\" --accept-source-agreements", packageId),
+            "install" when string.IsNullOrWhiteSpace(packageId) =>
+                IntegrationResultHelper.Fail("install icin target veya parameters.id gerekli."),
             "install" => RunWinget(BuildInstallCommand(packageId, source), packageId),
             "uninstall" => RunWinget($"uninstall \"{EscapeArg(packageId)}\" --accept-source-agreements", packageId),
             "list" => RunWinget("list --accept-source-agreements", null),
@@ -22,13 +24,8 @@ public sealed class PackageInstallService : IPackageInstallService
         };
     }
 
-    private static string BuildInstallCommand(string? packageId, string? source)
+    private static string BuildInstallCommand(string packageId, string? source)
     {
-        if (string.IsNullOrWhiteSpace(packageId))
-        {
-            throw new InvalidOperationException("install icin packageId gerekli.");
-        }
-
         var cmd = $"install \"{EscapeArg(packageId)}\" --accept-package-agreements --accept-source-agreements";
         if (!string.IsNullOrWhiteSpace(source))
         {

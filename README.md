@@ -69,8 +69,8 @@ Vision (ekran görüntüsü) yalnızca profilde etkinse ve model multimodal ise 
 
 - **Ayarlar** sayfası (`UnifiedSettingsPage`): hotkey, TTS, mikrofon izni, uyandırma kelimesi, ActionGate politikası, UI otomasyon seçenekleri.
 - **Tray + arka plan:** `BackgroundModeEnabled` ile sistem tepsisinde çalışır; `Ctrl+Alt+A` (varsayılan) ile sesli overlay açılır.
-- **Uyandırma kelimesi ve komut dinleme:** [Vosk](https://alphacephei.com/vosk/) ile tamamen yerel çalışır; Windows konuşma tanıma paketi veya API anahtarı gerekmez. Türkçe model (`vosk-model-small-tr-0.3`, ~35 MB) ilk kullanımda otomatik indirilir (`%LocalAppData%/WindowsAiAssistant/models`). Windows'ta Türkçe STT paketi yoksa komut dinleme otomatik olarak Vosk'a geçer.
-- **Whisper STT:** `SpeechEngine=whisper` ve geçerli `WhisperModelPath` (ggml `.bin`) gerekir; yoksa Windows STT kullanılır. [Whisper.ggml modelleri](https://huggingface.co/ggerganov/whisper.cpp/tree/main) indirilebilir.
+- **Uyandırma kelimesi:** [Vosk](https://alphacephei.com/vosk/) ile yerel dinleme (`vosk-model-small-tr-0.3`, ~35 MB) ilk kullanımda otomatik indirilir.
+- **Komut dinleme (varsayılan):** Whisper (`SpeechEngine=whisper`, `WhisperModelVariant=medium`); `ggml-medium.bin` build ile paketlenir. Alternatif: Vosk veya Windows yerleşik STT. Windows'ta Türkçe paketi yoksa otomatik olarak Whisper kullanılır.
 - **Yeniden başlatma:** Hotkey, wake-word, STT motoru ve UI otomasyon ayarları singleton servislerde tutulur; kayıttan sonra uygulama yeniden başlatılmadan etkinleşmez.
 
 ## Loglar

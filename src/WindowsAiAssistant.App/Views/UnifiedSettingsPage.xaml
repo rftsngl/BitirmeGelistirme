@@ -4,13 +4,128 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:ps="using:WindowsAiAssistant.App.ProviderSettings"
-    xmlns:cfg="using:WindowsAiAssistant.App.Configuration">
+    xmlns:cfg="using:WindowsAiAssistant.App.Configuration"
+    xmlns:viewModels="using:WindowsAiAssistant.App.ViewModels">
 
     <Page.Resources>
         <DataTemplate x:Key="SettingsChoiceItemTemplate" x:DataType="cfg:SettingsChoice">
             <StackPanel Spacing="2" Padding="0,2">
                 <TextBlock Text="{x:Bind Display}" FontWeight="SemiBold" />
                 <TextBlock Text="{x:Bind Description}" Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="SpeechModelItemTemplate" x:DataType="viewModels:SpeechModelDownloadItemViewModel">
+            <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12"
+                    Margin="0,0,0,8">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontWeight="SemiBold" />
+                                <Border Style="{StaticResource BadgeBorderStyle}"
+                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                        Visibility="{x:Bind IsActiveForSettings, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <TextBlock Text="Seçili"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind MetaLine, Mode=OneWay}"
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Border Grid.Column="1"
+                                Style="{StaticResource BadgeBorderStyle}"
+                                Background="{x:Bind State, Mode=OneWay, Converter={StaticResource SpeechModelStateToBackgroundBrushConverter}}">
+                            <TextBlock Text="{x:Bind StatusText, Mode=OneWay}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{x:Bind State, Mode=OneWay, Converter={StaticResource SpeechModelStateToForegroundBrushConverter}}" />
+                        </Border>
+
+                        <StackPanel Grid.Column="2" Spacing="8" VerticalAlignment="Center">
+                            <Button Content="İndir"
+                                    Command="{x:Bind DownloadCommand, Mode=OneWay}"
+                                    Style="{ThemeResource AccentButtonStyle}"
+                                    MinWidth="88"
+                                    Visibility="{x:Bind ShowDownloadButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <FontIcon Glyph="&#xE73E;"
+                                      FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                      Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                      Visibility="{x:Bind ShowReadyIcon, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <muxc:ProgressRing Width="20"
+                                               Height="20"
+                                               IsActive="True"
+                                               Visibility="{x:Bind ShowProgress, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Spacing="6"
+                                Visibility="{x:Bind ShowProgress, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{x:Bind ProgressStageText, Mode=OneWay}"
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{x:Bind ProgressLabel, Mode=OneWay}"
+                                       FontWeight="SemiBold" />
+                        </Grid>
+                        <ProgressBar Minimum="0"
+                                     Maximum="100"
+                                     Value="{x:Bind ProgressPercent, Mode=OneWay}"
+                                     IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <muxc:InfoBar Severity="Error"
+                                  IsOpen="True"
+                                  IsClosable="False"
+                                  Title="İndirme başarısız"
+                                  Message="{x:Bind ErrorMessage, Mode=OneWay}"
+                                  Visibility="{x:Bind HasErrorMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="SpeechModelGroupTemplate" x:DataType="viewModels:SpeechModelGroupViewModel">
+            <StackPanel Spacing="10" Margin="0,0,0,16">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="{x:Bind Title, Mode=OneWay}" Style="{StaticResource SettingTitleTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind Description, Mode=OneWay}"
+                                   Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Border Grid.Column="1"
+                            Style="{StaticResource BadgeBorderStyle}"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                        <TextBlock Text="{x:Bind Summary, Mode=OneWay}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold" />
+                    </Border>
+                </Grid>
+                <ItemsControl ItemsSource="{x:Bind Items, Mode=OneWay}"
+                              ItemTemplate="{StaticResource SpeechModelItemTemplate}" />
             </StackPanel>
         </DataTemplate>
     </Page.Resources>
@@ -524,8 +639,31 @@
                                        Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
 
                             <NumberBox Header="Sessizlik algılama (ms)" Value="{Binding SilenceEndMilliseconds, Mode=TwoWay}"
-                                       Minimum="300" Maximum="3000" SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch" />
-                            <TextBlock Text="Konuşma bittikten sonra kaydı sonlandırmak için gereken sessizlik. Düşük = daha hızlı tepki."
+                                       Minimum="400" Maximum="3000" SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch" />
+                            <TextBlock Text="Konuşma bittikten sonra kaydı sonlandırmak için gereken sessizlik. Yüksek = yabancı kelimeler ve duraklamalar için daha iyi (önerilen: 1000–1400)."
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
+
+                            <TextBlock Text="Gelişmiş dinleme ayarları" FontWeight="SemiBold" Margin="0,4,0,0" />
+                            <NumberBox Header="Mikrofon hassasiyeti" Value="{Binding VadSpeechMultiplier, Mode=TwoWay}"
+                                       Minimum="1.5" Maximum="8" SmallChange="0.1" LargeChange="0.5"
+                                       SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch" />
+                            <TextBlock Text="Yüksek değer = daha az yanlış tetikleme (ortam gürültüsü). Çok yüksek = konuşmayı kaçırabilir. Önerilen: 3.5–4.5."
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
+
+                            <NumberBox Header="Minimum konuşma süresi (ms)" Value="{Binding VadMinSpeechMilliseconds, Mode=TwoWay}"
+                                       Minimum="200" Maximum="2000" SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch" />
+                            <TextBlock Text="Kayıt ancak bu süre konuşulduktan sonra biter. Kısa gürültü patlamalarını filtreler."
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
+
+                            <NumberBox Header="Mikrofon kazancı" Value="{Binding MicGainTargetPeak, Mode=TwoWay}"
+                                       Minimum="0.2" Maximum="0.8" SmallChange="0.05" LargeChange="0.1"
+                                       SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch" />
+                            <TextBlock Text="Düşük = daha az amplifikasyon ve daha az hayalet kelime. Önerilen: 0.35–0.45."
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
+
+                            <NumberBox Header="Minimum komut uzunluğu (karakter)" Value="{Binding SttMinTranscriptCharacters, Mode=TwoWay}"
+                                       Minimum="2" Maximum="20" SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch" />
+                            <TextBlock Text="Bu uzunluğun altındaki tanıma sonuçları yok sayılır."
                                        Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
 
                             <NumberBox Header="Sonuç penceresi kapanma süresi (saniye)" Value="{Binding OverlayAutoCloseSeconds, Mode=TwoWay}"
@@ -539,7 +677,7 @@
                         <StackPanel Spacing="12">
                             <TextBlock Text="Mikrofon ve komut dinleme" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource SettingDescriptionTextBlockStyle}"
-                                       Text="Overlay açıldığında komutunuzu dinleyen motor. Türkçe için Vosk önerilir; Windows paketi gerekmez." />
+                                       Text="Komut dinleme (Whisper) ile uyandırma (Vosk) ayrı motorlardır. Overlay açılırken Word gibi önceki uygulama odağı korunur." />
 
                             <muxc:InfoBar Severity="Informational"
                                           IsOpen="True"
@@ -564,6 +702,28 @@
                             <TextBlock Text="{Binding SttEngineSummary}"
                                        Style="{StaticResource SettingDescriptionTextBlockStyle}" />
 
+                            <ComboBox Header="Vosk model kalitesi"
+                                      ItemsSource="{Binding VoskModelVariantChoices}"
+                                      SelectedItem="{Binding SelectedVoskModelVariant, Mode=TwoWay}"
+                                      ItemTemplate="{StaticResource SettingsChoiceItemTemplate}"
+                                      HorizontalAlignment="Stretch"
+                                      Visibility="{Binding ShowVoskModelSettings, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <TextBlock Text="{Binding VoskModelVariantSummary}"
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ShowVoskModelSettings, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                            <ComboBox Header="Whisper model kalitesi"
+                                      ItemsSource="{Binding WhisperModelVariantChoices}"
+                                      SelectedItem="{Binding SelectedWhisperModelVariant, Mode=TwoWay}"
+                                      ItemTemplate="{StaticResource SettingsChoiceItemTemplate}"
+                                      HorizontalAlignment="Stretch"
+                                      Visibility="{Binding ShowWhisperModelSettings, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <TextBlock Text="{Binding WhisperModelVariantSummary}"
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ShowWhisperModelSettings, Converter={StaticResource BoolToVisibilityConverter}}" />
+
                             <ComboBox Header="Mikrofon"
                                       ItemsSource="{Binding MicrophoneOptions}"
                                       SelectedItem="{Binding SelectedMicrophone, Mode=TwoWay}"
@@ -574,11 +734,54 @@
                         </StackPanel>
                     </Border>
 
+                    <Border x:Name="SpeechModelsSection"
+                            Style="{StaticResource SettingsCardBorderStyle}">
+                        <StackPanel Spacing="16">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <TextBlock Text="Konuşma modelleri" Style="{StaticResource SettingTitleTextBlockStyle}" />
+                                    <TextBlock Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                               Text="Whisper ve Vosk modellerini buradan indirin. Seçili ayarlarda kullanılan modeller «Seçili» rozeti ile işaretlenir."
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Content="Yenile"
+                                        Command="{Binding RefreshSpeechModelInventoryCommand}"
+                                        VerticalAlignment="Top" />
+                            </Grid>
+
+                            <muxc:InfoBar IsOpen="True"
+                                          IsClosable="False"
+                                          Severity="Informational"
+                                          Title="İndirme durumu"
+                                          Message="{Binding SpeechModelsSummaryMessage}" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="Seçili modelleri indir"
+                                        Command="{Binding DownloadRequiredSpeechModelsCommand}"
+                                        Style="{ThemeResource AccentButtonStyle}" />
+                                <TextBlock Text="Yalnızca mevcut ayarlarınızda kullanılan eksik modelleri indirir."
+                                           Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <ItemsControl ItemsSource="{Binding SpeechModelGroups}"
+                                          ItemTemplate="{StaticResource SpeechModelGroupTemplate}" />
+                        </StackPanel>
+                    </Border>
+
                     <Border Style="{StaticResource SettingsCardBorderStyle}">
                         <StackPanel Spacing="12">
                             <TextBlock Text="Uyandırma kelimesi (isteğe bağlı)" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource SettingDescriptionTextBlockStyle}"
-                                       Text="Klavye kısayolu (Ctrl+Alt+A) her zaman kullanılabilir. Uyandırma kelimesi Vosk ile tamamen yerel çalışır; hesap veya API anahtarı gerekmez." />
+                                       Text="Uyandırma her zaman Vosk ile çalışır (hafif). Komut dinleme motorundan bağımsızdır." />
+                            <TextBlock Text="{Binding WakeWordEngineSummary}"
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" />
 
                             <muxc:InfoBar IsOpen="True"
                                           IsClosable="False"
@@ -601,6 +804,24 @@
                                               IsEnabled="{Binding IsWakeWordServiceAvailable}"
                                               VerticalAlignment="Center" />
                             </Grid>
+
+                            <ToggleSwitch Header="Yalnızca kesin uyandırma eşleşmesi"
+                                          IsOn="{Binding WakeWordFinalOnly, Mode=TwoWay}"
+                                          Visibility="{Binding WakeWordEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <TextBlock Text="Açıkken yarım (partial) sonuçlarla tetiklenmez; yanlış alarm azalır. Önerilir."
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                       Visibility="{Binding WakeWordEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                            <NumberBox Header="Uyandırma bekleme süresi (saniye)" Value="{Binding WakeWordCooldownSeconds, Mode=TwoWay}"
+                                       Minimum="1" Maximum="30" SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch"
+                                       Visibility="{Binding WakeWordEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                            <ToggleSwitch Header="Gerçek konuşma algılandığında uyan"
+                                          IsOn="{Binding WakeWordRequireSpeechEnergy, Mode=TwoWay}"
+                                          Visibility="{Binding WakeWordEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <TextBlock Text="TV, fan veya arka plan sesiyle yanlış uyanmayı azaltır. Önerilir."
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                       Visibility="{Binding WakeWordEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                             <StackPanel Spacing="12"
                                         Visibility="{Binding WakeWordEnabled, Converter={StaticResource BoolToVisibilityConverter}}">

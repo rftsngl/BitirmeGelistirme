@@ -50,7 +50,8 @@
     "SpeechListenTimeoutSeconds": 12,
     "OverlayAutoCloseSeconds": 10,
     "VoiceApprovalEnabled": true,
-    "SpeechEngine": "vosk",
+    "SpeechEngine": "whisper",
+    "WhisperModelVariant": "medium",
     "WhisperModelPath": "",
     "VoskModelPath": "",
     "InputDeviceIndex": -1

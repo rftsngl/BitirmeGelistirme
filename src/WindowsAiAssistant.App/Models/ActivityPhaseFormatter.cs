@@ -13,7 +13,7 @@ public static class ActivityPhaseFormatter
         {
             "basladi" => ("Görevi aldım", Truncate(detail, 120)),
             "gozlem" => ("Ekranı okuyorum", "Pencereler, odak ve görünen kontroller taranıyor."),
-            "llm" => ("Plan netleşiyor", string.IsNullOrWhiteSpace(detail) ? "Sonraki güvenli adım seçiliyor…" : detail),
+            "llm" => ("Düşünüyorum", FriendlyLlmDetail(detail)),
             "gate" => ("Güvenlik süzgeci", Truncate(detail, 140)),
             "onay" => ("Onay bekliyor", Truncate(detail, 140)),
             "eylem" => FormatEylem(detail),
@@ -60,4 +60,27 @@ public static class ActivityPhaseFormatter
 
     private static string Capitalize(string value) =>
         string.IsNullOrWhiteSpace(value) ? value : char.ToUpper(value[0]) + value[1..];
+
+    private static string FriendlyLlmDetail(string detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            return "Sizin için en uygun yanıtı hazırlıyorum…";
+        }
+
+        if (detail.Contains("karar", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Ne yapacağımı planlıyorum…";
+        }
+
+        return "Birazdan hazır olacak…";
+    }
+
+    public static string ForDeveloper(AgentStepProgress progress)
+    {
+        var step = Math.Min(progress.StepIndex + 1, progress.MaxSteps);
+        return string.IsNullOrWhiteSpace(progress.Detail)
+            ? $"Adım {step}/{progress.MaxSteps}: {progress.Phase}"
+            : $"Adım {step}/{progress.MaxSteps}: {progress.Phase} — {progress.Detail}";
+    }
 }

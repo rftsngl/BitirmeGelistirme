@@ -9,17 +9,6 @@ namespace WindowsAiAssistant.App.Audio;
 /// </summary>
 public sealed class VoskWakeWordModelService
 {
-    private static readonly IReadOnlyDictionary<string, (string FolderName, string DownloadUrl)> Catalog =
-        new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["tr"] = (
-                "vosk-model-small-tr-0.3",
-                "https://alphacephei.com/vosk/models/vosk-model-small-tr-0.3.zip"),
-            ["en"] = (
-                "vosk-model-small-en-us-0.15",
-                "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip")
-        };
-
     private readonly AudioOptions _options;
     private readonly string _modelsRoot;
     private readonly SemaphoreSlim _downloadGate = new(1, 1);
@@ -36,55 +25,84 @@ public sealed class VoskWakeWordModelService
     public string ModelsRoot => _modelsRoot;
 
     public bool IsWakeModelReady(string? wakeWordPhrase = null) =>
-        TryResolveModelDirectory(ResolveLanguageKeyFromWakePhrase(wakeWordPhrase ?? _options.WakeWordPhrase), out _);
+        IsWakeLanguageReady(ResolveLanguageKeyFromWakePhrase(wakeWordPhrase ?? _options.WakeWordPhrase));
+
+    public bool IsWakeLanguageReady(string languageKey) =>
+        TryResolveWakeModelDirectory(languageKey, out _);
 
     public bool IsSttModelReady(string? speechLanguage = null) =>
-        TryResolveModelDirectory(ResolveLanguageKeyFromSpeechLanguage(speechLanguage ?? _options.SpeechLanguage), out _);
+        IsSttLanguageReady(
+            ResolveLanguageKeyFromSpeechLanguage(speechLanguage ?? _options.SpeechLanguage),
+            _options.VoskModelVariant);
+
+    public bool IsSttLanguageReady(string languageKey, string? variant) =>
+        TryResolveModelDirectory(languageKey, ResolveSttDescriptor(languageKey, variant), out _);
 
     public string DescribeWakeAvailability(string? wakeWordPhrase = null)
     {
         var phrase = wakeWordPhrase ?? _options.WakeWordPhrase;
-        if (TryResolveModelDirectory(ResolveLanguageKeyFromWakePhrase(phrase), out var path))
+        if (TryResolveWakeModelDirectory(ResolveLanguageKeyFromWakePhrase(phrase), out var path))
         {
             return $"Vosk uyandırma modeli hazır ({Path.GetFileName(path)}).";
         }
 
-        var descriptor = Catalog[ResolveLanguageKeyFromWakePhrase(phrase)];
+        var descriptor = ResolveWakeDescriptor(ResolveLanguageKeyFromWakePhrase(phrase));
         return
             $"Vosk uyandırma modeli henüz indirilmedi ({descriptor.FolderName}). " +
-            "İlk kullanımda otomatik indirilir (~35–40 MB). " +
+            $"İlk kullanımda otomatik indirilir ({descriptor.SizeHint}). " +
             $"Beklenen konum: {GetModelDirectory(descriptor.FolderName)}";
     }
 
     public string DescribeSttAvailability(string? speechLanguage = null)
     {
-        if (TryResolveModelDirectory(
+        if (TryResolveSttModelDirectory(
                 ResolveLanguageKeyFromSpeechLanguage(speechLanguage ?? _options.SpeechLanguage),
                 out var path))
         {
-            return $"Komut dinleme Vosk ile hazır ({Path.GetFileName(path)}). Tamamen yerel çalışır.";
+            var readyDescriptor = ResolveSttDescriptor(
+                ResolveLanguageKeyFromSpeechLanguage(speechLanguage ?? _options.SpeechLanguage));
+            var note = string.IsNullOrWhiteSpace(readyDescriptor.Note) ? string.Empty : $" {readyDescriptor.Note}";
+            return $"Komut dinleme Vosk ile hazır ({Path.GetFileName(path)}, {readyDescriptor.SizeHint}).{note}";
         }
 
-        var descriptor = Catalog[ResolveLanguageKeyFromSpeechLanguage(speechLanguage ?? _options.SpeechLanguage)];
+        var descriptor = ResolveSttDescriptor(
+            ResolveLanguageKeyFromSpeechLanguage(speechLanguage ?? _options.SpeechLanguage));
         return
-            $"Vosk komut modeli henüz indirilmedi ({descriptor.FolderName}). " +
-            "Sesli komut verdiğinizde otomatik indirilir (~35–40 MB). " +
+            $"Vosk komut modeli henüz indirilmedi ({descriptor.FolderName}, {descriptor.SizeHint}). " +
+            "Sesli komut verdiğinizde otomatik indirilir. " +
             $"Beklenen konum: {GetModelDirectory(descriptor.FolderName)}";
     }
 
     public Task<string> EnsureWakeModelAsync(CancellationToken cancellationToken = default) =>
-        EnsureModelForLanguageKeyAsync(ResolveLanguageKeyFromWakePhrase(_options.WakeWordPhrase), cancellationToken);
-
-    public Task<string> EnsureSttModelAsync(CancellationToken cancellationToken = default) =>
-        EnsureModelForLanguageKeyAsync(
-            ResolveLanguageKeyFromSpeechLanguage(_options.SpeechLanguage),
+        EnsureWakeLanguageAsync(
+            ResolveLanguageKeyFromWakePhrase(_options.WakeWordPhrase),
+            progress: null,
             cancellationToken);
 
-    public Task<string> EnsureModelAsync(CancellationToken cancellationToken = default) =>
-        EnsureWakeModelAsync(cancellationToken);
+    public Task<string> EnsureWakeLanguageAsync(
+        string languageKey,
+        IProgress<ModelDownloadProgress>? progress,
+        CancellationToken cancellationToken = default) =>
+        EnsureWakeModelForLanguageKeyAsync(languageKey, progress, cancellationToken);
+
+    public Task<string> EnsureSttModelAsync(CancellationToken cancellationToken = default) =>
+        EnsureSttLanguageAsync(
+            ResolveLanguageKeyFromSpeechLanguage(_options.SpeechLanguage),
+            _options.VoskModelVariant,
+            progress: null,
+            cancellationToken);
+
+    public Task<string> EnsureSttLanguageAsync(
+        string languageKey,
+        string? variant,
+        IProgress<ModelDownloadProgress>? progress,
+        CancellationToken cancellationToken = default) =>
+        EnsureModelForLanguageKeyAsync(languageKey, variant, progress, cancellationToken);
 
     private async Task<string> EnsureModelForLanguageKeyAsync(
         string languageKey,
+        string? variant,
+        IProgress<ModelDownloadProgress>? progress,
         CancellationToken cancellationToken)
     {
         var configured = ResolveConfiguredModelPath();
@@ -99,15 +117,15 @@ public sealed class VoskWakeWordModelService
             return configured;
         }
 
-        if (TryResolveModelDirectory(languageKey, out var existing))
+        var descriptor = ResolveSttDescriptor(languageKey, variant);
+        if (TryResolveModelDirectory(languageKey, descriptor, out var existing))
         {
             return existing;
         }
 
-        var descriptor = Catalog[languageKey];
         var targetDirectory = GetModelDirectory(descriptor.FolderName);
         TryPromoteStagedModel(descriptor.FolderName);
-        if (TryResolveModelDirectory(languageKey, out existing))
+        if (TryResolveModelDirectory(languageKey, descriptor, out existing))
         {
             return existing;
         }
@@ -116,7 +134,7 @@ public sealed class VoskWakeWordModelService
         try
         {
             TryPromoteStagedModel(descriptor.FolderName);
-            if (TryResolveModelDirectory(languageKey, out existing))
+            if (TryResolveModelDirectory(languageKey, descriptor, out existing))
             {
                 return existing;
             }
@@ -125,12 +143,15 @@ public sealed class VoskWakeWordModelService
             var zipPath = Path.Combine(_modelsRoot, $"{descriptor.FolderName}.zip");
             if (!File.Exists(zipPath))
             {
-                await DownloadFileAsync(descriptor.DownloadUrl, zipPath, cancellationToken).ConfigureAwait(false);
+                await DownloadFileAsync(descriptor.DownloadUrl, zipPath, progress, 0, 88, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
+            progress?.Report(new ModelDownloadProgress(90, "Çıkarılıyor"));
             ExtractModelZip(zipPath, _modelsRoot, descriptor.FolderName);
+            progress?.Report(new ModelDownloadProgress(100, "Hazır"));
 
-            if (!TryResolveModelDirectory(languageKey, out existing))
+            if (!TryResolveModelDirectory(languageKey, descriptor, out existing))
             {
                 throw new SpeechAccessException(
                     $"Vosk modeli çıkarıldı ancak doğrulanamadı: {targetDirectory}");
@@ -144,7 +165,61 @@ public sealed class VoskWakeWordModelService
         }
     }
 
-    private bool TryResolveModelDirectory(string languageKey, out string path)
+    private async Task<string> EnsureWakeModelForLanguageKeyAsync(
+        string languageKey,
+        IProgress<ModelDownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (TryResolveWakeModelDirectory(languageKey, out var existing))
+        {
+            return existing;
+        }
+
+        var descriptor = ResolveWakeDescriptor(languageKey);
+        var targetDirectory = GetModelDirectory(descriptor.FolderName);
+
+        await _downloadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            TryPromoteStagedModel(descriptor.FolderName);
+            if (TryResolveWakeModelDirectory(languageKey, out existing))
+            {
+                return existing;
+            }
+
+            Directory.CreateDirectory(_modelsRoot);
+            var zipPath = Path.Combine(_modelsRoot, $"{descriptor.FolderName}.zip");
+            if (!File.Exists(zipPath))
+            {
+                await DownloadFileAsync(descriptor.DownloadUrl, zipPath, progress, 0, 88, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            progress?.Report(new ModelDownloadProgress(90, "Çıkarılıyor"));
+            ExtractModelZip(zipPath, _modelsRoot, descriptor.FolderName);
+            progress?.Report(new ModelDownloadProgress(100, "Hazır"));
+
+            if (!TryResolveWakeModelDirectory(languageKey, out existing))
+            {
+                throw new SpeechAccessException(
+                    $"Vosk uyandırma modeli doğrulanamadı: {targetDirectory}");
+            }
+
+            return existing;
+        }
+        finally
+        {
+            _downloadGate.Release();
+        }
+    }
+
+    private bool TryResolveWakeModelDirectory(string languageKey, out string path) =>
+        TryResolveModelDirectory(languageKey, ResolveWakeDescriptor(languageKey), out path);
+
+    private bool TryResolveSttModelDirectory(string languageKey, out string path) =>
+        TryResolveModelDirectory(languageKey, ResolveSttDescriptor(languageKey), out path);
+
+    private bool TryResolveModelDirectory(string languageKey, VoskModelDescriptor descriptor, out string path)
     {
         path = string.Empty;
         var configured = ResolveConfiguredModelPath();
@@ -154,7 +229,6 @@ public sealed class VoskWakeWordModelService
             return true;
         }
 
-        var descriptor = Catalog[languageKey];
         var expected = GetModelDirectory(descriptor.FolderName);
         if (IsValidModelDirectory(expected))
         {
@@ -197,6 +271,12 @@ public sealed class VoskWakeWordModelService
 
         return false;
     }
+
+    private static VoskModelDescriptor ResolveWakeDescriptor(string languageKey) =>
+        VoskModelCatalog.Resolve(languageKey, "small");
+
+    private VoskModelDescriptor ResolveSttDescriptor(string languageKey, string? variant = null) =>
+        VoskModelCatalog.Resolve(languageKey, variant ?? _options.VoskModelVariant);
 
     private string? ResolveConfiguredModelPath()
     {
@@ -301,17 +381,36 @@ public sealed class VoskWakeWordModelService
         }
     }
 
-    private static async Task DownloadFileAsync(string url, string destination, CancellationToken cancellationToken)
+    private static async Task DownloadFileAsync(
+        string url,
+        string destination,
+        IProgress<ModelDownloadProgress>? progress,
+        double progressStart,
+        double progressEnd,
+        CancellationToken cancellationToken)
     {
         if (File.Exists(destination))
         {
             File.Delete(destination);
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(15) };
-        await using var response = await client.GetStreamAsync(url, cancellationToken).ConfigureAwait(false);
-        await using var output = File.Create(destination);
-        await response.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+        var scaled = progress is null
+            ? null
+            : new Progress<ModelDownloadProgress>(report =>
+            {
+                if (report.Percent < 0)
+                {
+                    progress.Report(new ModelDownloadProgress(-1, report.Stage));
+                    return;
+                }
+
+                var scaledPercent = progressStart + (report.Percent / 100.0) * (progressEnd - progressStart);
+                progress.Report(new ModelDownloadProgress(scaledPercent, report.Stage));
+            });
+
+        await ModelFileDownloader
+            .DownloadFileAsync(url, destination, scaled, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static void ExtractModelZip(string zipPath, string destinationRoot, string expectedFolderName)

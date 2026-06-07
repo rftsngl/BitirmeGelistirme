@@ -226,8 +226,10 @@ public sealed class ActionGate
             "select_element" or "expand_collapse" or "invoke_toggle" or "scroll" or
             "focus_window" or "move_window" or "mouse_scroll" or "notify" or "jump_list" => ActionRisk.Normal,
             "schedule_task" or "com_invoke" or "global_hook" or
-            "clipboard" or "audio_power" or "shell_session" or "file_watch" or
-            "credential_store" or "notification_listen" => ActionRisk.Sensitive,
+            "shell_session" or "file_watch" => ActionRisk.Sensitive,
+            "clipboard" => IsClipboardWrite(action) ? ActionRisk.Sensitive : ActionRisk.Normal,
+            "notification_listen" => IsNotificationRead(action) ? ActionRisk.Normal : ActionRisk.Sensitive,
+            "credential_store" => IsCredentialMutation(action) ? ActionRisk.Sensitive : ActionRisk.Normal,
             "verify_user" => ActionRisk.Safe,
             _ => ActionRisk.Normal
         };
@@ -253,6 +255,28 @@ public sealed class ActionGate
             mode.Equals("start", StringComparison.OrdinalIgnoreCase) ||
             mode.Equals("stop", StringComparison.OrdinalIgnoreCase) ||
             mode.Equals("restart", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsClipboardWrite(AgentAction action)
+    {
+        var mode = ActionParameterReader.GetTargetOrParameter(action, "mode") ?? "read";
+        return mode.Equals("write", StringComparison.OrdinalIgnoreCase) ||
+               mode.Equals("set", StringComparison.OrdinalIgnoreCase) ||
+               mode.Equals("clear", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsNotificationRead(AgentAction action)
+    {
+        var mode = ActionParameterReader.GetTargetOrParameter(action, "mode") ?? "peek";
+        return mode.Equals("peek", StringComparison.OrdinalIgnoreCase) ||
+               mode.Equals("read", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCredentialMutation(AgentAction action)
+    {
+        var mode = ActionParameterReader.GetTargetOrParameter(action, "mode") ?? "list";
+        return mode.Equals("store", StringComparison.OrdinalIgnoreCase) ||
+               mode.Equals("delete", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsCloseState(AgentAction action)

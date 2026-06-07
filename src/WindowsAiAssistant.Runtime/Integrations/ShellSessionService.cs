@@ -5,9 +5,10 @@ using WindowsAiAssistant.Runtime.Actions;
 
 namespace WindowsAiAssistant.Runtime.Integrations;
 
-public sealed class ShellSessionService : IShellSessionService
+public sealed class ShellSessionService : IShellSessionService, IDisposable
 {
     private readonly ConcurrentDictionary<string, ShellSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
+    private bool _disposed;
 
     public ActionResult Execute(string mode, string? sessionId = null, string? command = null, int maxOutputChars = 4000)
     {
@@ -108,6 +109,24 @@ public sealed class ShellSessionService : IShellSessionService
         }
 
         return IntegrationResultHelper.Ok(builder.Length == 0 ? "(aktif oturum yok)" : builder.ToString());
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        foreach (var id in _sessions.Keys.ToArray())
+        {
+            if (_sessions.TryRemove(id, out var session))
+            {
+                session.Dispose();
+            }
+        }
+
+        _disposed = true;
     }
 
     private sealed class ShellSession : IDisposable

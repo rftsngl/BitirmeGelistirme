@@ -86,7 +86,7 @@ public sealed class PromptBuilder
         builder.AppendLine("   - audio_power: parameters.mode=get_volume|set_volume|mute|unmute|prevent_sleep|allow_sleep, level=0-100");
         builder.AppendLine("   - perf_counter: parameters.mode=snapshot (CPU/RAM/disk ozeti)");
         builder.AppendLine("   - file_search: target=query, parameters.folder=desktop|documents|path, maxResults");
-        builder.AppendLine("   - notification_listen: parameters.mode=request_access|peek, maxEntries");
+        builder.AppendLine("   - notification_listen: parameters.mode=request_access|peek, maxEntries (Shell event log fallback)");
         builder.AppendLine("   - shell_session: parameters.mode=start|write|read|stop|list, sessionId, command (kalici PowerShell oturumu)");
         builder.AppendLine("   - file_watch: parameters.mode=start|stop|peek|list, path, filter, watchId, recursive=true|false");
         builder.AppendLine("   - credential_store: parameters.mode=list|read|store|delete, target, username, secret (loglara gizli yazma)");
@@ -167,6 +167,12 @@ public sealed class PromptBuilder
         builder.AppendLine("- jump_list: parameters.mode, parameters.tasks | com_invoke: parameters.progId,method,arguments,close");
         builder.AppendLine("- verify_user: parameters.message | global_hook: parameters.mode,type,maxEvents");
         builder.AppendLine("- audio_power: parameters.mode=mute|unmute|set_volume|get_volume, parameters.level=0-100");
+        builder.AppendLine("- service_control: parameters.mode, parameters.name | event_log: parameters.mode, log, level, hours");
+        builder.AppendLine("- registry_op: parameters.mode, hive, path, name, value | clipboard: parameters.mode, text");
+        builder.AppendLine("- install_package: parameters.mode, id | network_status: parameters.mode=status|adapters");
+        builder.AppendLine("- perf_counter: parameters.mode=snapshot | file_search: target=query, parameters.folder");
+        builder.AppendLine("- notification_listen: parameters.mode=peek | shell_session: parameters.mode, sessionId, command");
+        builder.AppendLine("- file_watch: parameters.mode, path, watchId | credential_store: parameters.mode, target");
         builder.AppendLine();
         builder.AppendLine("Current desktop observation:");
         builder.AppendLine(observation.ToPromptSummary());

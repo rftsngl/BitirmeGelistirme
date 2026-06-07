@@ -11,6 +11,8 @@
     <converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter" />
     <converters:BoolToSuccessBrushConverter x:Key="BoolToSuccessBrushConverter" />
     <converters:FilePathToImageSourceConverter x:Key="FilePathToImageSourceConverter" />
+    <converters:SpeechModelStateToBackgroundBrushConverter x:Key="SpeechModelStateToBackgroundBrushConverter" />
+    <converters:SpeechModelStateToForegroundBrushConverter x:Key="SpeechModelStateToForegroundBrushConverter" />
 
     <DataTemplate x:Key="TimelineEntryTemplate">
         <Grid ColumnSpacing="10" Margin="0,2">

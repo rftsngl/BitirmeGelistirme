@@ -16,19 +16,32 @@ public sealed class GlobalHotKeyService : IDisposable
 
     public void Start()
     {
-        if (!_options.GlobalHotKeyEnabled || _registered)
+        Restart();
+    }
+
+    /// <summary>
+    /// Mevcut kaydi kaldir ve seceneklere gore yeniden kaydet. Hata mesaji veya null.
+    /// </summary>
+    public string? Restart()
+    {
+        Stop();
+
+        if (!_options.GlobalHotKeyEnabled)
         {
-            return;
+            return null;
         }
 
         if (!TryParseHotKey(_options.GlobalHotKey, out var modifiers, out var virtualKey))
         {
-            return;
+            return $"Gecersiz kisayol: '{_options.GlobalHotKey}'. Ornek: Ctrl+Alt+A";
         }
 
         _messageWindow = new NativeMessageWindow();
         _messageWindow.HotKeyPressed += OnHotKeyPressed;
         _registered = _messageWindow.RegisterHotKey(HotKeyId, modifiers, virtualKey);
+        return _registered
+            ? null
+            : "Kisayol kaydedilemedi (baska bir uygulama ayni tuslari kullaniyor olabilir).";
     }
 
     public void Stop()
@@ -92,6 +105,29 @@ public sealed class GlobalHotKeyService : IDisposable
             ? (uint)char.ToUpperInvariant(key[0])
             : key.ToUpperInvariant() switch
             {
+                "SPACE" => 0x20,
+                "0" => 0x30,
+                "1" => 0x31,
+                "2" => 0x32,
+                "3" => 0x33,
+                "4" => 0x34,
+                "5" => 0x35,
+                "6" => 0x36,
+                "7" => 0x37,
+                "8" => 0x38,
+                "9" => 0x39,
+                "F1" => 0x70,
+                "F2" => 0x71,
+                "F3" => 0x72,
+                "F4" => 0x73,
+                "F5" => 0x74,
+                "F6" => 0x75,
+                "F7" => 0x76,
+                "F8" => 0x77,
+                "F9" => 0x78,
+                "F10" => 0x79,
+                "F11" => 0x7A,
+                "F12" => 0x7B,
                 "A" => 0x41,
                 "B" => 0x42,
                 "C" => 0x43,
@@ -118,7 +154,6 @@ public sealed class GlobalHotKeyService : IDisposable
                 "X" => 0x58,
                 "Y" => 0x59,
                 "Z" => 0x5A,
-                "SPACE" => 0x20,
                 _ => 0
             };
 

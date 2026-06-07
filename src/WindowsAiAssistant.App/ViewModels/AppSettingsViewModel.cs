@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using WindowsAiAssistant.Agent;
 using WindowsAiAssistant.App.Audio;
+using WindowsAiAssistant.App.Background;
 using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.App.Mvvm;
 using WindowsAiAssistant.App.Services;
@@ -22,6 +23,9 @@ public sealed class AppSettingsViewModel : ObservableObject
     private readonly LocalAppSettingsService _localSettings;
     private readonly MicrophonePermissionService _microphonePermissions;
     private readonly SpeechReadinessService _speechReadiness;
+    private readonly SwitchableSpeechToTextService _speechToText;
+    private readonly BackgroundAssistantHost _backgroundHost;
+    private readonly SpeechModelInventoryService _speechModelInventory;
     private string _statusMessage = string.Empty;
     private string _microphonePermissionSummary = string.Empty;
     private string _speechLanguageSummary = string.Empty;
@@ -38,12 +42,12 @@ public sealed class AppSettingsViewModel : ObservableObject
 
     public IReadOnlyList<SettingsChoice> SpeechEngineChoices { get; } =
     [
-        new("vosk", "Vosk (yerel, önerilen)",
-            "Türkçe komut dinleme için önerilir. Model bir kez indirilir, internet gerekmez."),
+        new("whisper", "Whisper (gelişmiş, önerilen)",
+            "Türkçe + İngilizce karma komutlar için en iyi doğruluk. medium model build ile gelir."),
+        new("vosk", "Vosk (yerel, hızlı)",
+            "Hızlı ve tamamen yerel. Türkçe için tek halka açık küçük model; yabancı kelimelerde daha zayıf."),
         new("windows", "Windows (yerleşik)",
-            "Windows konuşma tanıma dil paketi yüklü olmalıdır."),
-        new("whisper", "Whisper (gelişmiş)",
-            "Yalnızca geliştirici modunda. Yerel ggml model dosyası gerekir.")
+            "Windows konuşma tanıma dil paketi yüklü olmalıdır.")
     ];
 
     public IReadOnlyList<SettingsChoice> TtsEngineChoices { get; } =
@@ -70,7 +74,10 @@ public sealed class AppSettingsViewModel : ObservableObject
         LocalAppSettingsService localSettings,
         MicrophoneDeviceService microphoneDevices,
         MicrophonePermissionService microphonePermissions,
-        SpeechReadinessService speechReadiness)
+        SpeechReadinessService speechReadiness,
+        SwitchableSpeechToTextService speechToText,
+        BackgroundAssistantHost backgroundHost,
+        SpeechModelInventoryService speechModelInventory)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _audio = audio ?? throw new ArgumentNullException(nameof(audio));
@@ -78,11 +85,21 @@ public sealed class AppSettingsViewModel : ObservableObject
         _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
         _microphonePermissions = microphonePermissions ?? throw new ArgumentNullException(nameof(microphonePermissions));
         _speechReadiness = speechReadiness ?? throw new ArgumentNullException(nameof(speechReadiness));
+        _speechToText = speechToText ?? throw new ArgumentNullException(nameof(speechToText));
+        _backgroundHost = backgroundHost ?? throw new ArgumentNullException(nameof(backgroundHost));
+        _speechModelInventory = speechModelInventory ?? throw new ArgumentNullException(nameof(speechModelInventory));
         ArgumentNullException.ThrowIfNull(microphoneDevices);
 
         MicrophoneOptions = new ObservableCollection<MicrophoneDevice>(microphoneDevices.ListDevices());
+        SpeechModels = new ObservableCollection<SpeechModelDownloadItemViewModel>();
+        SpeechModelGroups = new ObservableCollection<SpeechModelGroupViewModel>();
         RequestMicrophonePermissionCommand = new AsyncRelayCommand(RequestMicrophonePermissionAsync);
+        RefreshSpeechModelInventoryCommand = new RelayCommand(RefreshSpeechModelInventory);
+        DownloadRequiredSpeechModelsCommand = new AsyncRelayCommand(
+            DownloadRequiredSpeechModelsAsync,
+            () => HasMissingRequiredSpeechModels);
         RefreshSpeechDiagnostics();
+        RefreshSpeechModelInventory();
 
         if (WindowsStartupService.IsRegistered())
         {
@@ -92,7 +109,28 @@ public sealed class AppSettingsViewModel : ObservableObject
 
     public AsyncRelayCommand RequestMicrophonePermissionCommand { get; }
 
+    public RelayCommand RefreshSpeechModelInventoryCommand { get; }
+
+    public AsyncRelayCommand DownloadRequiredSpeechModelsCommand { get; }
+
     public ObservableCollection<MicrophoneDevice> MicrophoneOptions { get; }
+
+    public ObservableCollection<SpeechModelDownloadItemViewModel> SpeechModels { get; }
+
+    public ObservableCollection<SpeechModelGroupViewModel> SpeechModelGroups { get; }
+
+    public int SpeechModelsDownloadedCount => SpeechModels.Count(item => item.IsDownloaded);
+
+    public int SpeechModelsTotalCount => SpeechModels.Count;
+
+    public int SpeechModelsMissingCount =>
+        SpeechModels.Count(item => item.State == SpeechModelDownloadState.NotDownloaded);
+
+    public bool HasMissingRequiredSpeechModels =>
+        SpeechModels.Any(item => item.IsActiveForSettings && item.CanDownload);
+
+    public string SpeechModelsSummaryMessage =>
+        $"{SpeechModelsDownloadedCount} / {SpeechModelsTotalCount} model indirildi · {SpeechModelsMissingCount} eksik";
 
     public bool BackgroundModeEnabled
     {
@@ -118,8 +156,7 @@ public sealed class AppSettingsViewModel : ObservableObject
         set { _audio.WakeWordEnabled = value; OnPropertyChanged(); }
     }
 
-    public bool IsWakeWordServiceAvailable =>
-        _speechReadiness.IsWakeWordServiceAvailable() || _microphonePermissions.CheckAccess() == MicrophoneAccessState.Granted;
+    public bool IsWakeWordServiceAvailable => _speechReadiness.IsWakeWordServiceAvailable();
 
     public bool IsSttServiceAvailable => _speechReadiness.IsSttServiceAvailable();
 
@@ -133,6 +170,52 @@ public sealed class AppSettingsViewModel : ObservableObject
         set { _audio.VoskModelPath = value ?? string.Empty; OnPropertyChanged(); }
     }
 
+    public IReadOnlyList<SettingsChoice> VoskModelVariantChoices =>
+        VoskModelCatalog.GetVariantChoices(
+                VoskWakeWordModelService.ResolveLanguageKeyFromSpeechLanguage(_audio.SpeechLanguage))
+            .Select(choice => new SettingsChoice(choice.Id, choice.Label, choice.Description))
+            .ToList();
+
+    public string VoskModelVariant
+    {
+        get => _audio.VoskModelVariant;
+        set
+        {
+            _audio.VoskModelVariant = string.IsNullOrWhiteSpace(value) ? "small" : value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedVoskModelVariant));
+            OnPropertyChanged(nameof(VoskModelVariantSummary));
+            OnPropertyChanged(nameof(SttEngineSummary));
+            RefreshSpeechModelInventory();
+        }
+    }
+
+    public SettingsChoice? SelectedVoskModelVariant
+    {
+        get => VoskModelVariantChoices.FirstOrDefault(choice =>
+                   choice.Value.Equals(_audio.VoskModelVariant, StringComparison.OrdinalIgnoreCase))
+               ?? VoskModelVariantChoices.FirstOrDefault();
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            VoskModelVariant = value.Value;
+        }
+    }
+
+    public string VoskModelVariantSummary
+    {
+        get
+        {
+            var lang = VoskWakeWordModelService.ResolveLanguageKeyFromSpeechLanguage(_audio.SpeechLanguage);
+            var descriptor = VoskModelCatalog.Resolve(lang, _audio.VoskModelVariant);
+            return descriptor.Note ?? $"{descriptor.DisplayName} — {descriptor.FolderName} ({descriptor.SizeHint})";
+        }
+    }
+
     public string WakeWordPhrase
     {
         get => _audio.WakeWordPhrase;
@@ -141,6 +224,7 @@ public sealed class AppSettingsViewModel : ObservableObject
             _audio.WakeWordPhrase = string.IsNullOrWhiteSpace(value) ? "asistan" : value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedWakeWord));
+            RefreshSpeechModelInventory();
         }
     }
 
@@ -214,7 +298,15 @@ public sealed class AppSettingsViewModel : ObservableObject
     public string SpeechLanguage
     {
         get => _audio.SpeechLanguage;
-        set { _audio.SpeechLanguage = value ?? string.Empty; OnPropertyChanged(); }
+        set
+        {
+            _audio.SpeechLanguage = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(VoskModelVariantChoices));
+            OnPropertyChanged(nameof(SelectedVoskModelVariant));
+            OnPropertyChanged(nameof(VoskModelVariantSummary));
+            RefreshSpeechModelInventory();
+        }
     }
 
     public int SpeechListenTimeoutSeconds
@@ -226,7 +318,49 @@ public sealed class AppSettingsViewModel : ObservableObject
     public int SilenceEndMilliseconds
     {
         get => _audio.SilenceEndMilliseconds;
-        set { _audio.SilenceEndMilliseconds = Math.Clamp(value, 300, 3000); OnPropertyChanged(); }
+        set { _audio.SilenceEndMilliseconds = Math.Clamp(value, 400, 3000); OnPropertyChanged(); }
+    }
+
+    public double VadSpeechMultiplier
+    {
+        get => _audio.VadSpeechMultiplier;
+        set { _audio.VadSpeechMultiplier = Math.Clamp(value, 1.5, 8.0); OnPropertyChanged(); }
+    }
+
+    public int VadMinSpeechMilliseconds
+    {
+        get => _audio.VadMinSpeechMilliseconds;
+        set { _audio.VadMinSpeechMilliseconds = Math.Clamp(value, 200, 2000); OnPropertyChanged(); }
+    }
+
+    public double MicGainTargetPeak
+    {
+        get => _audio.MicGainTargetPeak;
+        set { _audio.MicGainTargetPeak = Math.Clamp(value, 0.2, 0.8); OnPropertyChanged(); }
+    }
+
+    public int SttMinTranscriptCharacters
+    {
+        get => _audio.SttMinTranscriptCharacters;
+        set { _audio.SttMinTranscriptCharacters = Math.Clamp(value, 2, 20); OnPropertyChanged(); }
+    }
+
+    public bool WakeWordFinalOnly
+    {
+        get => _audio.WakeWordFinalOnly;
+        set { _audio.WakeWordFinalOnly = value; OnPropertyChanged(); }
+    }
+
+    public int WakeWordCooldownSeconds
+    {
+        get => _audio.WakeWordCooldownSeconds;
+        set { _audio.WakeWordCooldownSeconds = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+    }
+
+    public bool WakeWordRequireSpeechEnergy
+    {
+        get => _audio.WakeWordRequireSpeechEnergy;
+        set { _audio.WakeWordRequireSpeechEnergy = value; OnPropertyChanged(); }
     }
 
     public int OverlayAutoCloseSeconds
@@ -246,11 +380,14 @@ public sealed class AppSettingsViewModel : ObservableObject
         get => _audio.SpeechEngine;
         set
         {
-            _audio.SpeechEngine = string.IsNullOrWhiteSpace(value) ? "vosk" : value;
+            _audio.SpeechEngine = string.IsNullOrWhiteSpace(value) ? "whisper" : value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedSpeechEngine));
             OnPropertyChanged(nameof(IsWhisperEngine));
+            OnPropertyChanged(nameof(ShowVoskModelSettings));
+            OnPropertyChanged(nameof(ShowWhisperModelSettings));
             RefreshSpeechDiagnostics();
+            RefreshSpeechModelInventory();
         }
     }
 
@@ -271,6 +408,58 @@ public sealed class AppSettingsViewModel : ObservableObject
 
     public bool IsWhisperEngine =>
         string.Equals(_audio.SpeechEngine, "whisper", StringComparison.OrdinalIgnoreCase);
+
+    public bool ShowVoskModelSettings =>
+        string.Equals(_audio.SpeechEngine, "vosk", StringComparison.OrdinalIgnoreCase);
+
+    public bool ShowWhisperModelSettings => IsWhisperEngine;
+
+    public string WakeWordEngineSummary =>
+        "Uyandırma: Vosk (hafif, yalnızca «asistan» gibi kısa kelimeler). Komut dinleme motorundan bağımsızdır.";
+
+    public IReadOnlyList<SettingsChoice> WhisperModelVariantChoices =>
+        WhisperModelCatalog.GetVariantChoices()
+            .Select(choice => new SettingsChoice(choice.Id, choice.Label, choice.Description))
+            .ToList();
+
+    public string WhisperModelVariant
+    {
+        get => _audio.WhisperModelVariant;
+        set
+        {
+            _audio.WhisperModelVariant = string.IsNullOrWhiteSpace(value) ? "small" : value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedWhisperModelVariant));
+            OnPropertyChanged(nameof(WhisperModelVariantSummary));
+            OnPropertyChanged(nameof(SttEngineSummary));
+            RefreshSpeechModelInventory();
+        }
+    }
+
+    public SettingsChoice? SelectedWhisperModelVariant
+    {
+        get => WhisperModelVariantChoices.FirstOrDefault(choice =>
+                   choice.Value.Equals(_audio.WhisperModelVariant, StringComparison.OrdinalIgnoreCase))
+               ?? WhisperModelVariantChoices.FirstOrDefault();
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            WhisperModelVariant = value.Value;
+        }
+    }
+
+    public string WhisperModelVariantSummary
+    {
+        get
+        {
+            var descriptor = WhisperModelCatalog.Resolve(_audio.WhisperModelVariant);
+            return descriptor.Note ?? $"{descriptor.DisplayName} — {descriptor.FileName} ({descriptor.SizeHint})";
+        }
+    }
 
     public string WhisperModelPath
     {
@@ -483,7 +672,7 @@ public sealed class AppSettingsViewModel : ObservableObject
         StatusMessage = MicrophonePermissionService.Describe(state);
     }
 
-    public void Save()
+    public async Task SaveAsync()
     {
         var agentSnapshot = new AgentOptions
         {
@@ -508,8 +697,107 @@ public sealed class AppSettingsViewModel : ObservableObject
         LocalAppSettingsService.CopyUiAutomation(_runtime.UiAutomation, uiAutomationSnapshot);
 
         _localSettings.SaveSettings(agentSnapshot, audioSnapshot, policySnapshot, uiAutomationSnapshot, StartWithWindows);
+        _speechToText.Reload();
         RefreshSpeechDiagnostics();
-        StatusMessage =
-            "Ayarlar kaydedildi. Sesli asistan, uyandırma kelimesi ve gelişmiş konuşma motoru değişiklikleri için uygulamayı yeniden başlatın.";
+        RefreshSpeechModelInventory();
+
+        var applyNote = await _backgroundHost.ApplyRuntimeSettingsAsync().ConfigureAwait(true);
+        StatusMessage = applyNote is null
+            ? "Ayarlar kaydedildi ve uygulandı."
+            : $"Ayarlar kaydedildi. {applyNote}";
+    }
+
+    public void RefreshSpeechModelInventory()
+    {
+        var catalog = _speechModelInventory.ListAll();
+        var existing = SpeechModels.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+        SpeechModels.Clear();
+
+        foreach (var info in catalog)
+        {
+            if (existing.TryGetValue(info.Id, out var current)
+                && current.State is SpeechModelDownloadState.Downloading or SpeechModelDownloadState.Failed)
+            {
+                if (current.State == SpeechModelDownloadState.Failed)
+                {
+                    current.ApplyInventoryState(_speechModelInventory.GetState(info.Id));
+                }
+
+                SpeechModels.Add(current);
+                continue;
+            }
+
+            var item = new SpeechModelDownloadItemViewModel(info, DownloadSpeechModelAsync);
+            item.ApplyInventoryState(_speechModelInventory.GetState(info.Id));
+            SpeechModels.Add(item);
+        }
+
+        RebuildSpeechModelGroups();
+        UpdateSpeechModelSummary();
+    }
+
+    private void RebuildSpeechModelGroups()
+    {
+        SpeechModelGroups.Clear();
+
+        var definitions = new (string Category, string Description)[]
+        {
+            ("Komut dinleme (Whisper)", "Sesli komut tanıma için Whisper ggml modelleri."),
+            ("Uyandırma (Vosk)", "«Asistan» gibi uyandırma kelimeleri için hafif Vosk modelleri."),
+            ("Komut dinleme (Vosk)", "Whisper yerine Vosk ile komut dinleme seçtiyseniz gerekir.")
+        };
+
+        foreach (var (category, description) in definitions)
+        {
+            var items = SpeechModels
+                .Where(item => item.Category.Equals(category, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (items.Count == 0)
+            {
+                continue;
+            }
+
+            SpeechModelGroups.Add(new SpeechModelGroupViewModel(category, description, items));
+        }
+    }
+
+    private void UpdateSpeechModelSummary()
+    {
+        OnPropertyChanged(nameof(SpeechModelsDownloadedCount));
+        OnPropertyChanged(nameof(SpeechModelsTotalCount));
+        OnPropertyChanged(nameof(SpeechModelsMissingCount));
+        OnPropertyChanged(nameof(HasMissingRequiredSpeechModels));
+        OnPropertyChanged(nameof(SpeechModelsSummaryMessage));
+        DownloadRequiredSpeechModelsCommand.RaiseCanExecuteChanged();
+    }
+
+    private async Task DownloadRequiredSpeechModelsAsync()
+    {
+        foreach (var item in SpeechModels
+                     .Where(model => model.IsActiveForSettings && model.CanDownload)
+                     .ToList())
+        {
+            await DownloadSpeechModelAsync(item).ConfigureAwait(true);
+        }
+    }
+
+    private async Task DownloadSpeechModelAsync(SpeechModelDownloadItemViewModel item)
+    {
+        item.BeginDownload();
+        try
+        {
+            var progress = new Progress<ModelDownloadProgress>(update => item.ReportProgress(update));
+            await _speechModelInventory.DownloadAsync(item.Id, progress).ConfigureAwait(true);
+            item.MarkDownloaded();
+            RefreshSpeechDiagnostics();
+            RefreshSpeechModelInventory();
+            StatusMessage = $"{item.Title} indirildi.";
+        }
+        catch (Exception ex)
+        {
+            item.MarkFailed(ex.Message);
+            UpdateSpeechModelSummary();
+            StatusMessage = $"{item.Title} indirilemedi: {ex.Message}";
+        }
     }
 }

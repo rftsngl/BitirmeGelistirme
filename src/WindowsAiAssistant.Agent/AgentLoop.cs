@@ -138,15 +138,19 @@ public sealed class AgentLoop
             AgentDecision decision;
             string llmRawOutput = string.Empty;
 
-            var fastDecision = GoalRoutingHints.TryBuildFastAudioDecision(session.UserGoal);
+            var fastDecision = GoalRoutingHints.TryBuildFastDecision(session.UserGoal);
             if (fastDecision is not null &&
                 !session.Steps.Any(step =>
-                    string.Equals(step.ParsedDecision?.Action, "audio_power", StringComparison.OrdinalIgnoreCase)))
+                    string.Equals(step.ParsedDecision?.Action, fastDecision.Action, StringComparison.OrdinalIgnoreCase)))
             {
                 decision = fastDecision;
-                llmRawOutput = "{\"fastRoute\":\"audio_power\",\"mode\":\"" +
-                               fastDecision.Parameters.GetValueOrDefault("mode") + "\"}";
-                Report(progress, stepIndex, maxSteps, "llm", "Ses komutu — dogrudan audio_power");
+                llmRawOutput = JsonSerializer.Serialize(new
+                {
+                    fastRoute = fastDecision.Action,
+                    mode = fastDecision.Parameters.GetValueOrDefault("mode")
+                }, LogJsonOptions);
+                Report(progress, stepIndex, maxSteps, "llm",
+                    $"Hizli yol — dogrudan {fastDecision.Action}");
             }
             else
             {
@@ -342,12 +346,11 @@ public sealed class AgentLoop
             }
 
             if (actionResult.Success &&
-                decision.Action.Equals("audio_power", StringComparison.OrdinalIgnoreCase) &&
-                GoalRoutingHints.TryBuildFastAudioDecision(session.UserGoal) is not null)
+                GoalRoutingHints.ShouldCompleteAfterFastRoute(session.UserGoal, decision.Action))
             {
                 session.IsComplete = true;
-                var audioMessage = ResolveAssistantMessage(decision, actionResult);
-                Report(progress, stepIndex, maxSteps, "tamamlandi", audioMessage);
+                var fastMessage = ResolveAssistantMessage(decision, actionResult);
+                Report(progress, stepIndex, maxSteps, "tamamlandi", fastMessage);
                 await _runLogger.AppendAsync(
                     new AgentRunLog
                     {
@@ -362,7 +365,7 @@ public sealed class AgentLoop
                     },
                     cancellationToken).ConfigureAwait(false);
 
-                return Complete(session, audioMessage, observation, reachedMaxSteps: false);
+                return Complete(session, fastMessage, observation, reachedMaxSteps: false);
             }
 
             if (!ShouldContinueLoop(decision, out var stopReason))

@@ -18,11 +18,11 @@ public enum OverlayPhase
 
 public sealed class OverlayViewModel : ObservableObject
 {
-    private const int WaveformBarCount = 12;
-
     private OverlayPhase _phase = OverlayPhase.Hidden;
     private string _statusText = "Hazır";
+    private string _substatusText = string.Empty;
     private string _detailText = string.Empty;
+    private string _developerDetailText = string.Empty;
     private string _transcriptText = string.Empty;
     private string _resultText = string.Empty;
     private string _liveTranscript = string.Empty;
@@ -30,9 +30,7 @@ public sealed class OverlayViewModel : ObservableObject
     private bool _isBusy;
     private bool _isSpeaking;
     private bool _isAssistantSpeaking;
-    private double _audioLevel;
-    private int _waveformTick;
-    private IReadOnlyList<double> _waveformBarHeights = CreateBarHeights(0, false, 0);
+    private bool _showDeveloperDetail;
 
     public OverlayPhase Phase
     {
@@ -44,8 +42,13 @@ public sealed class OverlayViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsListening));
                 OnPropertyChanged(nameof(IsRunning));
                 OnPropertyChanged(nameof(ShowManualInput));
-                OnPropertyChanged(nameof(ShowLiveListenPanel));
                 OnPropertyChanged(nameof(IsCompactMode));
+                OnPropertyChanged(nameof(ShowListeningDots));
+                OnPropertyChanged(nameof(ShowThinkingDots));
+                OnPropertyChanged(nameof(ShowCompactHint));
+                OnPropertyChanged(nameof(ShowPillSubstatus));
+                OnPropertyChanged(nameof(ShowProgressRing));
+                OnPropertyChanged(nameof(ShowExpandedPanel));
             }
         }
     }
@@ -56,11 +59,39 @@ public sealed class OverlayViewModel : ObservableObject
         private set => SetField(ref _statusText, value);
     }
 
+    public string SubstatusText
+    {
+        get => _substatusText;
+        private set
+        {
+            if (SetField(ref _substatusText, value))
+            {
+                OnPropertyChanged(nameof(ShowCompactHint));
+                OnPropertyChanged(nameof(ShowPillSubstatus));
+            }
+        }
+    }
+
     public string DetailText
     {
         get => _detailText;
         private set => SetField(ref _detailText, value);
     }
+
+    public string DeveloperDetailText
+    {
+        get => _developerDetailText;
+        private set
+        {
+            if (SetField(ref _developerDetailText, value))
+            {
+                OnPropertyChanged(nameof(ShowDeveloperDetail));
+            }
+        }
+    }
+
+    public bool ShowDeveloperDetail =>
+        _showDeveloperDetail && !string.IsNullOrWhiteSpace(DeveloperDetailText);
 
     public string TranscriptText
     {
@@ -82,17 +113,12 @@ public sealed class OverlayViewModel : ObservableObject
             if (SetField(ref _liveTranscript, value))
             {
                 OnPropertyChanged(nameof(HasLiveTranscript));
+                OnPropertyChanged(nameof(ShowCompactHint));
             }
         }
     }
 
     public bool HasLiveTranscript => !string.IsNullOrWhiteSpace(LiveTranscript);
-
-    public IReadOnlyList<double> WaveformBarHeights
-    {
-        get => _waveformBarHeights;
-        private set => SetField(ref _waveformBarHeights, value);
-    }
 
     public bool IsSpeaking
     {
@@ -102,6 +128,7 @@ public sealed class OverlayViewModel : ObservableObject
             if (SetField(ref _isSpeaking, value))
             {
                 OnPropertyChanged(nameof(ShowSpeakingActivity));
+                OnPropertyChanged(nameof(ShowCompactHint));
             }
         }
     }
@@ -114,6 +141,7 @@ public sealed class OverlayViewModel : ObservableObject
             if (SetField(ref _isAssistantSpeaking, value))
             {
                 OnPropertyChanged(nameof(ShowSpeakingActivity));
+                OnPropertyChanged(nameof(ShowListeningDots));
             }
         }
     }
@@ -123,18 +151,57 @@ public sealed class OverlayViewModel : ObservableObject
     public bool IsBusy
     {
         get => _isBusy;
-        private set => SetField(ref _isBusy, value);
+        private set
+        {
+            if (SetField(ref _isBusy, value))
+            {
+                OnPropertyChanged(nameof(ShowProgressRing));
+            }
+        }
     }
 
     public bool IsListening => Phase == OverlayPhase.Listening;
     public bool IsRunning => Phase is OverlayPhase.Transcribing or OverlayPhase.Running;
+
     public bool IsAwaitingApproval => Phase == OverlayPhase.ApprovalPending;
     public bool ShowManualInput => Phase == OverlayPhase.ManualInput;
-    public bool ShowLiveListenPanel => Phase == OverlayPhase.Listening;
-    public bool IsCompactMode => Phase is OverlayPhase.Listening or OverlayPhase.Transcribing;
 
+    public bool IsCompactMode =>
+        Phase is OverlayPhase.Listening
+            or OverlayPhase.Transcribing
+            or OverlayPhase.Running;
+
+    public bool ShowExpandedPanel => !IsCompactMode;
+
+    public bool ShowListeningDots =>
+        Phase == OverlayPhase.Listening && !IsAssistantSpeaking;
+
+    public bool ShowThinkingDots =>
+        Phase is OverlayPhase.Transcribing or OverlayPhase.Running;
+
+    public bool ShowCompactHint =>
+        Phase == OverlayPhase.Listening
+        && !HasLiveTranscript
+        && !IsSpeaking
+        && !string.IsNullOrWhiteSpace(SubstatusText);
+
+    public bool ShowPillSubstatus =>
+        IsCompactMode
+        && !HasLiveTranscript
+        && !string.IsNullOrWhiteSpace(SubstatusText);
+
+    public bool ShowProgressRing =>
+        IsBusy && Phase is OverlayPhase.ApprovalPending;
+
+    /// <summary>
+    /// Yeni acilan uygulama odağı aldiginda oturumu kesmemek icin yalnizca güvenli fazlarda kapatilir.
+    /// (open_app sonrasi TTS veya agent calisirken overlay kapanmamali.)
+    /// </summary>
     public bool CanDismissOnFocusLoss =>
-        Phase is OverlayPhase.ManualInput or OverlayPhase.Result or OverlayPhase.Error;
+        !IsAssistantSpeaking
+        && !IsSpeaking
+        && Phase is OverlayPhase.ManualInput or OverlayPhase.Error
+            or OverlayPhase.Result;
 
     public string ManualInputText
     {
@@ -142,37 +209,38 @@ public sealed class OverlayViewModel : ObservableObject
         set => SetField(ref _manualInputText, value);
     }
 
+    public void ConfigureDeveloperMode(bool enabled) => _showDeveloperDetail = enabled;
+
     public void UpdateListenProgress(SpeechListenProgress progress)
     {
-        _audioLevel = progress.AudioLevel;
         IsSpeaking = progress.IsSpeaking;
-        _waveformTick++;
 
         if (!string.IsNullOrWhiteSpace(progress.PartialTranscript))
         {
             LiveTranscript = progress.PartialTranscript!;
-            StatusText = "Dinliyorum…";
+            StatusText = "Dinliyorum";
+            SubstatusText = string.Empty;
             DetailText = string.Empty;
         }
         else if (progress.IsSpeaking)
         {
-            StatusText = "Konuşuyorsunuz…";
-            DetailText = string.Empty;
+            StatusText = "Dinliyorum";
+            SubstatusText = string.Empty;
         }
         else if (string.IsNullOrWhiteSpace(LiveTranscript))
         {
-            StatusText = "Dinliyorum…";
-            DetailText = "Konuşmaya başlayın";
+            StatusText = "Dinliyorum";
+            SubstatusText = "Konuşabilirsiniz";
         }
-
-        WaveformBarHeights = CreateBarHeights(_audioLevel, progress.IsSpeaking, _waveformTick);
     }
 
     public void SetManualInputPrompt(string detail)
     {
         Phase = OverlayPhase.ManualInput;
         StatusText = "Ses algılanmadı";
+        SubstatusText = string.Empty;
         DetailText = detail;
+        DeveloperDetailText = string.Empty;
         LiveTranscript = string.Empty;
         ManualInputText = string.Empty;
         IsBusy = false;
@@ -181,11 +249,13 @@ public sealed class OverlayViewModel : ObservableObject
     public void SetApprovalPending(PendingApprovalRequest request, bool voiceApprovalEnabled = false)
     {
         Phase = OverlayPhase.ApprovalPending;
-        StatusText = "Onay gerekli";
-        DetailText = voiceApprovalEnabled
-            ? $"{request.GateDecision.Summary}\n(\"Onayla\" / \"Reddet\" diyebilir veya butonu kullanabilirsiniz.)"
-            : request.GateDecision.Summary;
-        ResultText = request.GateDecision.Reason;
+        StatusText = "Onayınız gerekiyor";
+        SubstatusText = voiceApprovalEnabled
+            ? "\"Onayla\" veya \"Reddet\" diyebilirsiniz"
+            : "Devam etmek için onaylayın";
+        DetailText = request.GateDecision.Summary;
+        ResultText = string.Empty;
+        DeveloperDetailText = request.GateDecision.Reason;
         LiveTranscript = string.Empty;
         IsBusy = false;
     }
@@ -216,30 +286,35 @@ public sealed class OverlayViewModel : ObservableObject
     {
         TranscriptText = string.Empty;
         ResultText = string.Empty;
-        DetailText = "Konuşmaya başlayın";
+        DetailText = string.Empty;
+        DeveloperDetailText = string.Empty;
         LiveTranscript = string.Empty;
-        StatusText = "Dinliyorum…";
+        StatusText = "Dinliyorum";
+        SubstatusText = "Konuşabilirsiniz";
         Phase = OverlayPhase.Listening;
         IsBusy = true;
-        WaveformBarHeights = CreateBarHeights(0, false, 0);
     }
 
     public void SetTranscribing()
     {
         Phase = OverlayPhase.Transcribing;
-        StatusText = "Anlıyorum…";
+        StatusText = "Anlıyorum";
+        SubstatusText = "Söylediklerinizi düzenliyorum…";
         DetailText = string.Empty;
         IsBusy = true;
     }
 
     public void SetCommandText(string transcript) => TranscriptText = transcript;
 
-    public void SetRunning(string detail)
+    public void SetRunning(string statusLabel, string? substatus = null, string? developerDetail = null)
     {
         Phase = OverlayPhase.Running;
-        StatusText = "Çalışıyor";
-        DetailText = detail;
+        StatusText = statusLabel;
+        SubstatusText = substatus ?? string.Empty;
+        DetailText = string.Empty;
+        DeveloperDetailText = developerDetail ?? string.Empty;
         LiveTranscript = string.Empty;
+        IsBusy = true;
     }
 
     public void SetResult(string transcript, string result)
@@ -247,8 +322,10 @@ public sealed class OverlayViewModel : ObservableObject
         Phase = OverlayPhase.Result;
         TranscriptText = transcript;
         ResultText = result;
-        StatusText = "Tamamlandı";
+        StatusText = "Hazır";
+        SubstatusText = string.Empty;
         DetailText = string.Empty;
+        DeveloperDetailText = string.Empty;
         LiveTranscript = string.Empty;
         IsBusy = false;
         IsAssistantSpeaking = false;
@@ -259,31 +336,35 @@ public sealed class OverlayViewModel : ObservableObject
         IsAssistantSpeaking = speaking;
         if (speaking)
         {
-            StatusText = "Seslendiriliyor…";
-            DetailText = string.Empty;
+            StatusText = "Seslendiriyor";
+            SubstatusText = string.Empty;
         }
         else if (Phase == OverlayPhase.Result)
         {
-            StatusText = "Tamamlandı";
+            StatusText = "Hazır";
         }
     }
 
     public void SetFollowUpListening()
     {
         Phase = OverlayPhase.Listening;
-        StatusText = "Dinliyorum…";
-        DetailText = "Devam etmek için konuşun";
+        StatusText = "Dinliyorum";
+        SubstatusText = "Devam edebilirsiniz";
         TranscriptText = string.Empty;
+        ResultText = string.Empty;
+        DetailText = string.Empty;
+        DeveloperDetailText = string.Empty;
         LiveTranscript = string.Empty;
         IsBusy = true;
-        WaveformBarHeights = CreateBarHeights(0, false, 0);
     }
 
     public void SetError(string message)
     {
         Phase = OverlayPhase.Error;
-        StatusText = "Hata";
+        StatusText = "Bir sorun oluştu";
+        SubstatusText = string.Empty;
         DetailText = message;
+        DeveloperDetailText = string.Empty;
         LiveTranscript = string.Empty;
         IsBusy = false;
     }
@@ -293,20 +374,5 @@ public sealed class OverlayViewModel : ObservableObject
         Phase = OverlayPhase.Hidden;
         IsBusy = false;
         LiveTranscript = string.Empty;
-    }
-
-    private static IReadOnlyList<double> CreateBarHeights(double level, bool isSpeaking, int tick)
-    {
-        var bars = new double[WaveformBarCount];
-        var energy = Math.Clamp(level * (isSpeaking ? 14.0 : 6.0), 0.05, 1.0);
-
-        for (var i = 0; i < WaveformBarCount; i++)
-        {
-            var wave = Math.Abs(Math.Sin((i * 0.65) + (tick * 0.45)));
-            var height = 6 + (energy * (10 + (wave * 18)));
-            bars[i] = Math.Clamp(height, 6, 32);
-        }
-
-        return bars;
     }
 }

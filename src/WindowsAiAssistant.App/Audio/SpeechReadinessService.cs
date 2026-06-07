@@ -7,45 +7,52 @@ public sealed class SpeechReadinessService
     private readonly AudioOptions _options;
     private readonly MicrophonePermissionService _permissions;
     private readonly VoskWakeWordModelService _voskModels;
+    private readonly WhisperModelService _whisperModels;
 
     public SpeechReadinessService(
         AudioOptions options,
         MicrophonePermissionService permissions,
-        VoskWakeWordModelService voskModels)
+        VoskWakeWordModelService voskModels,
+        WhisperModelService whisperModels)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _permissions = permissions ?? throw new ArgumentNullException(nameof(permissions));
         _voskModels = voskModels ?? throw new ArgumentNullException(nameof(voskModels));
+        _whisperModels = whisperModels ?? throw new ArgumentNullException(nameof(whisperModels));
     }
 
+    public bool UsesVoskForWakeWord() =>
+        string.Equals(_options.WakeWordEngine, "vosk", StringComparison.OrdinalIgnoreCase) ||
+        string.IsNullOrWhiteSpace(_options.WakeWordEngine);
+
     public bool UsesVoskForStt() =>
-        string.Equals(_options.SpeechEngine, "vosk", StringComparison.OrdinalIgnoreCase) ||
-        (!UsesWhisperForStt() && !IsWindowsSttLanguageSupported());
+        string.Equals(_options.SpeechEngine, "vosk", StringComparison.OrdinalIgnoreCase);
 
     public bool UsesWhisperForStt() =>
-        _options.DeveloperModeEnabled &&
-        string.Equals(_options.SpeechEngine, "whisper", StringComparison.OrdinalIgnoreCase);
+        string.Equals(_options.SpeechEngine, "whisper", StringComparison.OrdinalIgnoreCase) ||
+        string.IsNullOrWhiteSpace(_options.SpeechEngine) ||
+        (string.Equals(_options.SpeechEngine, "windows", StringComparison.OrdinalIgnoreCase)
+            && !IsWindowsSttLanguageSupported());
 
     public bool IsWindowsSttLanguageSupported() =>
         string.IsNullOrWhiteSpace(_options.SpeechLanguage) ||
         WindowsSpeechLanguageCatalog.IsTopicLanguageAvailable(_options.SpeechLanguage);
 
-    public bool IsWakeWordServiceAvailable() => _voskModels.IsWakeModelReady();
+    public bool IsWakeWordServiceAvailable() =>
+        UsesVoskForWakeWord() && _voskModels.IsWakeModelReady();
 
     public bool IsSttServiceAvailable() =>
-        UsesVoskForStt()
-            ? _voskModels.IsSttModelReady()
-            : UsesWhisperForStt()
-                ? !string.IsNullOrWhiteSpace(_options.WhisperModelPath) && File.Exists(_options.WhisperModelPath)
+        UsesWhisperForStt()
+            ? _whisperModels.IsModelReady()
+            : UsesVoskForStt()
+                ? _voskModels.IsSttModelReady()
                 : IsWindowsSttLanguageSupported();
 
     public string DescribeLanguageSupport()
     {
         if (UsesWhisperForStt())
         {
-            return !string.IsNullOrWhiteSpace(_options.WhisperModelPath) && File.Exists(_options.WhisperModelPath)
-                ? $"Komut dinleme Whisper ile hazır ({_options.WhisperModelPath})."
-                : "Whisper modeli bulunamadı. Geliştirici modunda model yolunu ayarlayın.";
+            return _whisperModels.DescribeAvailability();
         }
 
         if (UsesVoskForStt())
@@ -57,20 +64,28 @@ public sealed class SpeechReadinessService
     }
 
     public string DescribeWakeWordSupport() =>
-        _voskModels.DescribeWakeAvailability();
+        UsesVoskForWakeWord()
+            ? _voskModels.DescribeWakeAvailability()
+            : "Uyandırma motoru yapılandırılmadı.";
 
     public string DescribeActiveSttEngine()
     {
         if (UsesWhisperForStt())
         {
-            return "Aktif komut motoru: Whisper";
+            var descriptor = WhisperModelCatalog.Resolve(_options.WhisperModelVariant);
+            return $"Aktif komut motoru: Whisper ({descriptor.DisplayName})";
         }
 
         if (UsesVoskForStt())
         {
-            return string.Equals(_options.SpeechEngine, "vosk", StringComparison.OrdinalIgnoreCase)
-                ? "Aktif komut motoru: Vosk (yerel)"
-                : "Aktif komut motoru: Vosk (Windows Türkçe paketi olmadığı için otomatik seçildi)";
+            return "Aktif komut motoru: Vosk (yerel)";
+        }
+
+        if (string.Equals(_options.SpeechEngine, "windows", StringComparison.OrdinalIgnoreCase)
+            && !IsWindowsSttLanguageSupported())
+        {
+            var descriptor = WhisperModelCatalog.Resolve(_options.WhisperModelVariant);
+            return $"Aktif komut motoru: Whisper ({descriptor.DisplayName}, Windows Türkçe paketi olmadığı için otomatik seçildi)";
         }
 
         return "Aktif komut motoru: Windows (yerleşik)";
@@ -86,12 +101,8 @@ public sealed class SpeechReadinessService
 
         if (UsesWhisperForStt())
         {
-            if (string.IsNullOrWhiteSpace(_options.WhisperModelPath) || !File.Exists(_options.WhisperModelPath))
-            {
-                throw new SpeechAccessException(
-                    "Whisper modeli bulunamadı. Geliştirici modunda model yolunu ayarlayın veya konuşma tanıma motorunu Vosk olarak seçin.");
-            }
-
+            var path = await _whisperModels.EnsureModelAsync(cancellationToken).ConfigureAwait(false);
+            _options.WhisperModelPath = path;
             return;
         }
 
@@ -109,6 +120,11 @@ public sealed class SpeechReadinessService
 
     public async Task EnsureReadyForWakeWordAsync(CancellationToken cancellationToken = default)
     {
+        if (!UsesVoskForWakeWord())
+        {
+            throw new SpeechAccessException("Uyandırma motoru desteklenmiyor.");
+        }
+
         var access = await _permissions.RequestAccessAsync(cancellationToken).ConfigureAwait(false);
         if (access != MicrophoneAccessState.Granted)
         {

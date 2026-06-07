@@ -31,12 +31,58 @@ public sealed class AudioOptions
     public double TtsSpeakingRate { get; set; } = 0.95;
 
     public string SpeechLanguage { get; set; } = "tr-TR";
-    public int SpeechListenTimeoutSeconds { get; set; } = 8;
+    public int SpeechListenTimeoutSeconds { get; set; } = 10;
 
     /// <summary>
     /// Konusma bittikten sonra kaydi bitirmek icin gereken susma suresi (ms).
+    /// Yuksek = yabanci kelimeler ve duraklamalar icin daha fazla sure.
     /// </summary>
-    public int SilenceEndMilliseconds { get; set; } = 700;
+    public int SilenceEndMilliseconds { get; set; } = 1400;
+
+    /// <summary>
+    /// VAD konusma esigi carpani. Yuksek = daha az yanlis tetikleme (ortam gurultusu).
+    /// </summary>
+    public double VadSpeechMultiplier { get; set; } = 3.2;
+
+    /// <summary>
+    /// Kayit sonlandirmadan once gereken minimum konusma suresi (ms).
+    /// </summary>
+    public int VadMinSpeechMilliseconds { get; set; } = 380;
+
+    /// <summary>
+    /// Ortam gurultusu kalibrasyon suresi (ms).
+    /// </summary>
+    public int VadCalibrationMilliseconds { get; set; } = 500;
+
+    /// <summary>
+    /// Mikrofon kazanc hedefi (0.2–0.8). Dusuk = daha az amplifikasyon.
+    /// </summary>
+    public double MicGainTargetPeak { get; set; } = 0.55;
+
+    /// <summary>
+    /// Kabul edilecek minimum transcript uzunlugu (karakter).
+    /// </summary>
+    public int SttMinTranscriptCharacters { get; set; } = 2;
+
+    /// <summary>
+    /// Uyandirma yalnizca kesin (final) Vosk sonucunda tetiklensin; partial sonuclar yok sayilir.
+    /// </summary>
+    public bool WakeWordFinalOnly { get; set; } = true;
+
+    /// <summary>
+    /// Uyandirma tetiklendikten sonra tekrar dinleme bekleme suresi (saniye).
+    /// </summary>
+    public int WakeWordCooldownSeconds { get; set; } = 8;
+
+    /// <summary>
+    /// Uyandirma tetiklenmeden once mikrofonda gercek konusma algilanmali (arka plan gurultusunu filtreler).
+    /// </summary>
+    public bool WakeWordRequireSpeechEnergy { get; set; } = true;
+
+    /// <summary>
+    /// Uyandirma icin minimum ses seviyesi (RMS). Dusuk = daha kolay tetiklenir.
+    /// </summary>
+    public double WakeWordMinPeakLevel { get; set; } = 0.011;
 
     /// <summary>
     /// Asistan cevap verdikten sonra takip komutu icin dinleme suresi (saniye).
@@ -52,14 +98,29 @@ public sealed class AudioOptions
     public bool VoiceApprovalEnabled { get; set; } = true;
 
     /// <summary>
-    /// STT motoru: "windows" (varsayilan) veya "whisper" (yerel Whisper.net modeli).
+    /// Uyandirma kelimesi motoru. Yalnizca "vosk" desteklenir (hafif, grammar tabanli).
     /// </summary>
-    public string SpeechEngine { get; set; } = "windows";
+    public string WakeWordEngine { get; set; } = "vosk";
 
     /// <summary>
-    /// Whisper.net ggml model dosyasinin tam yolu (SpeechEngine=whisper icin gerekli).
+    /// Komut dinleme motoru: vosk, whisper veya windows.
+    /// </summary>
+    public string SpeechEngine { get; set; } = "whisper";
+
+    /// <summary>
+    /// Whisper model boyutu: base, small (onerilen), medium.
+    /// </summary>
+    public string WhisperModelVariant { get; set; } = "medium";
+
+    /// <summary>
+    /// Manuel Whisper ggml model dosya yolu. Bos ise otomatik indirilen model kullanilir.
     /// </summary>
     public string WhisperModelPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Vosk model kalitesi: small (hizli) veya accurate (dile gore daha iyi; TR icin not ile ayni kucuk model).
+    /// </summary>
+    public string VoskModelVariant { get; set; } = "small";
 
     /// <summary>
     /// Vosk uyandirma model klasoru (gelistirici modu). Bos ise otomatik indirilen model kullanilir.

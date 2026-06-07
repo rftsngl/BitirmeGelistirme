@@ -47,9 +47,11 @@ public sealed partial class UnifiedSettingsPage : Page
         SyncListSelectionToViewModel();
         // Bind AppVM sections
         AudioSection.DataContext = AppVM;
+        SpeechModelsSection.DataContext = AppVM;
         SecuritySection.DataContext = AppVM;
         DeveloperSection.DataContext = AppVM;
         AppVM.RefreshSpeechDiagnostics();
+        AppVM.RefreshSpeechModelInventory();
     }
 
     private void SyncListSelectionToViewModel()
@@ -196,6 +198,6 @@ public sealed partial class UnifiedSettingsPage : Page
         SettingsScrollViewer.ChangeView(null, 0, null, false);
     }
 
-    private void SaveAppSettings_OnClick(object sender, RoutedEventArgs e)
-        => AppVM.Save();
+    private async void SaveAppSettings_OnClick(object sender, RoutedEventArgs e)
+        => await AppVM.SaveAsync().ConfigureAwait(true);
 }

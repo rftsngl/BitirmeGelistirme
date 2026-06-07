@@ -10,11 +10,10 @@ namespace WindowsAiAssistant.App.Audio;
 /// </summary>
 public sealed class VoskWakeWordService : IWakeWordService
 {
-    private static readonly TimeSpan Cooldown = TimeSpan.FromSeconds(2);
-
     private readonly AudioOptions _options;
     private readonly SpeechReadinessService _readiness;
     private readonly VoskWakeWordModelService _models;
+    private readonly MicrophoneSessionCoordinator _microphone;
     private CancellationTokenSource? _listenCts;
     private Task? _listenTask;
     private int _cooldownGate;
@@ -22,11 +21,13 @@ public sealed class VoskWakeWordService : IWakeWordService
     public VoskWakeWordService(
         AudioOptions options,
         SpeechReadinessService readiness,
-        VoskWakeWordModelService models)
+        VoskWakeWordModelService models,
+        MicrophoneSessionCoordinator microphone)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
         _models = models ?? throw new ArgumentNullException(nameof(models));
+        _microphone = microphone ?? throw new ArgumentNullException(nameof(microphone));
     }
 
     public bool IsListening => _listenCts is not null && !_listenCts.IsCancellationRequested;
@@ -74,10 +75,41 @@ public sealed class VoskWakeWordService : IWakeWordService
 
     private async Task ListenLoopAsync(CancellationToken cancellationToken)
     {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await RunListenSessionAsync(cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    private async Task RunListenSessionAsync(CancellationToken cancellationToken)
+    {
+        using var micSession = await _microphone.AcquireAsync(cancellationToken).ConfigureAwait(false);
+
         Model? model = null;
         VoskRecognizer? recognizer = null;
         WaveInEvent? waveIn = null;
         var recordingStopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Pcm16Resampler? resampler = null;
+        var captureSampleRate = MicrophoneCapture.TargetSampleRate;
 
         try
         {
@@ -89,30 +121,65 @@ public sealed class VoskWakeWordService : IWakeWordService
             model = new Model(modelPath);
             recognizer = new VoskRecognizer(model, 16000f, WakeWordPhraseResolver.BuildGrammarJson(phrases));
 
-            waveIn = new WaveInEvent
+            waveIn = MicrophoneCapture.OpenWaveIn(_options, bufferMilliseconds: 50, out captureSampleRate);
+            if (captureSampleRate != MicrophoneCapture.TargetSampleRate)
             {
-                DeviceNumber = ResolveDeviceNumber(_options.InputDeviceIndex),
-                WaveFormat = new WaveFormat(16000, 16, 1),
-                BufferMilliseconds = 100
-            };
+                resampler = new Pcm16Resampler(captureSampleRate, MicrophoneCapture.TargetSampleRate);
+            }
+
+            var wakeVad = _options.WakeWordRequireSpeechEnergy
+                ? new VoiceActivityDetector(
+                    silenceEndMs: 300,
+                    speechMultiplier: Math.Min(_options.VadSpeechMultiplier, 3.2),
+                    calibrationMs: 400,
+                    minSpeechMs: 120,
+                    speechOnsetFrames: 2)
+                : null;
+            var utteranceHadSpeech = false;
+            var utterancePeak = 0.0;
 
             waveIn.DataAvailable += (_, args) =>
             {
-                if (Volatile.Read(ref _cooldownGate) != 0 || recognizer is null)
+                if (recognizer is null)
                 {
                     return;
                 }
 
                 try
                 {
-                    if (recognizer.AcceptWaveform(args.Buffer, args.BytesRecorded))
-                    {
-                        TryTriggerFromJson(recognizer.Result(), phrases);
-                    }
-                    else
-                    {
-                        TryTriggerFromJson(recognizer.PartialResult(), phrases);
-                    }
+                    MicrophoneCapture.ProcessChunk(
+                        args.Buffer.AsSpan(0, args.BytesRecorded),
+                        captureSampleRate,
+                        resampler,
+                        _options,
+                        (chunk, level) =>
+                        {
+                            utterancePeak = Math.Max(utterancePeak, level);
+
+                            if (wakeVad is not null)
+                            {
+                                wakeVad.Process(chunk);
+                                if (wakeVad.SpeechStarted)
+                                {
+                                    utteranceHadSpeech = true;
+                                }
+                            }
+                            else if (level >= WakeMinPeak())
+                            {
+                                utteranceHadSpeech = true;
+                            }
+
+                            if (recognizer.AcceptWaveform(chunk, chunk.Length))
+                            {
+                                OnWakeFinal(recognizer, phrases, wakeVad, ref utteranceHadSpeech, ref utterancePeak);
+                            }
+                            else if (!_options.WakeWordFinalOnly
+                                     && Volatile.Read(ref _cooldownGate) == 0
+                                     && PassesEnergyGate(utteranceHadSpeech, utterancePeak))
+                            {
+                                TryTriggerFromJson(recognizer.PartialResult(), phrases, finalOnly: false);
+                            }
+                        });
                 }
                 catch
                 {
@@ -121,16 +188,7 @@ public sealed class VoskWakeWordService : IWakeWordService
             };
             waveIn.RecordingStopped += (_, _) => recordingStopped.TrySetResult();
 
-            waveIn.StartRecording();
             await recordingStopped.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // expected
-        }
-        catch
-        {
-            // Model, mikrofon veya Vosk hatasi — hotkey fallback kalir.
         }
         finally
         {
@@ -152,16 +210,41 @@ public sealed class VoskWakeWordService : IWakeWordService
         }
     }
 
-    private void TryTriggerFromJson(string? json, IReadOnlyList<string> phrases)
+    private void OnWakeFinal(
+        VoskRecognizer recognizer,
+        IReadOnlyList<string> phrases,
+        VoiceActivityDetector? wakeVad,
+        ref bool utteranceHadSpeech,
+        ref double utterancePeak)
     {
-        var text = ExtractRecognizedText(json);
-        if (string.IsNullOrWhiteSpace(text))
+        if (Volatile.Read(ref _cooldownGate) == 0
+            && PassesEnergyGate(utteranceHadSpeech, utterancePeak))
+        {
+            TryTriggerFromJson(recognizer.Result(), phrases, finalOnly: true);
+        }
+
+        utteranceHadSpeech = false;
+        utterancePeak = 0;
+        wakeVad?.Reset();
+    }
+
+    private double WakeMinPeak() =>
+        Math.Clamp(_options.WakeWordMinPeakLevel, 0.006, 0.05);
+
+    private bool PassesEnergyGate(bool utteranceHadSpeech, double utterancePeak) =>
+        !_options.WakeWordRequireSpeechEnergy
+        || utteranceHadSpeech
+        || utterancePeak >= WakeMinPeak();
+
+    private void TryTriggerFromJson(string? json, IReadOnlyList<string> phrases, bool finalOnly)
+    {
+        if (!finalOnly && _options.WakeWordFinalOnly)
         {
             return;
         }
 
-        var normalized = Normalize(text);
-        if (!phrases.Any(phrase => normalized.Contains(Normalize(phrase), StringComparison.Ordinal)))
+        var text = ExtractRecognizedText(json);
+        if (!WakeWordPhraseResolver.MatchesAnyPhrase(text, phrases))
         {
             return;
         }
@@ -199,14 +282,12 @@ public sealed class VoskWakeWordService : IWakeWordService
         return null;
     }
 
-    private static string Normalize(string value) =>
-        value.Trim().ToLowerInvariant();
-
     private async Task ReleaseCooldownAsync()
     {
+        var cooldown = TimeSpan.FromSeconds(Math.Clamp(_options.WakeWordCooldownSeconds, 1, 30));
         try
         {
-            await Task.Delay(Cooldown).ConfigureAwait(false);
+            await Task.Delay(cooldown).ConfigureAwait(false);
         }
         finally
         {
@@ -214,13 +295,4 @@ public sealed class VoskWakeWordService : IWakeWordService
         }
     }
 
-    private static int ResolveDeviceNumber(int requested)
-    {
-        if (requested < 0)
-        {
-            return -1;
-        }
-
-        return requested < WaveInEvent.DeviceCount ? requested : -1;
-    }
 }

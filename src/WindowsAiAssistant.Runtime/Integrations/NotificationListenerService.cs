@@ -32,12 +32,13 @@ public sealed class NotificationListenerService : INotificationListenerService
               'Microsoft-Windows-Shell-Core/Operational',
               'Microsoft-Windows-ActionCenter/Operational'
             )
-            foreach ($log in $logs) {
+            $events = foreach ($log in $logs) {
               try {
                 Get-WinEvent -LogName $log -MaxEvents __MAX__ -ErrorAction Stop |
                   Select-Object TimeCreated, Id, ProviderName, Message
               } catch { }
-            } | Sort-Object TimeCreated -Descending | Select-Object -First __MAX__ |
+            }
+            $events | Sort-Object TimeCreated -Descending | Select-Object -First __MAX__ |
             Format-List | Out-String -Width 220
             """.Replace("__MAX__", limit.ToString(), StringComparison.Ordinal);
 

@@ -18,6 +18,7 @@ public sealed class BackgroundAssistantHost : IDisposable
     private MainWindow? _mainWindow;
     private int _overlayBusy;
     private bool _started;
+    private bool _trayActive;
     private bool _disposed;
 
     public BackgroundAssistantHost(
@@ -45,13 +46,14 @@ public sealed class BackgroundAssistantHost : IDisposable
         _started = true;
         _mainWindow = mainWindow;
 
-        if (!_audioOptions.BackgroundModeEnabled)
+        if (!_audioOptions.BackgroundModeEnabled && !LaunchArguments.IsBackgroundLaunch())
         {
             mainWindow.Activate();
             return;
         }
 
         _tray.Initialize();
+        _trayActive = true;
         _tray.OpenMainWindowRequested += OnOpenMainWindow;
         _tray.ActivateOverlayRequested += OnActivateOverlay;
         _tray.ExitRequested += OnExit;
@@ -60,7 +62,7 @@ public sealed class BackgroundAssistantHost : IDisposable
         _hotKeys.HotKeyPressed += OnActivateOverlay;
         _wakeWord.WakeWordDetected += OnActivateOverlay;
         _hotKeys.Start();
-        _ = _wakeWord.StartAsync();
+        _ = StartWakeWordIfEnabledAsync();
         _ = RequestMicrophonePermissionInBackgroundAsync();
         _tray.SetListeningEnabled(_audioOptions.GlobalHotKeyEnabled || _audioOptions.WakeWordEnabled);
 
@@ -69,7 +71,7 @@ public sealed class BackgroundAssistantHost : IDisposable
             WindowsStartupService.SetEnabled(true);
         }
 
-        if (_audioOptions.StartMinimizedToTray)
+        if (LaunchArguments.IsBackgroundLaunch())
         {
             mainWindow.HideToTray();
         }
@@ -99,6 +101,49 @@ public sealed class BackgroundAssistantHost : IDisposable
         _ = _wakeWord.DisposeAsync();
     }
 
+    public void RequestOverlayActivation()
+    {
+        OnActivateOverlay(this, EventArgs.Empty);
+    }
+
+    public async Task<string?> ApplyRuntimeSettingsAsync()
+    {
+        WindowsStartupService.SetEnabled(_audioOptions.StartWithWindows);
+
+        if (!_trayActive)
+        {
+            return "Tepsi/arka plan modu degisikligi bir sonraki uygulama acilisinda gecerli olur.";
+        }
+
+        var notes = new List<string>();
+        var hotKeyError = _hotKeys.Restart();
+        if (hotKeyError is not null)
+        {
+            notes.Add(hotKeyError);
+        }
+
+        var listening = _audioOptions.GlobalHotKeyEnabled || _audioOptions.WakeWordEnabled;
+        _tray.SetListeningEnabled(listening);
+
+        await _wakeWord.StopAsync().ConfigureAwait(false);
+        if (_audioOptions.WakeWordEnabled && listening)
+        {
+            await StartWakeWordIfEnabledAsync().ConfigureAwait(false);
+        }
+
+        return notes.Count == 0 ? null : string.Join(" ", notes);
+    }
+
+    private Task StartWakeWordIfEnabledAsync()
+    {
+        if (!_audioOptions.WakeWordEnabled)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _wakeWord.StartAsync();
+    }
+
     private void OnOpenMainWindow(object? sender, EventArgs e)
     {
         _mainWindow?.ShowFromTray();
@@ -126,6 +171,8 @@ public sealed class BackgroundAssistantHost : IDisposable
             if (resumeWakeWord)
             {
                 await _wakeWord.StopAsync().ConfigureAwait(false);
+                // WaveIn surucusunun mikrofonu birakmasi icin kisa bekleme
+                await Task.Delay(320).ConfigureAwait(false);
             }
 
             await _overlay.RunVoiceSessionAsync().ConfigureAwait(true);
@@ -170,7 +217,7 @@ public sealed class BackgroundAssistantHost : IDisposable
     {
         if (_tray.IsListeningEnabled)
         {
-            await _wakeWord.StartAsync().ConfigureAwait(false);
+            await StartWakeWordIfEnabledAsync().ConfigureAwait(false);
         }
         else
         {

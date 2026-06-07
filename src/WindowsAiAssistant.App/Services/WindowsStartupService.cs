@@ -34,6 +34,6 @@ public static class WindowsStartupService
             return;
         }
 
-        key.SetValue(ValueName, $"\"{exePath}\"");
+        key.SetValue(ValueName, LaunchArguments.BuildStartupCommand(startWithWindows: true, background: true));
     }
 }

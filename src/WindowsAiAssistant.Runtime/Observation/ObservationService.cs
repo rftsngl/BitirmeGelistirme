@@ -1,4 +1,5 @@
 using WindowsAiAssistant.Runtime.Automation;
+using WindowsAiAssistant.Runtime.Config;
 using WindowsAiAssistant.Runtime.Debugging;
 using WindowsAiAssistant.Runtime.Windows;
 
@@ -11,19 +12,22 @@ public sealed class ObservationService
     private readonly ScreenCaptureService _screenCapture;
     private readonly WindowManager _windowManager;
     private readonly UiAutomationService _uiAutomation;
+    private readonly UiAutomationOptions _uiAutomationOptions;
 
     public ObservationService(
         ForegroundWindowService foregroundWindow,
         ScreenInfoService screenInfo,
         ScreenCaptureService screenCapture,
         WindowManager windowManager,
-        UiAutomationService uiAutomation)
+        UiAutomationService uiAutomation,
+        RuntimeOptions runtimeOptions)
     {
         _foregroundWindow = foregroundWindow ?? throw new ArgumentNullException(nameof(foregroundWindow));
         _screenInfo = screenInfo ?? throw new ArgumentNullException(nameof(screenInfo));
         _screenCapture = screenCapture ?? throw new ArgumentNullException(nameof(screenCapture));
         _windowManager = windowManager ?? throw new ArgumentNullException(nameof(windowManager));
         _uiAutomation = uiAutomation ?? throw new ArgumentNullException(nameof(uiAutomation));
+        _uiAutomationOptions = runtimeOptions?.UiAutomation ?? new UiAutomationOptions();
     }
 
     public async Task<DesktopObservation> CaptureAsync(
@@ -63,9 +67,16 @@ public sealed class ObservationService
         {
             try
             {
+                var timeoutMs = Math.Clamp(_uiAutomationOptions.CaptureTimeoutMs, 1000, 120_000);
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(timeoutMs);
                 uiTree = await _uiAutomation
-                    .CaptureWindowTreeAsync(foreground.Handle, cancellationToken)
+                    .CaptureWindowTreeAsync(foreground.Handle, timeoutCts.Token)
                     .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                uiCaptureSkipReason = $"UIA zaman asimi ({_uiAutomationOptions.CaptureTimeoutMs} ms)";
             }
             catch
             {

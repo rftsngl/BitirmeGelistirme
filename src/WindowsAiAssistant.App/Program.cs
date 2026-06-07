@@ -49,7 +49,8 @@ public static class AppServices
         services.AddSingleton<IWmiQueryService, WmiQueryService>();
         services.AddSingleton<ITaskSchedulerIntegrationService, TaskSchedulerIntegrationService>();
         services.AddSingleton<IComAutomationService, ComAutomationService>();
-        services.AddSingleton<IGlobalHookService, GlobalHookService>();
+        services.AddSingleton<GlobalHookService>();
+        services.AddSingleton<IGlobalHookService>(sp => sp.GetRequiredService<GlobalHookService>());
         services.AddSingleton<IGraphicsCaptureService, WinGraphicsCaptureService>();
         services.AddSingleton<IToastNotificationService, WinToastNotificationService>();
         services.AddSingleton<IWindowsHelloService, WinWindowsHelloService>();
@@ -64,8 +65,10 @@ public static class AppServices
         services.AddSingleton<IPerformanceCounterService, PerformanceCounterService>();
         services.AddSingleton<IFileSearchService, WinFileSearchService>();
         services.AddSingleton<INotificationListenerService, NotificationListenerService>();
-        services.AddSingleton<IShellSessionService, ShellSessionService>();
-        services.AddSingleton<IFileWatchService, FileWatchIntegrationService>();
+        services.AddSingleton<ShellSessionService>();
+        services.AddSingleton<IShellSessionService>(sp => sp.GetRequiredService<ShellSessionService>());
+        services.AddSingleton<FileWatchIntegrationService>();
+        services.AddSingleton<IFileWatchService>(sp => sp.GetRequiredService<FileWatchIntegrationService>());
         services.AddSingleton<ICredentialStoreService, CredentialStoreService>();
         services.AddSingleton<IActionHandler, RespondActionHandler>();
         services.AddSingleton<IActionHandler, AskUserActionHandler>();
@@ -135,16 +138,24 @@ public static class AppServices
 
         services.AddSingleton<MicrophoneDeviceService>();
         services.AddSingleton<MicrophonePermissionService>();
+        services.AddSingleton<MicrophoneSessionCoordinator>();
         services.AddSingleton<VoskWakeWordModelService>();
+        services.AddSingleton<WhisperModelService>();
+        services.AddSingleton<SpeechModelInventoryService>();
+        services.AddSingleton<ForegroundFocusService>();
         services.AddSingleton<SpeechReadinessService>();
         services.AddSingleton<VoiceApprovalService>();
-        services.AddSingleton<ISpeechToTextService>(sp =>
+        services.AddSingleton<SwitchableSpeechToTextService>(sp =>
         {
             var options = sp.GetRequiredService<AudioOptions>();
             var readiness = sp.GetRequiredService<SpeechReadinessService>();
             var voskModels = sp.GetRequiredService<VoskWakeWordModelService>();
-            return SpeechEngineResolver.Create(options, readiness, voskModels);
+            var whisperModels = sp.GetRequiredService<WhisperModelService>();
+            var microphone = sp.GetRequiredService<MicrophoneSessionCoordinator>();
+            return new SwitchableSpeechToTextService(() =>
+                SpeechEngineResolver.Create(options, readiness, voskModels, whisperModels, microphone));
         });
+        services.AddSingleton<ISpeechToTextService>(sp => sp.GetRequiredService<SwitchableSpeechToTextService>());
         services.AddSingleton<EdgeTextToSpeechService>();
         services.AddSingleton<WindowsTextToSpeechService>();
         services.AddSingleton<ITextToSpeechService, HybridTextToSpeechService>();
@@ -153,7 +164,8 @@ public static class AppServices
             var options = sp.GetRequiredService<AudioOptions>();
             var readiness = sp.GetRequiredService<SpeechReadinessService>();
             var models = sp.GetRequiredService<VoskWakeWordModelService>();
-            return new VoskWakeWordService(options, readiness, models);
+            var microphone = sp.GetRequiredService<MicrophoneSessionCoordinator>();
+            return new VoskWakeWordService(options, readiness, models, microphone);
         });
         services.AddSingleton<GlobalHotKeyService>();
         services.AddSingleton<OverlayViewModel>();

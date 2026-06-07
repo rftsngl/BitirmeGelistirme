@@ -7,11 +7,13 @@ internal static class SpeechEngineResolver
     public static ISpeechToTextService Create(
         AudioOptions options,
         SpeechReadinessService readiness,
-        VoskWakeWordModelService voskModels)
+        VoskWakeWordModelService voskModels,
+        WhisperModelService whisperModels,
+        MicrophoneSessionCoordinator microphone)
     {
         if (readiness.UsesWhisperForStt())
         {
-            return new WhisperSpeechToTextService(options, readiness);
+            return new WhisperSpeechToTextService(options, readiness, whisperModels, microphone);
         }
 
         if (readiness.UsesVoskForStt())

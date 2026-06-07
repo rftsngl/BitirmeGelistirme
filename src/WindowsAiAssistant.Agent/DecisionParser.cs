@@ -228,8 +228,67 @@ public sealed class DecisionParser
             "com_invoke" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "progId")) ||
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "method")) =>
                 "com_invoke icin parameters.progId ve parameters.method gerekli.",
+            "audio_power" when ModeIs(parameters, target, "set_volume") &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "level")) =>
+                "audio_power set_volume icin parameters.level (0-100) gerekli.",
+            "service_control" when ModeIsOneOf(parameters, target, "status", "start", "stop", "restart") &&
+                string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "name", "service", "serviceName")) =>
+                "service_control bu mod icin target veya parameters.name gerekli.",
+            "registry_op" when ModeIsOneOf(parameters, target, "read", "write", "delete") &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "path", "key")) =>
+                "registry_op icin parameters.path gerekli.",
+            "registry_op" when ModeIs(parameters, target, "write") &&
+                (string.IsNullOrWhiteSpace(FirstParameter(parameters, "name", "valueName")) ||
+                 string.IsNullOrWhiteSpace(FirstParameter(parameters, "value", "data"))) =>
+                "registry_op write icin parameters.name ve parameters.value gerekli.",
+            "clipboard" when ModeIsOneOf(parameters, target, "write", "set") &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "text", "content")) =>
+                "clipboard write icin parameters.text gerekli.",
+            "install_package" when ModeIsOneOf(parameters, target, "search", "install", "uninstall") &&
+                string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "id", "package", "packageId")) =>
+                "install_package bu mod icin target veya parameters.id gerekli.",
+            "file_search" when ModeIs(parameters, target, "search") &&
+                string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "query", "q")) =>
+                "file_search icin target veya parameters.query gerekli.",
+            "shell_session" when ModeIsOneOf(parameters, target, "write", "run", "read", "stop") &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "sessionId", "session")) =>
+                "shell_session bu mod icin parameters.sessionId gerekli.",
+            "shell_session" when ModeIsOneOf(parameters, target, "write", "run") &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "command", "cmd")) =>
+                "shell_session write icin parameters.command gerekli.",
+            "file_watch" when ModeIsOneOf(parameters, target, "start", "watch") &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "path", "folder")) =>
+                "file_watch start icin parameters.path gerekli.",
+            "file_watch" when ModeIsOneOf(parameters, target, "stop", "unwatch", "peek", "read") &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "watchId", "id")) =>
+                "file_watch bu mod icin parameters.watchId gerekli.",
+            "credential_store" when ModeIsOneOf(parameters, target, "read", "delete", "store") &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "target", "name")) =>
+                "credential_store bu mod icin parameters.target gerekli.",
+            "credential_store" when ModeIs(parameters, target, "store") &&
+                string.IsNullOrWhiteSpace(FirstParameter(parameters, "secret", "password")) =>
+                "credential_store store icin parameters.secret gerekli.",
             _ => null
         };
+    }
+
+    private static string? ModeFromParameters(IReadOnlyDictionary<string, string> parameters, string? target) =>
+        ReadStringFromParameters(parameters, "mode") ?? target;
+
+    private static bool ModeIs(IReadOnlyDictionary<string, string> parameters, string? target, string mode) =>
+        string.Equals(ModeFromParameters(parameters, target), mode, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ModeIsOneOf(
+        IReadOnlyDictionary<string, string> parameters,
+        string? target,
+        params string[] modes)
+    {
+        var value = ModeFromParameters(parameters, target);
+        return value is not null &&
+               modes.Any(m => string.Equals(value, m, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string? ValidateUiElementTarget(
