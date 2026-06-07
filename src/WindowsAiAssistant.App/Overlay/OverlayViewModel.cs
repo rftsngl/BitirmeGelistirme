@@ -213,6 +213,12 @@ public sealed class OverlayViewModel : ObservableObject
 
     public void UpdateListenProgress(SpeechListenProgress progress)
     {
+        if (progress.IsTranscribing)
+        {
+            SetTranscribing();
+            return;
+        }
+
         IsSpeaking = progress.IsSpeaking;
 
         if (!string.IsNullOrWhiteSpace(progress.PartialTranscript))

@@ -64,6 +64,8 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
             return null;
         }
 
+        progress?.Report(new SpeechListenProgress { IsTranscribing = true });
+
         try
         {
             var factory = GetFactory();
@@ -112,9 +114,12 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         var captureDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var capturePeak = 0.0;
         var heardSpeech = false;
+        var heardSpeechFlag = 0;
+        var captureStartedUtc = DateTimeOffset.UtcNow;
         WaveInEvent? waveIn = null;
         Pcm16Resampler? resampler = null;
         var captureSampleRate = MicrophoneCapture.TargetSampleRate;
+        var hardLimitSeconds = maxWaitSeconds + 5;
 
         try
         {
@@ -143,6 +148,7 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
                         if (vad.SpeechStarted || level >= 0.008)
                         {
                             heardSpeech = true;
+                            Interlocked.Exchange(ref heardSpeechFlag, 1);
                         }
 
                         lock (pcm)
@@ -157,7 +163,9 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
                             PartialTranscript = null
                         });
 
-                        if (vad.ShouldEndAfterSpeech() || vad.ExceededMaxWait(maxWaitSeconds))
+                        if (vad.ShouldEndAfterSpeech()
+                            || vad.ExceededMaxWait(maxWaitSeconds)
+                            || (DateTimeOffset.UtcNow - captureStartedUtc).TotalSeconds >= hardLimitSeconds)
                         {
                             captureDone.TrySetResult();
                         }
@@ -166,19 +174,39 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
             waveIn.RecordingStopped += (_, _) => captureDone.TrySetResult();
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(maxWaitSeconds + 25));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(hardLimitSeconds + 8));
 
-            var completed = await Task.WhenAny(
-                captureDone.Task,
-                Task.Delay(Timeout.Infinite, timeoutCts.Token)).ConfigureAwait(false);
+            using var watchdogCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var watchdog = RunCaptureWatchdogAsync(
+                captureDone,
+                captureStartedUtc,
+                maxWaitSeconds,
+                hardLimitSeconds,
+                () => Volatile.Read(ref heardSpeechFlag) != 0,
+                watchdogCts.Token);
 
-            if (completed != captureDone.Task && cancellationToken.IsCancellationRequested)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                await captureDone.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                captureDone.TrySetResult();
+            }
+            finally
+            {
+                await watchdogCts.CancelAsync().ConfigureAwait(false);
+                try
+                {
+                    await watchdog.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // expected
+                }
             }
 
             waveIn.StopRecording();
-            await captureDone.Task.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
         }
         finally
@@ -214,6 +242,40 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         }
 
         return ConvertPcm16ToFloat(TrimLeadingSilence(buffer, capturePeak));
+    }
+
+    private static async Task RunCaptureWatchdogAsync(
+        TaskCompletionSource captureDone,
+        DateTimeOffset captureStartedUtc,
+        int maxWaitSeconds,
+        int hardLimitSeconds,
+        Func<bool> hasHeardSpeech,
+        CancellationToken cancellationToken)
+    {
+        while (!captureDone.Task.IsCompleted && !cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            var elapsed = (DateTimeOffset.UtcNow - captureStartedUtc).TotalSeconds;
+            if (elapsed >= hardLimitSeconds)
+            {
+                captureDone.TrySetResult();
+                return;
+            }
+
+            if (elapsed >= maxWaitSeconds && !hasHeardSpeech())
+            {
+                captureDone.TrySetResult();
+                return;
+            }
+        }
     }
 
     private static byte[] TrimLeadingSilence(byte[] pcm, double peakLevel)

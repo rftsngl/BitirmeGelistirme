@@ -87,12 +87,14 @@ internal sealed class VoiceActivityDetector
 
     public bool ExceededMaxWait(int maxWaitSeconds)
     {
+        var elapsedSeconds = (DateTimeOffset.UtcNow - _startedUtc).TotalSeconds;
         if (_speechStarted)
         {
-            return (DateTimeOffset.UtcNow - _startedUtc).TotalSeconds >= Math.Max(maxWaitSeconds, 45);
+            // Konusma basladiktan sonra da makul ust sinir (eskiden min 45 sn bekliyordu)
+            return elapsedSeconds >= maxWaitSeconds + 6;
         }
 
-        return (DateTimeOffset.UtcNow - _startedUtc).TotalSeconds >= maxWaitSeconds;
+        return elapsedSeconds >= maxWaitSeconds;
     }
 
     public void Reset()
