@@ -1,87 +1,179 @@
 # Windows AI Assistant
 
-Doğal dil komutlarını **tüm Windows masaüstünde** yürüten bir yapay zekâ asistanı. Kullanıcı yalnızca **hedefi** yazar (örn. "Not defterini aç ve merhaba yaz"); yöntemi, sırayı ve araç seçimini **LLM'in kendisi** belirler. Agent her özellik için ayrı bir senaryo/handler'a bağlı değildir: LLM az sayıda **genel yetenek ailesini** (kabuk/terminal, UI Automation, sistem/başlatma) adım adım birleştirir, her adımda zengin gözlem geri beslemesini (pencereler, UI ağacı, son aksiyon sonucu, kabuk çıktısı) okuyarak stratejisini uyarlar. Runtime'ın görevi bu yetenekleri LLM'e sunmak ve çıktıyı **strict JSON karar** olarak güvenli biçimde çalıştırmaktır. Güvenlik ağırlıklı olarak system prompt ve kaba `ActionGate` politikasıyla sağlanır.
+Windows masaüstünüzde sesli veya yazılı komutlarla işlem yapan yapay zekâ asistanı. «Not defterini aç», «bu klasördeki dosyaları listele» veya «Chrome’da haberler sayfasını aç» gibi istekleri Türkçe söyleyebilir veya yazabilirsiniz; asistan adımları kendi planlayıp uygular.
 
-## Mimari
+---
 
-Tek yönlü bağımlılık: `App → Agent → Runtime`
+## Ne yapar?
 
-| Proje | Sorumluluk |
-|-------|------------|
-| `WindowsAiAssistant.App` | WinUI 3 arayüz (sohbet, sağlayıcı ayarları, **Ses ve Güvenlik**, yetenekler, geçmiş), tray, sesli overlay, DI kökü |
-| `WindowsAiAssistant.Agent` | `AgentLoop`, `PromptBuilder`, `AiClient` (LLM), `DecisionParser`/`DecisionSchema` |
-| `WindowsAiAssistant.Runtime` | Gözlem (ekran/pencere/UIA), aksiyon handler'ları, UI Automation, giriş enjeksiyonu, loglama |
+- **Sesli komut:** «Asistan» deyin veya kısayol tuşuna basın, konuşun.
+- **Yazılı komut:** Uygulama içindeki sohbet ekranından yazın.
+- **Masaüstü işlemleri:** Uygulama açma, dosya/klasör işlemleri, web sayfası, terminal komutları ve benzeri görevler.
+- **Sesli yanıt:** İsterseniz cevapları Türkçe seslendirilir.
+- **Onay isteyen işlemler:** Silme veya hassas adımlarda sizden onay alınır.
 
-Akış: **observe → decide (LLM, JSON) → execute → log** ve hedef tamamlanana ya da `MaxSteps`'e ulaşılana kadar tekrarlanır. Başarısız bir eylem akışı bitirmez; **geri bildirim olarak** bir sonraki adıma beslenir, böylece LLM alternatif bir yol dener (örn. `open_app` başarısızsa `shell` ile uygulamayı keşfedip `launch` eder). Yalnızca sağlayıcı/karar (altyapı) hataları akışı erken sonlandırır.
+---
 
 ## Gereksinimler
 
-- .NET 8 SDK
-- Windows 10 sürüm 19041 (2004) veya üzeri
-- Bir LLM erişimi: OpenAI uyumlu API, Google Gemini veya yerel sunucu (LM Studio / Ollama)
+- **Windows 10** (2004 / sürüm 19041) veya **Windows 11**
+- **İnternet** (yapay zekâ sağlayıcısı ve sesli yanıt için; komut dinleme yerel çalışır)
+- Bir **yapay zekâ hesabı** veya API anahtarı (OpenAI, Google Gemini veya yerel sunucu — LM Studio / Ollama)
+- **Mikrofon** (sesli kullanım için)
 
-## Derleme ve çalıştırma
+---
 
-Derleme çıktıları varsayılan olarak **`%LOCALAPPDATA%\WindowsAiAssistantBuild`** altına yazılır (`Directory.Build.props`). Böylece proje klasöründeki `bin\Debug` DLL’leri antivirüs/sandbox tarafından kilitlenmez; Cursor/VS Code entegre terminalinden `dotnet build` güvenle çalışır.
+## Kurulum
 
-```powershell
-dotnet build WindowsAiAssistant.sln
-dotnet run --project src/WindowsAiAssistant.App
-```
+1. `WindowsAiAssistant-Setup` kurulum dosyasını çalıştırın.
+2. Kurulum sihirbazını tamamlayın.
+3. İlk açılışta **mikrofon izni** istenirse **İzin ver** deyin.
 
-### Antivirüs / MSB3021 (DLL erişim reddedildi)
+Kurulumdan sonra uygulama sistem tepsisinde (saat yanındaki simgeler) çalışabilir.
 
-Hata devam ederse (Controlled Folder Access veya agresif AV):
+---
 
-1. **Cursor/VS Code görevleri:** `Terminal` → `Run Task` → `build` (`.vscode/tasks.json`).
-2. **Defender istisnaları (yönetici PowerShell):**
-   ```powershell
-   Set-ExecutionPolicy -Scope Process Bypass
-   .\scripts\Add-DevAntivirusExclusions.ps1
-   ```
-   Script proje klasörü, LocalAppData build çıktısı, `dotnet`, **Cursor.exe**, **Code.exe** ve MSBuild süreçlerini ekler.
-3. **Temiz derleme:** görev `clean build output (LocalAppData)` veya:
-   ```powershell
-   Remove-Item -Recurse -Force "$env:LOCALAPPDATA\WindowsAiAssistantBuild" -ErrorAction SilentlyContinue
-   dotnet build WindowsAiAssistant.sln
-   ```
+## İlk kurulum (5 dakika)
 
-## Yapılandırma
+### 1. Yapay zekâ bağlantısı
 
-Ayarlar şu sırayla çözülür:
+Uygulamayı açın → **Sağlayıcı Ayarları**:
 
-1. **`src/WindowsAiAssistant.App/appsettings.json`** — varsayılanlar (`Agent`, `Runtime`, `Audio`).
-2. **`appsettings.Local.json`** (opsiyonel, git'e dahil değil) — kullanıcı tercihleri (uyandırma kelimesi, hotkey vb.). Örnek: [`appsettings.Local.json.example`](src/WindowsAiAssistant.App/appsettings.Local.json.example).
-3. **Sağlayıcı profilleri** — uygulama içi "Sağlayıcı Ayarları" sayfası; kalıcı dosya: `%LocalAppData%/WindowsAiAssistant/provider-settings.json`.
-4. **API anahtarı** — önce profilde kayıtlı anahtar, yoksa profilin `ApiKeyEnvVar` ortam değişkeni (örn. `OPENAI_API_KEY`, `GEMINI_API_KEY`).
+| Seçenek | Ne gerekir? |
+|--------|-------------|
+| OpenAI (ChatGPT API) | [platform.openai.com](https://platform.openai.com) üzerinden API anahtarı |
+| Google Gemini | Google AI Studio API anahtarı |
+| Yerel (LM Studio / Ollama) | Bilgisayarınızda çalışan yerel sunucu; anahtar gerekmez |
 
-### Sağlayıcı türleri
+Anahtarı ilgili alana yapıştırıp **Bağlantıyı test et** ile deneyin. Başarılı olunca asistan kullanıma hazırdır.
 
-| Tür | BaseUrl örneği | Not |
-|-----|----------------|-----|
-| OpenAI uyumlu | `https://api.openai.com/v1` | `Authorization: Bearer` |
-| Gemini | `https://generativelanguage.googleapis.com` | `x-goog-api-key` başlığı |
-| Yerel (LM Studio / Ollama) | `http://localhost:1234/v1` | API anahtarı gerekmez |
+### 2. Mikrofon
 
-Vision (ekran görüntüsü) yalnızca profilde etkinse ve model multimodal ise kullanılır.
+**Ayarlar → Ses** bölümünde:
 
-### Ses, tray ve overlay
+- **Mikrofon izni ver** düğmesine basın.
+- Doğru mikrofonu seçin (kulaklık/USB mikrofon kullanıyorsanız listeden onu seçin).
 
-- **Ayarlar** sayfası (`UnifiedSettingsPage`): hotkey, TTS, mikrofon izni, uyandırma kelimesi, ActionGate politikası, UI otomasyon seçenekleri.
-- **Tray + arka plan:** `BackgroundModeEnabled` ile sistem tepsisinde çalışır; `Ctrl+Alt+A` (varsayılan) ile sesli overlay açılır.
-- **Uyandırma kelimesi:** [Vosk](https://alphacephei.com/vosk/) ile yerel dinleme (`vosk-model-small-tr-0.3`, ~35 MB) ilk kullanımda otomatik indirilir.
-- **Komut dinleme (varsayılan):** Whisper (`SpeechEngine=whisper`, `WhisperModelVariant=medium`); `ggml-medium.bin` build ile paketlenir. Alternatif: Vosk veya Windows yerleşik STT. Windows'ta Türkçe paketi yoksa otomatik olarak Whisper kullanılır.
-- **Yeniden başlatma:** Hotkey, wake-word, STT motoru ve UI otomasyon ayarları singleton servislerde tutulur; kayıttan sonra uygulama yeniden başlatılmadan etkinleşmez.
+### 3. Sesli kullanım (isteğe bağlı)
 
-## Loglar
+- **Uyandırma kelimesi:** Açıkken «**Asistan**» diyerek başlatabilirsiniz.
+- **Kısayol tuşu:** Varsayılan `Ctrl+Alt+A` — her yerden sesli paneli açar.
 
-- **Run kayıtları:** `Runtime:LogsDirectory` (varsayılan `logs/runs/*.jsonl`) — her adım için gözlem, karar ve sonuç. Uygulamadaki "Geçmiş" sayfasından listelenir; sonuç kartındaki **Logu Aç** ile dosya konumu açılır.
-- **Ekran görüntüleri:** `Runtime:ScreenshotsDirectory` (varsayılan `logs/screenshots`).
+---
 
-## Yönetici (elevated) pencereler
+## Nasıl kullanılır?
 
-Standart kullanıcı hakkıyla çalışan bir uygulama, **yönetici olarak açılmış** pencereleri UI Automation ile kontrol edemez (Windows UIPI kısıtı). Yükseltilmiş uygulamaları hedeflemeniz gerekiyorsa Windows AI Assistant'ı **"Yönetici olarak çalıştır"** ile başlatın. DPI uyumu için uygulama Per-Monitor v2 manifesti ile gelir.
+### Sesli komut
 
-## Geliştirme planı
+1. **«Asistan»** deyin **veya** `Ctrl+Alt+A` tuşlarına basın.
+2. Alttaki panelde **«Dinliyorum»** görünür — komutunuzu söyleyin.
+3. Konuşmanız bitince **«Anlıyorum»** aşamasına geçer; ardından asistan işleme başlar.
+4. Cevap sesli okunabilir; panelde yazılı özet de görünür.
+5. Aynı oturumda **takip komutu** verebilirsiniz (ör. «şimdi kaydet»).
 
-Fazlar ve durum: [`Docs/Plan/README.md`](Docs/Plan/README.md). Tamamlanan fazların iyileştirme backlog'u: [`Docs/Plan/tamamlanan-fazlar-iyilestirme-notlari.md`](Docs/Plan/tamamlanan-fazlar-iyilestirme-notlari.md).
+Panelde **X** ile iptal edebilirsiniz.
+
+### Yazılı komut
+
+Ana penceredeki **sohbet** alanına yazıp gönderin. Ses kullanmadan da tüm özellikler çalışır.
+
+### Örnek komutlar
+
+- «Hesap makinesini aç»
+- «Masaüstündeki ekran görüntüsünü aç»
+- «Chrome’da YouTube’u aç»
+- «Bu klasördeki PDF dosyalarını listele»
+- «Bugün hava nasıl?» (yalnızca sohbet)
+
+Komutları doğal Türkçe ile verin; tam komut formatı ezberlemeniz gerekmez.
+
+---
+
+## Ayarlar (özet)
+
+**Ayarlar** sayfasından yapılandırabilirsiniz:
+
+| Bölüm | Açıklama |
+|-------|----------|
+| Ses | Mikrofon, uyandırma kelimesi, kısayol, sesli yanıt |
+| Güvenlik | Hassas işlemlerde onay, sesle «evet/hayır» |
+| Başlangıç | Windows açılışında arka planda başlat |
+| Geliştirici modu | Teknik ayrıntıları gösterir (normal kullanımda kapalı bırakın) |
+
+Ayarları kaydettikten sonra **ses ve kısayol değişiklikleri** için uygulamayı bir kez kapatıp açmanız gerekebilir.
+
+---
+
+## Sistem tepsisi
+
+Uygulama arka planda çalışırken tepsi simgesine sağ tıklayın:
+
+- **Ana pencereyi aç**
+- **Sesli asistanı başlat** (overlay)
+- **Dinlemeyi aç/kapat** (uyandırma + kısayol)
+- **Çıkış**
+
+Tepsi simgesi üzerine gelince «dinleniyor» veya «dinleme kapalı» yazar.
+
+---
+
+## Sık karşılaşılan durumlar
+
+### «Asistan» dememe rağmen açılmıyor
+
+- Tepside dinlemenin **açık** olduğundan emin olun.
+- `Ctrl+Alt+A` ile deneyin — çalışıyorsa sorun uyandırma kelimesindedir.
+- **Ayarlar → Ses:** Mikrofon izni ve doğru cihaz seçimi.
+- Çok gürültülü ortamda **«Gerçek konuşma algılandığında uyan»** seçeneğini kapatıp tekrar deneyin.
+
+### «Dinliyorum» ekranında uzun süre kalıyor
+
+- Net ve yeterince yüksek sesle konuşun.
+- Komuttan sonra kısa bir süre susun (sistem konuşmanızın bittiğini algılar).
+- İlk komutta işlem birkaç saniye sürebilir (ses tanıma modeli yüklenir).
+
+### «Ses duyamadım» uyarısı
+
+- Windows **Ayarlar → Gizlilik → Mikrofon** bölümünde uygulama için izin verin.
+- Başka bir uygulama mikrofonu kullanıyorsa kapatın (Discord, Zoom vb.).
+- Farklı bir mikrofon seçip tekrar deneyin.
+
+### Asistan bir işlemi yapamıyor
+
+- **Yönetici olarak çalışan** programlar (bazı kurulum sihirbazları, Yönetici CMD) normal modda kontrol edilemez. Gerekirse uygulamayı **Yönetici olarak çalıştır** ile açın.
+- İnternet bağlantısı ve API anahtarının geçerli olduğunu kontrol edin.
+- **Geçmiş** sayfasından son çalışmanın hata mesajına bakın.
+
+### Sesli yanıt gelmiyor
+
+- **Ayarlar → Ses:** «Sesli yanıt» açık mı?
+- Edge ses motoru internet gerektirir; kapalıysa Windows yerel sesi kullanılır.
+
+---
+
+## Gizlilik ve veri
+
+- **Uyandırma kelimesi** ve **komut dinleme** büyük ölçüde bilgisayarınızda işlenir.
+- **Yapay zekâ istekleri** seçtiğiniz sağlayıcıya (OpenAI, Gemini vb.) gider; komut metni ve gerekli bağlam paylaşılır.
+- **Sesli yanıt (Edge)** Microsoft ses hizmetini kullanır; internet gerekir.
+- İşlem kayıtları uygulama klasöründe tutulur; **Geçmiş** sayfasından görüntüleyebilirsiniz.
+
+---
+
+## Kaldırma
+
+Windows **Ayarlar → Uygulamalar → Yüklü uygulamalar** listesinden **Windows AI Assistant** öğesini kaldırın.
+
+---
+
+## Destek
+
+Sorun yaşarsanız:
+
+1. Uygulamayı tamamen kapatıp yeniden açın.
+2. Mikrofon izni ve API anahtarını kontrol edin.
+3. Önce yazılı komutla (sohbet) deneyin — çalışıyorsa sorun yalnızca ses tarafındadır.
+
+---
+
+*Windows AI Assistant — masaüstünüz için sesli ve yazılı yapay zekâ yardımcısı.*
