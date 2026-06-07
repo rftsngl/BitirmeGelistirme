@@ -503,14 +503,29 @@
                             </Grid>
                             <Border Style="{StaticResource SettingDividerStyle}" />
 
+                            <ComboBox Header="Sesli okuma motoru"
+                                      ItemsSource="{x:Bind AppVM.TtsEngineChoices, Mode=OneWay}"
+                                      SelectedItem="{Binding SelectedTtsEngine, Mode=TwoWay}"
+                                      HorizontalAlignment="Stretch" />
+
+                            <TextBox Header="Sesli okuma sesi" Text="{Binding TtsVoiceName, Mode=TwoWay}"
+                                     PlaceholderText="tr-TR-EmelNeural" HorizontalAlignment="Stretch" />
+                            <TextBlock Text="Edge modunda: tr-TR-EmelNeural (kadın) veya tr-TR-AhmetNeural (erkek). Windows modunda: Tolga."
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
+
                             <TextBox Header="Konuşma dili" Text="{Binding SpeechLanguage, Mode=TwoWay}"
                                      PlaceholderText="tr-TR" HorizontalAlignment="Stretch" />
                             <TextBlock Text="Türkçe için tr-TR kullanın. Vosk ve sesli okuma bu dile göre ayarlanır."
                                        Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
 
-                            <NumberBox Header="Dinleme süresi (saniye)" Value="{Binding SpeechListenTimeoutSeconds, Mode=TwoWay}"
+                            <NumberBox Header="Konuşma bekleme süresi (saniye)" Value="{Binding SpeechListenTimeoutSeconds, Mode=TwoWay}"
                                        Minimum="3" Maximum="120" SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch" />
-                            <TextBlock Text="Komut penceresi açıldıktan sonra mikrofonun kaç saniye dinleyeceğini belirler."
+                            <TextBlock Text="Konuşmaya başlamanız için en fazla beklenecek süre. Konuşmayı bitirince VAD hemen devreye girer."
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
+
+                            <NumberBox Header="Sessizlik algılama (ms)" Value="{Binding SilenceEndMilliseconds, Mode=TwoWay}"
+                                       Minimum="300" Maximum="3000" SpinButtonPlacementMode="Inline" HorizontalAlignment="Stretch" />
+                            <TextBlock Text="Konuşma bittikten sonra kaydı sonlandırmak için gereken sessizlik. Düşük = daha hızlı tepki."
                                        Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
 
                             <NumberBox Header="Sonuç penceresi kapanma süresi (saniye)" Value="{Binding OverlayAutoCloseSeconds, Mode=TwoWay}"

@@ -6,13 +6,16 @@ using WindowsAiAssistant.App.Configuration;
 namespace WindowsAiAssistant.App.Audio;
 
 /// <summary>
-/// Vosk ile yerel komut dinleme (overlay STT).
+/// Vosk ile yerel komut dinleme. VAD ile konusma bitince kaydi hemen sonlandirir.
 /// </summary>
 public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
 {
     private readonly AudioOptions _options;
     private readonly SpeechReadinessService _readiness;
     private readonly VoskWakeWordModelService _models;
+    private readonly object _modelGate = new();
+    private Model? _cachedModel;
+    private string? _cachedModelPath;
 
     public VoskSpeechToTextService(
         AudioOptions options,
@@ -24,37 +27,107 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
         _models = models ?? throw new ArgumentNullException(nameof(models));
     }
 
-    public async Task<string?> ListenOnceAsync(CancellationToken cancellationToken = default)
+    public async Task<string?> ListenOnceAsync(
+        CancellationToken cancellationToken = default,
+        int? listenTimeoutSeconds = null,
+        IProgress<SpeechListenProgress>? progress = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _readiness.EnsureReadyForListenAsync(cancellationToken).ConfigureAwait(false);
 
         var modelPath = await _models.EnsureSttModelAsync(cancellationToken).ConfigureAwait(false);
-        var pcm = await CapturePcmAsync(cancellationToken).ConfigureAwait(false);
-        if (pcm.Length == 0)
-        {
-            return null;
-        }
+        var model = GetOrLoadModel(modelPath);
 
-        Model? model = null;
         VoskRecognizer? recognizer = null;
+        WaveInEvent? waveIn = null;
+        var captureDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         try
         {
             Vosk.Vosk.SetLogLevel(-1);
-            model = new Model(modelPath);
             recognizer = new VoskRecognizer(model, 16000f);
             recognizer.SetMaxAlternatives(0);
             recognizer.SetWords(false);
 
-            const int chunkSize = 4000;
-            for (var offset = 0; offset < pcm.Length; offset += chunkSize)
+            var maxWaitSeconds = Math.Clamp(listenTimeoutSeconds ?? _options.SpeechListenTimeoutSeconds, 3, 60);
+            var vad = new VoiceActivityDetector(_options.SilenceEndMilliseconds);
+            var deviceNumber = ResolveDeviceNumber(_options.InputDeviceIndex);
+
+            waveIn = new WaveInEvent
+            {
+                DeviceNumber = deviceNumber,
+                WaveFormat = new WaveFormat(16000, 16, 1),
+                BufferMilliseconds = 30
+            };
+
+            waveIn.DataAvailable += (_, args) =>
+            {
+                if (args.BytesRecorded <= 0 || recognizer is null)
+                {
+                    return;
+                }
+
+                try
+                {
+                    var span = args.Buffer.AsSpan(0, args.BytesRecorded);
+                    var (level, isSpeech) = vad.Process(span);
+
+                    recognizer.AcceptWaveform(args.Buffer, args.BytesRecorded);
+
+                    string? partial = null;
+                    var partialJson = recognizer.PartialResult();
+                    partial = ExtractPartialText(partialJson);
+
+                    progress?.Report(new SpeechListenProgress
+                    {
+                        AudioLevel = level,
+                        IsSpeaking = isSpeech,
+                        PartialTranscript = partial
+                    });
+
+                    if (vad.ShouldEndAfterSpeech())
+                    {
+                        captureDone.TrySetResult();
+                    }
+                    else if (vad.ExceededMaxWait(maxWaitSeconds))
+                    {
+                        captureDone.TrySetResult();
+                    }
+                }
+                catch
+                {
+                    // frame hatalarini yut
+                }
+            };
+
+            waveIn.RecordingStopped += (_, _) => captureDone.TrySetResult();
+
+            try
+            {
+                waveIn.StartRecording();
+            }
+            catch (Exception ex)
+            {
+                throw new SpeechAccessException(
+                    "Mikrofon başka bir oturum tarafından kullanılıyor olabilir. Lütfen tekrar deneyin.",
+                    ex);
+            }
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(maxWaitSeconds + 20));
+
+            var completed = await Task.WhenAny(
+                captureDone.Task,
+                Task.Delay(Timeout.Infinite, timeoutCts.Token)).ConfigureAwait(false);
+
+            if (completed != captureDone.Task && cancellationToken.IsCancellationRequested)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var length = Math.Min(chunkSize, pcm.Length - offset);
-                var chunk = new byte[length];
-                Buffer.BlockCopy(pcm, offset, chunk, 0, length);
-                recognizer.AcceptWaveform(chunk, length);
             }
+
+            waveIn.StopRecording();
+            await captureDone.Task.ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             return ExtractText(recognizer.FinalResult());
         }
@@ -62,60 +135,48 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
         {
             throw;
         }
-        catch
+        catch (SpeechAccessException)
         {
-            return null;
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new SpeechAccessException($"Vosk komut dinleme başarısız: {ex.Message}", ex);
         }
         finally
         {
+            if (waveIn is not null)
+            {
+                try
+                {
+                    waveIn.StopRecording();
+                    waveIn.Dispose();
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+
             recognizer?.Dispose();
-            model?.Dispose();
         }
     }
 
-    private async Task<byte[]> CapturePcmAsync(CancellationToken cancellationToken)
+    private Model GetOrLoadModel(string modelPath)
     {
-        var timeoutSeconds = Math.Clamp(_options.SpeechListenTimeoutSeconds, 3, 60);
-        var deviceNumber = ResolveDeviceNumber(_options.InputDeviceIndex);
-        var pcm = new List<byte>();
-
-        using var waveIn = new WaveInEvent
+        lock (_modelGate)
         {
-            DeviceNumber = deviceNumber,
-            WaveFormat = new WaveFormat(16000, 16, 1),
-            BufferMilliseconds = 50
-        };
-
-        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        waveIn.DataAvailable += (_, args) =>
-        {
-            lock (pcm)
+            if (_cachedModel is not null &&
+                string.Equals(_cachedModelPath, modelPath, StringComparison.OrdinalIgnoreCase))
             {
-                pcm.AddRange(args.Buffer.Take(args.BytesRecorded));
+                return _cachedModel;
             }
-        };
-        waveIn.RecordingStopped += (_, _) => stopped.TrySetResult();
 
-        waveIn.StartRecording();
-
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-        try
-        {
-            await Task.Delay(Timeout.Infinite, timeoutCts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // timeout veya iptal
-        }
-
-        waveIn.StopRecording();
-        await stopped.Task.ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        lock (pcm)
-        {
-            return pcm.ToArray();
+            _cachedModel?.Dispose();
+            Vosk.Vosk.SetLogLevel(-1);
+            _cachedModel = new Model(modelPath);
+            _cachedModelPath = modelPath;
+            return _cachedModel;
         }
     }
 
@@ -143,6 +204,30 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
         return null;
     }
 
+    private static string? ExtractPartialText(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.TryGetProperty("partial", out var partialNode))
+            {
+                var text = partialNode.GetString()?.Trim();
+                return string.IsNullOrWhiteSpace(text) ? null : text;
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
+    }
+
     private static int ResolveDeviceNumber(int requested)
     {
         if (requested < 0)
@@ -155,5 +240,11 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
 
     public void Dispose()
     {
+        lock (_modelGate)
+        {
+            _cachedModel?.Dispose();
+            _cachedModel = null;
+            _cachedModelPath = null;
+        }
     }
 }

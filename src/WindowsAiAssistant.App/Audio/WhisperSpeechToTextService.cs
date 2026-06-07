@@ -23,7 +23,10 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
     }
 
-    public async Task<string?> ListenOnceAsync(CancellationToken cancellationToken = default)
+    public async Task<string?> ListenOnceAsync(
+        CancellationToken cancellationToken = default,
+        int? listenTimeoutSeconds = null,
+        IProgress<SpeechListenProgress>? progress = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _readiness.EnsureReadyForListenAsync(cancellationToken).ConfigureAwait(false);
@@ -31,7 +34,7 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         float[]? samples;
         try
         {
-            samples = await CaptureSamplesAsync(cancellationToken).ConfigureAwait(false);
+            samples = await CaptureSamplesAsync(cancellationToken, listenTimeoutSeconds).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -73,9 +76,9 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         }
     }
 
-    private async Task<float[]?> CaptureSamplesAsync(CancellationToken cancellationToken)
+    private async Task<float[]?> CaptureSamplesAsync(CancellationToken cancellationToken, int? listenTimeoutSeconds = null)
     {
-        var timeoutSeconds = Math.Clamp(_options.SpeechListenTimeoutSeconds, 3, 60);
+        var timeoutSeconds = Math.Clamp(listenTimeoutSeconds ?? _options.SpeechListenTimeoutSeconds, 3, 60);
         var deviceNumber = ResolveDeviceNumber(_options.InputDeviceIndex);
         var pcm = new List<byte>();
 

@@ -30,7 +30,12 @@ public sealed class ActionGate
         "read_element",
         "list_windows",
         "wmi_query",
-        "capture_screen"
+        "capture_screen",
+        "event_log",
+        "network_status",
+        "perf_counter",
+        "file_search",
+        "audio_power"
     };
 
     private static readonly HashSet<string> KnownActions = new(StringComparer.OrdinalIgnoreCase)
@@ -42,7 +47,10 @@ public sealed class ActionGate
         "focus_window", "window_state", "move_window", "list_windows", "launch",
         "mouse_click", "mouse_scroll", "mouse_drag", "shell",
         "capture_screen", "notify", "wmi_query", "schedule_task", "jump_list",
-        "com_invoke", "verify_user", "global_hook"
+        "com_invoke", "verify_user", "global_hook",
+        "service_control", "event_log", "registry_op", "clipboard", "install_package",
+        "network_status", "audio_power", "perf_counter", "file_search", "notification_listen",
+        "shell_session", "file_watch", "credential_store"
     };
 
     private static readonly string[] DestructiveShellPatterns =
@@ -211,13 +219,40 @@ public sealed class ActionGate
             "mouse_click" => UsesFreeCoordinates(action) ? ActionRisk.Sensitive : ActionRisk.Normal,
             "shell" => IsDestructiveShell(action) ? ActionRisk.Destructive : ActionRisk.Sensitive,
             "launch" => IsKnownLaunchTarget(action) ? ActionRisk.Normal : ActionRisk.Sensitive,
+            "install_package" => IsPackageUninstall(action) ? ActionRisk.Destructive : ActionRisk.Sensitive,
+            "registry_op" => IsRegistryWrite(action) ? ActionRisk.Sensitive : ActionRisk.Normal,
+            "service_control" => IsServiceMutation(action) ? ActionRisk.Sensitive : ActionRisk.Normal,
             "open_app" or "open_url" or "type_text" or "click_element" or "focus_element" or
             "select_element" or "expand_collapse" or "invoke_toggle" or "scroll" or
             "focus_window" or "move_window" or "mouse_scroll" or "notify" or "jump_list" => ActionRisk.Normal,
-            "schedule_task" or "com_invoke" or "global_hook" => ActionRisk.Sensitive,
+            "schedule_task" or "com_invoke" or "global_hook" or
+            "clipboard" or "audio_power" or "shell_session" or "file_watch" or
+            "credential_store" or "notification_listen" => ActionRisk.Sensitive,
             "verify_user" => ActionRisk.Safe,
             _ => ActionRisk.Normal
         };
+    }
+
+    private static bool IsPackageUninstall(AgentAction action)
+    {
+        var mode = ActionParameterReader.GetTargetOrParameter(action, "mode");
+        return mode?.Equals("uninstall", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static bool IsRegistryWrite(AgentAction action)
+    {
+        var mode = ActionParameterReader.GetTargetOrParameter(action, "mode");
+        return mode?.Equals("write", StringComparison.OrdinalIgnoreCase) == true ||
+               mode?.Equals("delete", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static bool IsServiceMutation(AgentAction action)
+    {
+        var mode = ActionParameterReader.GetTargetOrParameter(action, "mode");
+        return mode is not null && (
+            mode.Equals("start", StringComparison.OrdinalIgnoreCase) ||
+            mode.Equals("stop", StringComparison.OrdinalIgnoreCase) ||
+            mode.Equals("restart", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsCloseState(AgentAction action)

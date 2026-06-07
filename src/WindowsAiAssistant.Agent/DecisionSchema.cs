@@ -55,7 +55,20 @@ public static class DecisionSchema
         "jump_list",
         "com_invoke",
         "verify_user",
-        "global_hook"
+        "global_hook",
+        "service_control",
+        "event_log",
+        "registry_op",
+        "clipboard",
+        "install_package",
+        "network_status",
+        "audio_power",
+        "perf_counter",
+        "file_search",
+        "notification_listen",
+        "shell_session",
+        "file_watch",
+        "credential_store"
     };
 
     public const string JsonSchemaExample = """

@@ -43,7 +43,20 @@ public sealed class AgentLoop
         "jump_list",
         "com_invoke",
         "verify_user",
-        "global_hook"
+        "global_hook",
+        "service_control",
+        "event_log",
+        "registry_op",
+        "clipboard",
+        "install_package",
+        "network_status",
+        "audio_power",
+        "perf_counter",
+        "file_search",
+        "notification_listen",
+        "shell_session",
+        "file_watch",
+        "credential_store"
     };
 
     private static readonly JsonSerializerOptions LogJsonOptions = new() { WriteIndented = false };
@@ -122,48 +135,66 @@ public sealed class AgentLoop
                 cancellationToken).ConfigureAwait(false);
             lastObservation = observation;
 
-            var prompt = _promptBuilder.Build(session.UserGoal, observation, session.Steps, triggerSource);
-            Report(progress, stepIndex, maxSteps, "llm", $"Adim {stepIndex + 1} karar isteniyor");
+            AgentDecision decision;
+            string llmRawOutput = string.Empty;
 
-            var llmContent = await RequestLlmDecisionAsync(prompt, observation, cancellationToken).ConfigureAwait(false);
-            if (llmContent.Error is not null)
+            var fastDecision = GoalRoutingHints.TryBuildFastAudioDecision(session.UserGoal);
+            if (fastDecision is not null &&
+                !session.Steps.Any(step =>
+                    string.Equals(step.ParsedDecision?.Action, "audio_power", StringComparison.OrdinalIgnoreCase)))
             {
-                return Fail(session, llmContent.Error, lastObservation, AgentErrorKind.Provider);
+                decision = fastDecision;
+                llmRawOutput = "{\"fastRoute\":\"audio_power\",\"mode\":\"" +
+                               fastDecision.Parameters.GetValueOrDefault("mode") + "\"}";
+                Report(progress, stepIndex, maxSteps, "llm", "Ses komutu — dogrudan audio_power");
             }
-
-            var parseResult = _decisionParser.Parse(llmContent.Content!);
-            if (!parseResult.Success)
+            else
             {
-                var retryReason = parseResult.ErrorMessage ?? "bilinmeyen sebep";
-                var retryPrompt = prompt + Environment.NewLine +
-                    $"Your previous reply was invalid ({retryReason}). Return ONLY one valid JSON object matching the schema.";
-                llmContent = await RequestLlmDecisionAsync(retryPrompt, observation, cancellationToken).ConfigureAwait(false);
+                var prompt = _promptBuilder.Build(session.UserGoal, observation, session.Steps, triggerSource);
+                Report(progress, stepIndex, maxSteps, "llm", $"Adim {stepIndex + 1} karar isteniyor");
+
+                var llmContent = await RequestLlmDecisionAsync(prompt, observation, cancellationToken).ConfigureAwait(false);
                 if (llmContent.Error is not null)
                 {
                     return Fail(session, llmContent.Error, lastObservation, AgentErrorKind.Provider);
                 }
 
-                await _runLogger.AppendAsync(
-                    new AgentRunLog
+                var parseResult = _decisionParser.Parse(llmContent.Content!);
+                if (!parseResult.Success)
+                {
+                    var retryReason = parseResult.ErrorMessage ?? "bilinmeyen sebep";
+                    var retryPrompt = prompt + Environment.NewLine +
+                        $"Your previous reply was invalid ({retryReason}). Return ONLY one valid JSON object matching the schema.";
+                    llmContent = await RequestLlmDecisionAsync(retryPrompt, observation, cancellationToken).ConfigureAwait(false);
+                    if (llmContent.Error is not null)
                     {
-                        RunId = session.RunId,
-                        StepIndex = stepIndex,
-                        UserGoal = session.UserGoal,
-                        ObservationSummaryJson = $"{{\"parseRetryReason\":\"{Escape(retryReason)}\"}}",
-                        LlmRawOutput = llmContent.Content,
-                        Timestamp = DateTimeOffset.UtcNow
-                    },
-                    cancellationToken).ConfigureAwait(false);
+                        return Fail(session, llmContent.Error, lastObservation, AgentErrorKind.Provider);
+                    }
 
-                parseResult = _decisionParser.Parse(llmContent.Content!);
+                    await _runLogger.AppendAsync(
+                        new AgentRunLog
+                        {
+                            RunId = session.RunId,
+                            StepIndex = stepIndex,
+                            UserGoal = session.UserGoal,
+                            ObservationSummaryJson = $"{{\"parseRetryReason\":\"{Escape(retryReason)}\"}}",
+                            LlmRawOutput = llmRawOutput,
+                            Timestamp = DateTimeOffset.UtcNow
+                        },
+                        cancellationToken).ConfigureAwait(false);
+
+                    parseResult = _decisionParser.Parse(llmContent.Content!);
+                }
+
+                if (!parseResult.Success || parseResult.Decision is null)
+                {
+                    return Fail(session, parseResult.ErrorMessage ?? "Karar okunamadi.", lastObservation, AgentErrorKind.Decision);
+                }
+
+                decision = parseResult.Decision;
+                llmRawOutput = llmContent.Content!;
             }
 
-            if (!parseResult.Success || parseResult.Decision is null)
-            {
-                return Fail(session, parseResult.ErrorMessage ?? "Karar okunamadi.", lastObservation, AgentErrorKind.Decision);
-            }
-
-            var decision = parseResult.Decision;
             var agentAction = decision.ToAgentAction();
 
             // #region agent log
@@ -256,7 +287,7 @@ public sealed class AgentLoop
             session.Steps.Add(new AgentStep
             {
                 Index = stepIndex,
-                LlmRawOutput = llmContent.Content,
+                LlmRawOutput = llmRawOutput,
                 ParsedDecision = decision,
                 ActionResult = actionResult
             });
@@ -293,7 +324,7 @@ public sealed class AgentLoop
                     ScreenshotPath = observation.Screenshot?.FilePath,
                     WindowsSummaryJson = observation.WindowsToJson(),
                     UiTreeSummaryJson = observation.UiTreeToJson(),
-                    LlmRawOutput = llmContent.Content,
+                    LlmRawOutput = llmRawOutput,
                     ParsedDecisionJson = JsonSerializer.Serialize(decision, LogJsonOptions),
                     GateDecisionJson = gateLogJson,
                     ActionResultJson = JsonSerializer.Serialize(actionResult, LogJsonOptions),
@@ -308,6 +339,30 @@ public sealed class AgentLoop
             if (!actionResult.Success)
             {
                 continue;
+            }
+
+            if (actionResult.Success &&
+                decision.Action.Equals("audio_power", StringComparison.OrdinalIgnoreCase) &&
+                GoalRoutingHints.TryBuildFastAudioDecision(session.UserGoal) is not null)
+            {
+                session.IsComplete = true;
+                var audioMessage = ResolveAssistantMessage(decision, actionResult);
+                Report(progress, stepIndex, maxSteps, "tamamlandi", audioMessage);
+                await _runLogger.AppendAsync(
+                    new AgentRunLog
+                    {
+                        RunId = session.RunId,
+                        StepIndex = stepIndex,
+                        UserGoal = session.UserGoal,
+                        ObservationSummaryJson = observation.ToJsonSummary(),
+                        LlmRawOutput = llmRawOutput,
+                        ParsedDecisionJson = JsonSerializer.Serialize(decision, LogJsonOptions),
+                        ActionResultJson = JsonSerializer.Serialize(actionResult, LogJsonOptions),
+                        Timestamp = DateTimeOffset.UtcNow
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                return Complete(session, audioMessage, observation, reachedMaxSteps: false);
             }
 
             if (!ShouldContinueLoop(decision, out var stopReason))
@@ -532,7 +587,8 @@ public sealed class AgentLoop
 
         if (!string.IsNullOrWhiteSpace(actionResult.Message) &&
             (decision.Action.Equals("respond", StringComparison.OrdinalIgnoreCase) ||
-             decision.Action.Equals("ask_user", StringComparison.OrdinalIgnoreCase)))
+             decision.Action.Equals("ask_user", StringComparison.OrdinalIgnoreCase) ||
+             decision.Action.Equals("audio_power", StringComparison.OrdinalIgnoreCase)))
         {
             return actionResult.Message;
         }

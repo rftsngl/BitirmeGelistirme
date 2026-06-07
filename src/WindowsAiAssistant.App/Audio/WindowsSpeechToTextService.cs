@@ -14,7 +14,10 @@ public sealed class WindowsSpeechToTextService : ISpeechToTextService
         _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
     }
 
-    public async Task<string?> ListenOnceAsync(CancellationToken cancellationToken = default)
+    public async Task<string?> ListenOnceAsync(
+        CancellationToken cancellationToken = default,
+        int? listenTimeoutSeconds = null,
+        IProgress<SpeechListenProgress>? progress = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _readiness.EnsureReadyForListenAsync(cancellationToken).ConfigureAwait(false);
@@ -29,7 +32,8 @@ public sealed class WindowsSpeechToTextService : ISpeechToTextService
             await recognizer.CompileConstraintsAsync().AsTask().ConfigureAwait(false);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(_options.SpeechListenTimeoutSeconds, 3, 60)));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(
+                Math.Clamp(listenTimeoutSeconds ?? _options.SpeechListenTimeoutSeconds, 3, 60)));
 
             var recognizeTask = recognizer.RecognizeAsync().AsTask();
             var completed = await Task.WhenAny(recognizeTask, Task.Delay(Timeout.Infinite, timeoutCts.Token))

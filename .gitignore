@@ -11,11 +11,10 @@ artifacts/
 
 # Visual Studio / MSBuild
 .vs/
+.tmp-edgetts-probe/
 .vscode/*
 !.vscode/extensions.json
-!.vscode/tasks.json
 !.vscode/launch.json
-!.vscode/settings.json
 .cursor/
 .cursorignore
 *.user

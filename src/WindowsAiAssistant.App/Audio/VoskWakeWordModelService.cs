@@ -93,7 +93,7 @@ public sealed class VoskWakeWordModelService
             if (!IsValidModelDirectory(configured))
             {
                 throw new SpeechAccessException(
-                    $"Vosk model klasörü geçersiz: {configured}. 'am/final.mdl' dosyası bulunamadı.");
+                    $"Vosk model klasörü geçersiz: {configured}. 'am/final.mdl' veya 'final.mdl' bulunamadı.");
             }
 
             return configured;
@@ -106,10 +106,16 @@ public sealed class VoskWakeWordModelService
 
         var descriptor = Catalog[languageKey];
         var targetDirectory = GetModelDirectory(descriptor.FolderName);
+        TryPromoteStagedModel(descriptor.FolderName);
+        if (TryResolveModelDirectory(languageKey, out existing))
+        {
+            return existing;
+        }
 
         await _downloadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            TryPromoteStagedModel(descriptor.FolderName);
             if (TryResolveModelDirectory(languageKey, out existing))
             {
                 return existing;
@@ -117,7 +123,11 @@ public sealed class VoskWakeWordModelService
 
             Directory.CreateDirectory(_modelsRoot);
             var zipPath = Path.Combine(_modelsRoot, $"{descriptor.FolderName}.zip");
-            await DownloadFileAsync(descriptor.DownloadUrl, zipPath, cancellationToken).ConfigureAwait(false);
+            if (!File.Exists(zipPath))
+            {
+                await DownloadFileAsync(descriptor.DownloadUrl, zipPath, cancellationToken).ConfigureAwait(false);
+            }
+
             ExtractModelZip(zipPath, _modelsRoot, descriptor.FolderName);
 
             if (!TryResolveModelDirectory(languageKey, out existing))
@@ -159,6 +169,11 @@ public sealed class VoskWakeWordModelService
 
         foreach (var candidate in Directory.GetDirectories(_modelsRoot))
         {
+            if (candidate.EndsWith("_extract", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (!IsValidModelDirectory(candidate))
             {
                 continue;
@@ -171,6 +186,13 @@ public sealed class VoskWakeWordModelService
                 path = candidate;
                 return true;
             }
+        }
+
+        var staged = FindModelDirectory(Path.Combine(_modelsRoot, "_extract"));
+        if (!string.IsNullOrWhiteSpace(staged))
+        {
+            path = staged;
+            return true;
         }
 
         return false;
@@ -208,8 +230,76 @@ public sealed class VoskWakeWordModelService
         return primary is "en" ? "en" : "tr";
     }
 
-    private static bool IsValidModelDirectory(string path) =>
-        Directory.Exists(path) && File.Exists(Path.Combine(path, "am", "final.mdl"));
+    private static bool IsValidModelDirectory(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return false;
+        }
+
+        if (File.Exists(Path.Combine(path, "am", "final.mdl")))
+        {
+            return true;
+        }
+
+        // vosk-model-small-tr-0.3 gibi bazi modeller final.mdl dosyasini kok dizinde tutar.
+        return File.Exists(Path.Combine(path, "final.mdl"));
+    }
+
+    private static string? FindModelDirectory(string root)
+    {
+        if (IsValidModelDirectory(root))
+        {
+            return root;
+        }
+
+        if (!Directory.Exists(root))
+        {
+            return null;
+        }
+
+        foreach (var directory in Directory.GetDirectories(root))
+        {
+            var nested = FindModelDirectory(directory);
+            if (!string.IsNullOrWhiteSpace(nested))
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
+    private void TryPromoteStagedModel(string expectedFolderName)
+    {
+        var stagedRoot = Path.Combine(_modelsRoot, "_extract");
+        var stagedModel = FindModelDirectory(stagedRoot);
+        if (string.IsNullOrWhiteSpace(stagedModel))
+        {
+            return;
+        }
+
+        var finalDirectory = GetModelDirectory(expectedFolderName);
+        if (Directory.Exists(finalDirectory))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(_modelsRoot);
+        Directory.Move(stagedModel, finalDirectory);
+
+        try
+        {
+            if (Directory.Exists(stagedRoot))
+            {
+                Directory.Delete(stagedRoot, recursive: true);
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+    }
 
     private static async Task DownloadFileAsync(string url, string destination, CancellationToken cancellationToken)
     {
@@ -227,19 +317,23 @@ public sealed class VoskWakeWordModelService
     private static void ExtractModelZip(string zipPath, string destinationRoot, string expectedFolderName)
     {
         var extractRoot = Path.Combine(destinationRoot, "_extract");
-        if (Directory.Exists(extractRoot))
+        var existingModel = FindModelDirectory(extractRoot);
+        if (string.IsNullOrWhiteSpace(existingModel))
         {
-            Directory.Delete(extractRoot, recursive: true);
+            if (Directory.Exists(extractRoot))
+            {
+                Directory.Delete(extractRoot, recursive: true);
+            }
+
+            Directory.CreateDirectory(extractRoot);
+            ZipFile.ExtractToDirectory(zipPath, extractRoot);
         }
 
-        Directory.CreateDirectory(extractRoot);
-        ZipFile.ExtractToDirectory(zipPath, extractRoot);
-
-        var extractedModelDir = Directory.GetDirectories(extractRoot)
-            .FirstOrDefault(IsValidModelDirectory);
+        var extractedModelDir = FindModelDirectory(extractRoot);
         if (string.IsNullOrWhiteSpace(extractedModelDir))
         {
-            throw new SpeechAccessException("İndirilen Vosk modeli arşivi tanınamadı.");
+            throw new SpeechAccessException(
+                "İndirilen Vosk modeli arşivi tanınamadı. Beklenen yapı: am/final.mdl veya final.mdl.");
         }
 
         var finalDirectory = Path.Combine(destinationRoot, expectedFolderName);

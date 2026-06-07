@@ -14,8 +14,35 @@ public sealed class AudioOptions
     public bool GlobalHotKeyEnabled { get; set; } = true;
     public string GlobalHotKey { get; set; } = "Ctrl+Alt+A";
     public bool TextToSpeechEnabled { get; set; } = true;
+
+    /// <summary>
+    /// TTS motoru: edge (neural, dogal) veya windows (yerel).
+    /// </summary>
+    public string TtsEngine { get; set; } = "edge";
+
+    /// <summary>
+    /// TTS sesi (or. tr-TR-EmelNeural). Bos ise dil icin varsayilan neural ses secilir.
+    /// </summary>
+    public string TtsVoiceName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Konusma hizi carpani (0.5–2.0). 1.0 = normal.
+    /// </summary>
+    public double TtsSpeakingRate { get; set; } = 0.95;
+
     public string SpeechLanguage { get; set; } = "tr-TR";
-    public int SpeechListenTimeoutSeconds { get; set; } = 12;
+    public int SpeechListenTimeoutSeconds { get; set; } = 8;
+
+    /// <summary>
+    /// Konusma bittikten sonra kaydi bitirmek icin gereken susma suresi (ms).
+    /// </summary>
+    public int SilenceEndMilliseconds { get; set; } = 700;
+
+    /// <summary>
+    /// Asistan cevap verdikten sonra takip komutu icin dinleme suresi (saniye).
+    /// </summary>
+    public int FollowUpListenTimeoutSeconds { get; set; } = 10;
+
     public int OverlayAutoCloseSeconds { get; set; } = 10;
     public bool StartWithWindows { get; set; }
 

@@ -82,34 +82,156 @@ public sealed class OverlaySessionRunner
 
         try
         {
-        await window.DispatcherQueue.EnqueueAsync(() =>
-        {
-            _viewModel.ResetForSession();
-            window.ShowAndPosition();
-            return Task.CompletedTask;
-        }).ConfigureAwait(true);
-
-        if (!_providerStatus.IsReady)
-        {
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
-                _viewModel.SetError(_providerStatus.ReadyReason);
+                _viewModel.ResetForSession();
+                window.ShowAndPosition();
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
-            await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
-            return;
-        }
 
-        string? transcript;
+            if (!_providerStatus.IsReady)
+            {
+                await window.DispatcherQueue.EnqueueAsync(() =>
+                {
+                    _viewModel.SetError(_providerStatus.ReadyReason);
+                    return Task.CompletedTask;
+                }).ConfigureAwait(true);
+                await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
+                return;
+            }
+
+            var isFollowUp = false;
+            while (!token.IsCancellationRequested)
+            {
+                var listenTimeout = isFollowUp
+                    ? _audioOptions.FollowUpListenTimeoutSeconds
+                    : _audioOptions.SpeechListenTimeoutSeconds;
+
+                var transcript = await AcquireTranscriptAsync(window, token, listenTimeout, isFollowUp)
+                    .ConfigureAwait(true);
+                if (string.IsNullOrWhiteSpace(transcript))
+                {
+                    if (!isFollowUp)
+                    {
+                        await window.DispatcherQueue.EnqueueAsync(() =>
+                        {
+                            _viewModel.SetManualInputPrompt(
+                                "Ses duyamadım. Komutu aşağıya yazıp Gönder'e basabilirsiniz. Mikrofon izni ve seçili mikrofonu kontrol edin.");
+                            return Task.CompletedTask;
+                        }).ConfigureAwait(true);
+
+                        transcript = await WaitForManualInputAsync(token).ConfigureAwait(true);
+                        if (string.IsNullOrWhiteSpace(transcript))
+                        {
+                            await window.DispatcherQueue.EnqueueAsync(() =>
+                            {
+                                _viewModel.SetHidden();
+                                window.HideOverlay();
+                                return Task.CompletedTask;
+                            }).ConfigureAwait(true);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                var result = await ExecuteAgentAsync(window, transcript, token).ConfigureAwait(true);
+                if (result is null)
+                {
+                    return;
+                }
+
+                if (!result.Success)
+                {
+                    await window.DispatcherQueue.EnqueueAsync(() =>
+                    {
+                        _viewModel.SetError(result.ErrorMessage ?? "Asistan çalışması başarısız.");
+                        return Task.CompletedTask;
+                    }).ConfigureAwait(true);
+                    await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
+                    return;
+                }
+
+                var assistantMessage = result.AssistantMessage ?? "Tamamlandı.";
+                await window.DispatcherQueue.EnqueueAsync(() =>
+                {
+                    _viewModel.SetResult(transcript, assistantMessage);
+                    return Task.CompletedTask;
+                }).ConfigureAwait(true);
+
+                if (_textToSpeech.IsEnabled)
+                {
+                    try
+                    {
+                        await window.DispatcherQueue.EnqueueAsync(() =>
+                        {
+                            _viewModel.SetAssistantSpeaking(true);
+                            return Task.CompletedTask;
+                        }).ConfigureAwait(true);
+
+                        await _textToSpeech.SpeakAsync(assistantMessage, token).ConfigureAwait(true);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        await window.DispatcherQueue.EnqueueAsync(() =>
+                        {
+                            _viewModel.SetAssistantSpeaking(false);
+                            _viewModel.SetError($"Sesli okuma başarısız: {ex.Message}");
+                            return Task.CompletedTask;
+                        }).ConfigureAwait(true);
+                        await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
+                        return;
+                    }
+                    finally
+                    {
+                        await window.DispatcherQueue.EnqueueAsync(() =>
+                        {
+                            _viewModel.SetAssistantSpeaking(false);
+                            return Task.CompletedTask;
+                        }).ConfigureAwait(true);
+                    }
+                }
+
+                isFollowUp = true;
+                await window.DispatcherQueue.EnqueueAsync(() =>
+                {
+                    _viewModel.SetFollowUpListening();
+                    return Task.CompletedTask;
+                }).ConfigureAwait(true);
+            }
+
+            await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
+        }
+        finally
+        {
+            _activeWindow = null;
+            _runCoordinator.ExitRun();
+        }
+    }
+
+    private async Task<string?> AcquireTranscriptAsync(
+        AssistantOverlayWindow window,
+        CancellationToken token,
+        int listenTimeoutSeconds,
+        bool isFollowUp)
+    {
         try
         {
-            await window.DispatcherQueue.EnqueueAsync(() =>
+            var progress = new Progress<SpeechListenProgress>(update =>
             {
-                _viewModel.SetTranscribing();
-                return Task.CompletedTask;
-            }).ConfigureAwait(true);
+                window.DispatcherQueue.TryEnqueue(() => _viewModel.UpdateListenProgress(update));
+            });
 
-            transcript = await _speechToText.ListenOnceAsync(token).ConfigureAwait(true);
+            return await _speechToText
+                .ListenOnceAsync(token, listenTimeoutSeconds, progress)
+                .ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -119,50 +241,44 @@ public sealed class OverlaySessionRunner
                 window.HideOverlay();
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
-            return;
+            return null;
         }
         catch (SpeechAccessException ex) when (!token.IsCancellationRequested)
         {
+            if (isFollowUp)
+            {
+                return null;
+            }
+
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
                 _viewModel.SetManualInputPrompt(ex.Message);
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
-            transcript = await WaitForManualInputAsync(token).ConfigureAwait(true);
+            return await WaitForManualInputAsync(token).ConfigureAwait(true);
         }
         catch (Exception ex) when (!token.IsCancellationRequested)
         {
+            if (isFollowUp)
+            {
+                return null;
+            }
+
             await window.DispatcherQueue.EnqueueAsync(() =>
             {
                 _viewModel.SetManualInputPrompt(
                     $"Sesi anlayamadım. Komutu yazarak gönderebilirsiniz. Ayrıntı: {ex.Message}");
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
-            transcript = await WaitForManualInputAsync(token).ConfigureAwait(true);
+            return await WaitForManualInputAsync(token).ConfigureAwait(true);
         }
+    }
 
-        if (string.IsNullOrWhiteSpace(transcript))
-        {
-            await window.DispatcherQueue.EnqueueAsync(() =>
-            {
-                _viewModel.SetManualInputPrompt(
-                    "Ses duyamadım. Komutu aşağıya yazıp Gönder'e basabilirsiniz. Mikrofon izni ve seçili mikrofonu kontrol edin.");
-                return Task.CompletedTask;
-            }).ConfigureAwait(true);
-
-            transcript = await WaitForManualInputAsync(token).ConfigureAwait(true);
-            if (string.IsNullOrWhiteSpace(transcript))
-            {
-                await window.DispatcherQueue.EnqueueAsync(() =>
-                {
-                    _viewModel.SetHidden();
-                    window.HideOverlay();
-                    return Task.CompletedTask;
-                }).ConfigureAwait(true);
-                return;
-            }
-        }
-
+    private async Task<AgentLoopResult?> ExecuteAgentAsync(
+        AssistantOverlayWindow window,
+        string transcript,
+        CancellationToken token)
+    {
         await window.DispatcherQueue.EnqueueAsync(() =>
         {
             _viewModel.SetCommandText(transcript);
@@ -182,12 +298,11 @@ public sealed class OverlaySessionRunner
             });
         });
 
-        AgentLoopResult result;
         _approvalCoordinator.SetOverlayMode(true);
         _approvalCoordinator.OverlayApprovalRequested += OnOverlayApprovalRequested;
         try
         {
-            result = await _agentLoop.RunAsync(transcript, token, progress, "voice_overlay").ConfigureAwait(true);
+            return await _agentLoop.RunAsync(transcript, token, progress, "voice_overlay").ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -197,51 +312,13 @@ public sealed class OverlaySessionRunner
                 window.HideOverlay();
                 return Task.CompletedTask;
             }).ConfigureAwait(true);
-            return;
+            return null;
         }
         finally
         {
             _approvalCoordinator.OverlayApprovalRequested -= OnOverlayApprovalRequested;
             _approvalCoordinator.SetOverlayMode(false);
             _overlayApprovalRequest = null;
-            _activeWindow = null;
-        }
-
-        if (!result.Success)
-        {
-            await window.DispatcherQueue.EnqueueAsync(() =>
-            {
-                _viewModel.SetError(result.ErrorMessage ?? "Asistan çalışması başarısız.");
-                return Task.CompletedTask;
-            }).ConfigureAwait(true);
-            await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
-            return;
-        }
-
-        var assistantMessage = result.AssistantMessage ?? "Tamamlandı.";
-        await window.DispatcherQueue.EnqueueAsync(() =>
-        {
-            _viewModel.SetResult(transcript, assistantMessage);
-            return Task.CompletedTask;
-        }).ConfigureAwait(true);
-
-        if (_textToSpeech.IsEnabled)
-        {
-            try
-            {
-                await _textToSpeech.SpeakAsync(assistantMessage, token).ConfigureAwait(true);
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
-            {
-                // overlay closed during TTS
-            }
-        }
-
-        await ScheduleAutoCloseAsync(window, token).ConfigureAwait(true);
-        }
-        finally
-        {
-            _runCoordinator.ExitRun();
         }
     }
 

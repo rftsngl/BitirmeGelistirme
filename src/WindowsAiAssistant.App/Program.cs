@@ -54,6 +54,19 @@ public static class AppServices
         services.AddSingleton<IToastNotificationService, WinToastNotificationService>();
         services.AddSingleton<IWindowsHelloService, WinWindowsHelloService>();
         services.AddSingleton<IJumpListService, WinJumpListService>();
+        services.AddSingleton<IServiceControlService, ServiceControlService>();
+        services.AddSingleton<IEventLogService, EventLogIntegrationService>();
+        services.AddSingleton<IRegistryOperationService, RegistryOperationService>();
+        services.AddSingleton<IClipboardIntegrationService, ClipboardIntegrationService>();
+        services.AddSingleton<IPackageInstallService, PackageInstallService>();
+        services.AddSingleton<INetworkStatusService, NetworkStatusService>();
+        services.AddSingleton<IAudioPowerService, AudioPowerService>();
+        services.AddSingleton<IPerformanceCounterService, PerformanceCounterService>();
+        services.AddSingleton<IFileSearchService, WinFileSearchService>();
+        services.AddSingleton<INotificationListenerService, NotificationListenerService>();
+        services.AddSingleton<IShellSessionService, ShellSessionService>();
+        services.AddSingleton<IFileWatchService, FileWatchIntegrationService>();
+        services.AddSingleton<ICredentialStoreService, CredentialStoreService>();
         services.AddSingleton<IActionHandler, RespondActionHandler>();
         services.AddSingleton<IActionHandler, AskUserActionHandler>();
         services.AddSingleton<IActionHandler, StopActionHandler>();
@@ -88,6 +101,19 @@ public static class AppServices
         services.AddSingleton<IActionHandler, ComInvokeActionHandler>();
         services.AddSingleton<IActionHandler, VerifyUserActionHandler>();
         services.AddSingleton<IActionHandler, GlobalHookActionHandler>();
+        services.AddSingleton<IActionHandler, ServiceControlActionHandler>();
+        services.AddSingleton<IActionHandler, EventLogActionHandler>();
+        services.AddSingleton<IActionHandler, RegistryOpActionHandler>();
+        services.AddSingleton<IActionHandler, ClipboardActionHandler>();
+        services.AddSingleton<IActionHandler, InstallPackageActionHandler>();
+        services.AddSingleton<IActionHandler, NetworkStatusActionHandler>();
+        services.AddSingleton<IActionHandler, AudioPowerActionHandler>();
+        services.AddSingleton<IActionHandler, PerfCounterActionHandler>();
+        services.AddSingleton<IActionHandler, FileSearchActionHandler>();
+        services.AddSingleton<IActionHandler, NotificationListenActionHandler>();
+        services.AddSingleton<IActionHandler, ShellSessionActionHandler>();
+        services.AddSingleton<IActionHandler, FileWatchActionHandler>();
+        services.AddSingleton<IActionHandler, CredentialStoreActionHandler>();
         services.AddSingleton<ActionExecutor>();
         services.AddSingleton<RunLogger>();
         services.AddSingleton<RunLogReader>();
@@ -119,7 +145,9 @@ public static class AppServices
             var voskModels = sp.GetRequiredService<VoskWakeWordModelService>();
             return SpeechEngineResolver.Create(options, readiness, voskModels);
         });
-        services.AddSingleton<ITextToSpeechService, WindowsTextToSpeechService>();
+        services.AddSingleton<EdgeTextToSpeechService>();
+        services.AddSingleton<WindowsTextToSpeechService>();
+        services.AddSingleton<ITextToSpeechService, HybridTextToSpeechService>();
         services.AddSingleton<IWakeWordService>(sp =>
         {
             var options = sp.GetRequiredService<AudioOptions>();

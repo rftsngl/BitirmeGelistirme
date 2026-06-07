@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using System.ComponentModel;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -17,8 +18,8 @@ public sealed partial class AssistantOverlayWindow : Window
     private readonly OverlayViewModel _viewModel;
     private readonly OverlaySessionRunner _sessionRunner;
     private Compositor? _compositor;
-    private Visual? _rootVisual;
-    private ScalarKeyFrameAnimation? _pulseAnimation;
+    private Visual? _cardVisual;
+    private Visual? _statusIconVisual;
     private bool _isPulsing;
 
     public AssistantOverlayWindow(OverlayViewModel viewModel, OverlaySessionRunner sessionRunner)
@@ -29,6 +30,7 @@ public sealed partial class AssistantOverlayWindow : Window
         InitializeComponent();
         Root.DataContext = _viewModel;
         ConfigureChrome();
+        CardBorder.Loaded += OnLoaded;
         Activated += OnActivated;
         Closed += (_, _) => _sessionRunner.CancelActiveSession();
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -36,48 +38,73 @@ public sealed partial class AssistantOverlayWindow : Window
 
     public void ShowAndPosition()
     {
-        PositionBottomCenter();
+        PositionBottomCenter(_viewModel.IsCompactMode);
+        AppWindow.Show();
         Activate();
         EnsureCompositor();
         PlayShowAnimation();
     }
 
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (CardBorder.Shadow is ThemeShadow themeShadow)
+        {
+            themeShadow.Receivers.Add(CardBorder);
+        }
+    }
+
     private void EnsureCompositor()
     {
-        if (_compositor is not null) return;
-        _rootVisual = ElementCompositionPreview.GetElementVisual(RootBorder);
-        _compositor = _rootVisual.Compositor;
+        if (_compositor is not null)
+        {
+            return;
+        }
+
+        _cardVisual = ElementCompositionPreview.GetElementVisual(CardBorder);
+        _statusIconVisual = ElementCompositionPreview.GetElementVisual(StatusIconHost);
+        _compositor = _cardVisual.Compositor;
     }
 
     private void PlayShowAnimation()
     {
         EnsureCompositor();
-        if (_compositor is null || _rootVisual is null) return;
+        if (_compositor is null || _cardVisual is null)
+        {
+            return;
+        }
 
-        _rootVisual.Opacity = 0f;
-        _rootVisual.Scale = new Vector3(0.96f, 0.96f, 1f);
-        _rootVisual.CenterPoint = new Vector3((float)(RootBorder.ActualWidth / 2), (float)RootBorder.ActualHeight, 0f);
+        var ease = _compositor.CreateCubicBezierEasingFunction(
+            new Vector2(0.05f, 0.7f),
+            new Vector2(0.1f, 1f));
 
-        var fadeIn = _compositor.CreateScalarKeyFrameAnimation();
-        fadeIn.InsertKeyFrame(0f, 0f);
-        fadeIn.InsertKeyFrame(1f, 1f, _compositor.CreateCubicBezierEasingFunction(
-            new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f)));
-        fadeIn.Duration = TimeSpan.FromMilliseconds(220);
+        _cardVisual.Opacity = 0f;
+        _cardVisual.Offset = new Vector3(0f, 28f, 0f);
+        _cardVisual.Scale = new Vector3(0.96f, 0.96f, 1f);
 
-        var scaleUp = _compositor.CreateVector3KeyFrameAnimation();
-        scaleUp.InsertKeyFrame(0f, new Vector3(0.96f, 0.96f, 1f));
-        scaleUp.InsertKeyFrame(1f, new Vector3(1f, 1f, 1f), _compositor.CreateCubicBezierEasingFunction(
-            new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f)));
-        scaleUp.Duration = TimeSpan.FromMilliseconds(280);
+        var fade = _compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0f, 0f);
+        fade.InsertKeyFrame(1f, 1f, ease);
+        fade.Duration = TimeSpan.FromMilliseconds(260);
 
-        _rootVisual.StartAnimation("Opacity", fadeIn);
-        _rootVisual.StartAnimation("Scale", scaleUp);
+        var slide = _compositor.CreateVector3KeyFrameAnimation();
+        slide.InsertKeyFrame(0f, new Vector3(0f, 28f, 0f));
+        slide.InsertKeyFrame(1f, new Vector3(0f, 0f, 0f), ease);
+        slide.Duration = TimeSpan.FromMilliseconds(300);
+
+        var scale = _compositor.CreateVector3KeyFrameAnimation();
+        scale.InsertKeyFrame(0f, new Vector3(0.96f, 0.96f, 1f));
+        scale.InsertKeyFrame(1f, new Vector3(1f, 1f, 1f), ease);
+        scale.Duration = TimeSpan.FromMilliseconds(300);
+
+        _cardVisual.StartAnimation("Opacity", fade);
+        _cardVisual.StartAnimation("Offset", slide);
+        _cardVisual.StartAnimation("Scale", scale);
     }
 
     private async void PlayHideAnimation()
     {
         EnsureCompositor();
-        if (_compositor is null || _rootVisual is null)
+        if (_compositor is null || _cardVisual is null)
         {
             AppWindow.Hide();
             return;
@@ -85,19 +112,22 @@ public sealed partial class AssistantOverlayWindow : Window
 
         StopPulseAnimation();
 
-        var fadeOut = _compositor.CreateScalarKeyFrameAnimation();
-        fadeOut.InsertKeyFrame(0f, 1f);
-        fadeOut.InsertKeyFrame(1f, 0f, _compositor.CreateCubicBezierEasingFunction(
-            new Vector2(0.4f, 0f), new Vector2(1f, 1f)));
-        fadeOut.Duration = TimeSpan.FromMilliseconds(160);
+        var ease = _compositor.CreateCubicBezierEasingFunction(
+            new Vector2(0.3f, 0f),
+            new Vector2(1f, 1f));
 
-        var scaleDown = _compositor.CreateVector3KeyFrameAnimation();
-        scaleDown.InsertKeyFrame(0f, new Vector3(1f, 1f, 1f));
-        scaleDown.InsertKeyFrame(1f, new Vector3(0.97f, 0.97f, 1f));
-        scaleDown.Duration = TimeSpan.FromMilliseconds(160);
+        var fade = _compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0f, 1f);
+        fade.InsertKeyFrame(1f, 0f, ease);
+        fade.Duration = TimeSpan.FromMilliseconds(160);
 
-        _rootVisual.StartAnimation("Opacity", fadeOut);
-        _rootVisual.StartAnimation("Scale", scaleDown);
+        var slide = _compositor.CreateVector3KeyFrameAnimation();
+        slide.InsertKeyFrame(0f, new Vector3(0f, 0f, 0f));
+        slide.InsertKeyFrame(1f, new Vector3(0f, 16f, 0f), ease);
+        slide.Duration = TimeSpan.FromMilliseconds(160);
+
+        _cardVisual.StartAnimation("Opacity", fade);
+        _cardVisual.StartAnimation("Offset", slide);
 
         await Task.Delay(170);
         AppWindow.Hide();
@@ -106,47 +136,77 @@ public sealed partial class AssistantOverlayWindow : Window
     private void StartPulseAnimation()
     {
         EnsureCompositor();
-        if (_compositor is null || _rootVisual is null || _isPulsing) return;
+        if (_compositor is null || _statusIconVisual is null || _isPulsing)
+        {
+            return;
+        }
 
-        _pulseAnimation = _compositor.CreateScalarKeyFrameAnimation();
-        _pulseAnimation.InsertKeyFrame(0f, 1f);
-        _pulseAnimation.InsertKeyFrame(0.5f, 0.6f);
-        _pulseAnimation.InsertKeyFrame(1f, 1f);
-        _pulseAnimation.Duration = TimeSpan.FromMilliseconds(1800);
-        _pulseAnimation.IterationBehavior = AnimationIterationBehavior.Forever;
+        var scalePulse = _compositor.CreateVector3KeyFrameAnimation();
+        scalePulse.InsertKeyFrame(0f, new Vector3(1f, 1f, 1f));
+        scalePulse.InsertKeyFrame(0.5f, new Vector3(1.12f, 1.12f, 1f));
+        scalePulse.InsertKeyFrame(1f, new Vector3(1f, 1f, 1f));
+        scalePulse.Duration = TimeSpan.FromMilliseconds(900);
+        scalePulse.IterationBehavior = AnimationIterationBehavior.Forever;
 
-        var statusVisual = ElementCompositionPreview.GetElementVisual(StatusIcon);
-        statusVisual.StartAnimation("Opacity", _pulseAnimation);
+        _statusIconVisual.CenterPoint = new Vector3(16f, 16f, 0f);
+        _statusIconVisual.StartAnimation("Scale", scalePulse);
         _isPulsing = true;
     }
 
     private void StopPulseAnimation()
     {
-        if (!_isPulsing) return;
-        var statusVisual = ElementCompositionPreview.GetElementVisual(StatusIcon);
-        statusVisual.StopAnimation("Opacity");
-        statusVisual.Opacity = 1f;
+        if (!_isPulsing || _statusIconVisual is null)
+        {
+            return;
+        }
+
+        _statusIconVisual.StopAnimation("Scale");
+        _statusIconVisual.Scale = new Vector3(1f, 1f, 1f);
         _isPulsing = false;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(OverlayViewModel.Phase)) return;
-
-        DispatcherQueue.TryEnqueue(() =>
+        if (e.PropertyName is nameof(OverlayViewModel.Phase) or nameof(OverlayViewModel.IsCompactMode))
         {
-            UpdatePhaseVisuals();
-            switch (_viewModel.Phase)
+            DispatcherQueue.TryEnqueue(() =>
             {
-                case OverlayPhase.Listening:
-                case OverlayPhase.Transcribing:
+                UpdatePhaseVisuals();
+                PositionBottomCenter(_viewModel.IsCompactMode);
+
+                if (_viewModel.Phase == OverlayPhase.Listening)
+                {
                     StartPulseAnimation();
-                    break;
-                default:
+                }
+                else
+                {
                     StopPulseAnimation();
-                    break;
-            }
-        });
+                }
+            });
+        }
+
+        if (e.PropertyName is nameof(OverlayViewModel.IsSpeaking)
+            or nameof(OverlayViewModel.IsAssistantSpeaking)
+            or nameof(OverlayViewModel.ShowSpeakingActivity))
+        {
+            DispatcherQueue.TryEnqueue(UpdateSpeakingRing);
+        }
+    }
+
+    private void UpdateSpeakingRing()
+    {
+        var active = _viewModel.ShowSpeakingActivity;
+        SpeakingRing.Opacity = active ? 1 : 0;
+        if (active)
+        {
+            SpeakingRingScale.ScaleX = 1.15;
+            SpeakingRingScale.ScaleY = 1.15;
+        }
+        else
+        {
+            SpeakingRingScale.ScaleX = 1;
+            SpeakingRingScale.ScaleY = 1;
+        }
     }
 
     private void UpdatePhaseVisuals()
@@ -169,8 +229,6 @@ public sealed partial class AssistantOverlayWindow : Window
             return;
         }
 
-        // Dis tikla kapatma yalnizca bekleme/manuel giris/terminal fazlarda guvenli;
-        // agent calisirken baska pencerelere odak verdiginde overlay kapanmamali.
         if (_viewModel.CanDismissOnFocusLoss)
         {
             HideOverlay();
@@ -200,10 +258,15 @@ public sealed partial class AssistantOverlayWindow : Window
         }
     }
 
-    private void PositionBottomCenter()
+    private void PositionBottomCenter(bool compact)
     {
-        const int width = 560;
-        const int height = 240;
+        const int compactWidth = 560;
+        const int compactHeight = 72;
+        const int expandedWidth = 580;
+        const int expandedHeight = 280;
+
+        var width = compact ? compactWidth : expandedWidth;
+        var height = compact ? compactHeight : expandedHeight;
 
         RectInt32 workArea;
         if (TryGetCursorMonitorWorkArea(out var cursorWorkArea))
@@ -219,7 +282,7 @@ public sealed partial class AssistantOverlayWindow : Window
         AppWindow.Resize(new SizeInt32(width, height));
         AppWindow.Move(new PointInt32(
             workArea.X + (workArea.Width - width) / 2,
-            workArea.Y + workArea.Height - height - 56));
+            workArea.Y + workArea.Height - height - 40));
     }
 
     private static bool TryGetCursorMonitorWorkArea(out RectInt32 workArea)
@@ -270,7 +333,6 @@ public sealed partial class AssistantOverlayWindow : Window
     private void ManualSubmitButton_Click(object sender, RoutedEventArgs e) =>
         _sessionRunner.SubmitManualInput(_viewModel.ManualInputText);
 
-    // P/Invoke for cursor-based monitor detection
     private const int MONITOR_DEFAULTTONEAREST = 2;
 
     [DllImport("user32.dll")]

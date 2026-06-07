@@ -81,8 +81,13 @@ public sealed class LocalAppSettingsService
         to.GlobalHotKeyEnabled = from.GlobalHotKeyEnabled;
         to.GlobalHotKey = from.GlobalHotKey;
         to.TextToSpeechEnabled = from.TextToSpeechEnabled;
+        to.TtsEngine = from.TtsEngine;
+        to.TtsVoiceName = from.TtsVoiceName;
+        to.TtsSpeakingRate = from.TtsSpeakingRate;
+        to.FollowUpListenTimeoutSeconds = from.FollowUpListenTimeoutSeconds;
         to.SpeechLanguage = from.SpeechLanguage;
         to.SpeechListenTimeoutSeconds = from.SpeechListenTimeoutSeconds;
+        to.SilenceEndMilliseconds = from.SilenceEndMilliseconds;
         to.OverlayAutoCloseSeconds = from.OverlayAutoCloseSeconds;
         to.StartWithWindows = from.StartWithWindows;
         to.VoiceApprovalEnabled = from.VoiceApprovalEnabled;

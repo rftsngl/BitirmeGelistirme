@@ -2,97 +2,223 @@
     x:Class="WindowsAiAssistant.App.Overlay.AssistantOverlayWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:animations="using:CommunityToolkit.WinUI.Animations"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
-    <Border x:Name="RootBorder"
-            Background="{ThemeResource LayerFillColorDefaultBrush}"
-            CornerRadius="16"
-            Padding="20,16">
-        <Grid x:Name="Root" KeyDown="Root_KeyDown">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Border x:Name="CardBorder"
+            Background="#F0181B22"
+            BorderBrush="#33FFFFFF"
+            BorderThickness="1"
+            CornerRadius="20"
+            Padding="14,10"
+            MinWidth="460"
+            MaxWidth="640"
+            KeyDown="Root_KeyDown">
+        <animations:Implicit.ShowAnimations>
+            <animations:ImplicitAnimationSet>
+                <animations:OffsetAnimation EasingMode="EaseOut"
+                                          Duration="0:0:0.32"
+                                          From="0,20,0"
+                                          To="0" />
+                <animations:OpacityAnimation EasingMode="EaseOut"
+                                           Duration="0:0:0.24"
+                                           From="0"
+                                           To="1" />
+            </animations:ImplicitAnimationSet>
+        </animations:Implicit.ShowAnimations>
+        <animations:Implicit.HideAnimations>
+            <animations:ImplicitAnimationSet>
+                <animations:OffsetAnimation EasingMode="EaseIn"
+                                          Duration="0:0:0.18"
+                                          From="0"
+                                          To="0,12,0" />
+                <animations:OpacityAnimation EasingMode="EaseIn"
+                                           Duration="0:0:0.16"
+                                           From="1"
+                                           To="0" />
+            </animations:ImplicitAnimationSet>
+        </animations:Implicit.HideAnimations>
+        <Border.Shadow>
+            <ThemeShadow />
+        </Border.Shadow>
 
-        <Grid Grid.Row="0" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <FontIcon x:Name="StatusIcon" Glyph="&#xE1D6;"
-                          FontFamily="{StaticResource SymbolThemeFontFamily}"
-                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                <TextBlock Text="{Binding StatusText}"
-                           FontSize="18"
-                           FontWeight="SemiBold"
-                           VerticalAlignment="Center" />
+        <Grid x:Name="Root">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0"
+                  Visibility="{Binding ShowLiveListenPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Width="36" Height="36" VerticalAlignment="Center">
+                    <Ellipse x:Name="SpeakingRing"
+                             Width="36"
+                             Height="36"
+                             Stroke="#6642D392"
+                             StrokeThickness="2"
+                             Opacity="0"
+                             RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform x:Name="SpeakingRingScale" ScaleX="1" ScaleY="1" />
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+                    <Border x:Name="StatusIconHost"
+                            Width="30"
+                            Height="30"
+                            CornerRadius="15"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#FF3DDC97" Offset="0" />
+                                <GradientStop Color="#FF1FA86F" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <FontIcon x:Name="StatusIcon"
+                                  Glyph="&#xE1D6;"
+                                  FontSize="13"
+                                  Foreground="White"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center" />
+                    </Border>
+                </Grid>
+
+                <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center" Spacing="1">
+                    <TextBlock Text="{Binding StatusText}"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Foreground="#FFF3F5F7" />
+                    <TextBlock Text="{Binding LiveTranscript}"
+                               FontSize="12.5"
+                               Foreground="#FFB8C0CC"
+                               TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding HasLiveTranscript, Converter={StaticResource BoolToVisibilityConverter}}" />
+                    <TextBlock Text="{Binding DetailText}"
+                               FontSize="11.5"
+                               Foreground="#FF7E8794"
+                               Visibility="{Binding HasLiveTranscript, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}" />
+                </StackPanel>
+
+                <ItemsControl Grid.Column="2"
+                              Margin="0,0,8,0"
+                              VerticalAlignment="Center"
+                              ItemsSource="{Binding WaveformBarHeights}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="2" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="3"
+                                    Height="{Binding}"
+                                    CornerRadius="1.5"
+                                    VerticalAlignment="Center">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                        <GradientStop Color="#FF1FA86F" Offset="0" />
+                                        <GradientStop Color="#FF6FE8B3" Offset="1" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Grid.Column="3"
+                        Click="CloseButton_Click"
+                        Background="#22FFFFFF"
+                        BorderThickness="0"
+                        CornerRadius="10"
+                        Padding="6"
+                        ToolTipService.ToolTip="Kapat (ESC)">
+                    <FontIcon Glyph="&#xE711;" FontSize="11" Foreground="#CCFFFFFF" />
+                </Button>
+            </Grid>
+
+            <StackPanel Grid.Row="1"
+                        Spacing="8"
+                        Margin="0,8,0,0"
+                        Visibility="{Binding IsCompactMode, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding StatusText}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="#FFF3F5F7"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1"
+                            Click="CloseButton_Click"
+                            Background="#22FFFFFF"
+                            BorderThickness="0"
+                            CornerRadius="10"
+                            ToolTipService.ToolTip="Kapat (ESC)">
+                        <FontIcon Glyph="&#xE711;" Foreground="#CCFFFFFF" />
+                    </Button>
+                </Grid>
+
+                <TextBlock Text="{Binding DetailText}"
+                           Foreground="#FFB8C0CC"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding DetailText, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
+                <TextBlock Text="{Binding TranscriptText}"
+                           FontStyle="Italic"
+                           Foreground="#FF9AA3AF"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding TranscriptText, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
+                <TextBlock Text="{Binding ResultText}"
+                           Foreground="#FFE8EDF2"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding ResultText, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
+
+                <muxc:ProgressRing IsActive="{Binding IsBusy}"
+                                   Width="22"
+                                   Height="22"
+                                   Foreground="#FF42D392"
+                                   HorizontalAlignment="Left"
+                                   Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                <StackPanel Spacing="8"
+                            Visibility="{Binding ShowManualInput, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBox x:Name="ManualInputBox"
+                             PlaceholderText="Komutunuzu yazın…"
+                             Text="{Binding ManualInputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Content="Gönder"
+                            Style="{ThemeResource AccentButtonStyle}"
+                            Click="ManualSubmitButton_Click"
+                            HorizontalAlignment="Right" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            HorizontalAlignment="Right"
+                            Visibility="{Binding IsAwaitingApproval, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Button Content="Onayla"
+                            Style="{ThemeResource AccentButtonStyle}"
+                            Click="ApproveButton_Click" />
+                    <Button Content="Reddet"
+                            Click="DenyButton_Click" />
+                </StackPanel>
             </StackPanel>
-            <Button Grid.Column="1"
-                    Click="CloseButton_Click"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    ToolTipService.ToolTip="Kapat (ESC)">
-                <FontIcon Glyph="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" />
-            </Button>
-        </Grid>
 
-        <TextBlock Grid.Row="1"
-                   Text="{Binding DetailText}"
-                   Opacity="0.85"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,8" />
-
-        <StackPanel Grid.Row="2" Spacing="8">
-            <TextBlock Text="{Binding TranscriptText}"
-                       FontStyle="Italic"
-                       Opacity="0.9"
-                       TextWrapping="Wrap"
-                       Visibility="{Binding TranscriptText, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
-            <TextBlock Text="{Binding ResultText}"
-                       TextWrapping="Wrap"
-                       Visibility="{Binding ResultText, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
-            <muxc:ProgressRing IsActive="{Binding IsBusy}"
-                               Width="28"
-                               Height="28"
-                               HorizontalAlignment="Left"
-                               Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
-
-            <StackPanel Spacing="8"
-                        Visibility="{Binding ShowManualInput, Converter={StaticResource BoolToVisibilityConverter}}">
-                <TextBox x:Name="ManualInputBox"
-                         PlaceholderText="Komutunuzu yazın…"
-                         Text="{Binding ManualInputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                <Button Content="Gönder"
-                        Style="{ThemeResource AccentButtonStyle}"
-                        Click="ManualSubmitButton_Click"
-                        HorizontalAlignment="Right" />
-            </StackPanel>
-        </StackPanel>
-
-        <TextBlock Grid.Row="3"
-                   Text="ESC ile kapat · Ctrl+Alt+A ile tekrar aç"
-                   FontSize="11"
-                   Opacity="0.55"
-                   HorizontalAlignment="Right"
-                   Margin="0,8,0,0" />
-
-        <StackPanel Grid.Row="3"
-                    Orientation="Horizontal"
-                    Spacing="8"
-                    HorizontalAlignment="Right"
-                    Margin="0,8,0,0"
-                    Visibility="{Binding IsAwaitingApproval, Converter={StaticResource BoolToVisibilityConverter}}">
-            <Button x:Name="ApproveButton"
-                    Content="Onayla"
-                    Style="{ThemeResource AccentButtonStyle}"
-                    Click="ApproveButton_Click" />
-            <Button x:Name="DenyButton"
-                    Content="Reddet"
-                    Click="DenyButton_Click" />
-        </StackPanel>
+            <TextBlock Grid.Row="2"
+                       Text="ESC ile kapat"
+                       FontSize="10"
+                       Foreground="#667E8794"
+                       HorizontalAlignment="Right"
+                       Margin="0,6,0,0"
+                       Visibility="{Binding IsCompactMode, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}" />
         </Grid>
     </Border>
 </Window>

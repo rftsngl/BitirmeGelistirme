@@ -46,6 +46,14 @@ public sealed class AppSettingsViewModel : ObservableObject
             "Yalnızca geliştirici modunda. Yerel ggml model dosyası gerekir.")
     ];
 
+    public IReadOnlyList<SettingsChoice> TtsEngineChoices { get; } =
+    [
+        new("edge", "Edge (doğal neural)",
+            "tr-TR-EmelNeural gibi doğal sesler. İnternet bağlantısı gerekir."),
+        new("windows", "Windows (yerel)",
+            "Sistemde yüklü ses (ör. Microsoft Tolga). İnternet gerekmez.")
+    ];
+
     public IReadOnlyList<SettingsChoice> WakeWordChoices { get; } =
     [
         new("asistan", "Asistan", "«Asistan» veya «Hey asistan» deyin (Türkçe Vosk modeli)."),
@@ -170,6 +178,39 @@ public sealed class AppSettingsViewModel : ObservableObject
         set { _audio.TextToSpeechEnabled = value; OnPropertyChanged(); }
     }
 
+    public string TtsEngine
+    {
+        get => _audio.TtsEngine;
+        set
+        {
+            _audio.TtsEngine = string.IsNullOrWhiteSpace(value) ? "edge" : value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedTtsEngine));
+        }
+    }
+
+    public SettingsChoice? SelectedTtsEngine
+    {
+        get => TtsEngineChoices.FirstOrDefault(choice =>
+            choice.Value.Equals(_audio.TtsEngine, StringComparison.OrdinalIgnoreCase))
+               ?? TtsEngineChoices[0];
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            TtsEngine = value.Value;
+        }
+    }
+
+    public string TtsVoiceName
+    {
+        get => _audio.TtsVoiceName;
+        set { _audio.TtsVoiceName = value ?? string.Empty; OnPropertyChanged(); }
+    }
+
     public string SpeechLanguage
     {
         get => _audio.SpeechLanguage;
@@ -180,6 +221,12 @@ public sealed class AppSettingsViewModel : ObservableObject
     {
         get => _audio.SpeechListenTimeoutSeconds;
         set { _audio.SpeechListenTimeoutSeconds = Math.Clamp(value, 3, 120); OnPropertyChanged(); }
+    }
+
+    public int SilenceEndMilliseconds
+    {
+        get => _audio.SilenceEndMilliseconds;
+        set { _audio.SilenceEndMilliseconds = Math.Clamp(value, 300, 3000); OnPropertyChanged(); }
     }
 
     public int OverlayAutoCloseSeconds

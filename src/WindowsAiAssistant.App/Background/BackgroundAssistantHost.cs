@@ -119,13 +119,31 @@ public sealed class BackgroundAssistantHost : IDisposable
             return;
         }
 
+        var resumeWakeWord = _audioOptions.WakeWordEnabled && _tray.IsListeningEnabled;
         try
         {
+            // Uyandirma servisi mikrofonu acik tutuyor; komut dinleme baslamadan once serbest birak.
+            if (resumeWakeWord)
+            {
+                await _wakeWord.StopAsync().ConfigureAwait(false);
+            }
+
             await _overlay.RunVoiceSessionAsync().ConfigureAwait(true);
         }
         finally
         {
             Interlocked.Exchange(ref _overlayBusy, 0);
+            if (resumeWakeWord && _tray.IsListeningEnabled)
+            {
+                try
+                {
+                    await _wakeWord.StartAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Hotkey ile manuel kullanim devam eder.
+                }
+            }
         }
     }
 
