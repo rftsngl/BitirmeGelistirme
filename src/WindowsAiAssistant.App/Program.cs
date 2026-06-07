@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using WindowsAiAssistant.Agent;
+using WindowsAiAssistant.App.Integrations;
 using WindowsAiAssistant.App.Audio;
 using WindowsAiAssistant.App.Background;
 using WindowsAiAssistant.App.Configuration;
@@ -15,6 +16,7 @@ using WindowsAiAssistant.Runtime.Automation;
 using WindowsAiAssistant.Runtime.Logging;
 using WindowsAiAssistant.Runtime.Observation;
 using WindowsAiAssistant.Runtime.Policy;
+using WindowsAiAssistant.Runtime.Integrations;
 using WindowsAiAssistant.Runtime.Windows;
 
 namespace WindowsAiAssistant.App;
@@ -44,6 +46,14 @@ public static class AppServices
         services.AddSingleton<UiElementRegistry>();
         services.AddSingleton<UiAutomationService>();
         services.AddSingleton<ObservationService>();
+        services.AddSingleton<IWmiQueryService, WmiQueryService>();
+        services.AddSingleton<ITaskSchedulerIntegrationService, TaskSchedulerIntegrationService>();
+        services.AddSingleton<IComAutomationService, ComAutomationService>();
+        services.AddSingleton<IGlobalHookService, GlobalHookService>();
+        services.AddSingleton<IGraphicsCaptureService, WinGraphicsCaptureService>();
+        services.AddSingleton<IToastNotificationService, WinToastNotificationService>();
+        services.AddSingleton<IWindowsHelloService, WinWindowsHelloService>();
+        services.AddSingleton<IJumpListService, WinJumpListService>();
         services.AddSingleton<IActionHandler, RespondActionHandler>();
         services.AddSingleton<IActionHandler, AskUserActionHandler>();
         services.AddSingleton<IActionHandler, StopActionHandler>();
@@ -70,6 +80,14 @@ public static class AppServices
         services.AddSingleton<IActionHandler, MouseScrollActionHandler>();
         services.AddSingleton<IActionHandler, MouseDragActionHandler>();
         services.AddSingleton<IActionHandler, ShellActionHandler>();
+        services.AddSingleton<IActionHandler, CaptureScreenActionHandler>();
+        services.AddSingleton<IActionHandler, NotifyActionHandler>();
+        services.AddSingleton<IActionHandler, WmiQueryActionHandler>();
+        services.AddSingleton<IActionHandler, ScheduleTaskActionHandler>();
+        services.AddSingleton<IActionHandler, JumpListActionHandler>();
+        services.AddSingleton<IActionHandler, ComInvokeActionHandler>();
+        services.AddSingleton<IActionHandler, VerifyUserActionHandler>();
+        services.AddSingleton<IActionHandler, GlobalHookActionHandler>();
         services.AddSingleton<ActionExecutor>();
         services.AddSingleton<RunLogger>();
         services.AddSingleton<RunLogReader>();
@@ -90,32 +108,24 @@ public static class AppServices
         services.AddSingleton<MainWindow>();
 
         services.AddSingleton<MicrophoneDeviceService>();
+        services.AddSingleton<MicrophonePermissionService>();
+        services.AddSingleton<VoskWakeWordModelService>();
+        services.AddSingleton<SpeechReadinessService>();
         services.AddSingleton<VoiceApprovalService>();
         services.AddSingleton<ISpeechToTextService>(sp =>
         {
             var options = sp.GetRequiredService<AudioOptions>();
-            if (string.Equals(options.SpeechEngine, "whisper", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(options.WhisperModelPath) &&
-                File.Exists(options.WhisperModelPath))
-            {
-                return new WhisperSpeechToTextService(options);
-            }
-
-            return new WindowsSpeechToTextService(options);
+            var readiness = sp.GetRequiredService<SpeechReadinessService>();
+            var voskModels = sp.GetRequiredService<VoskWakeWordModelService>();
+            return SpeechEngineResolver.Create(options, readiness, voskModels);
         });
         services.AddSingleton<ITextToSpeechService, WindowsTextToSpeechService>();
         services.AddSingleton<IWakeWordService>(sp =>
         {
             var options = sp.GetRequiredService<AudioOptions>();
-            if (options.WakeWordEnabled &&
-                !string.IsNullOrWhiteSpace(options.PorcupineAccessKey) &&
-                !string.IsNullOrWhiteSpace(options.PorcupineKeywordPath) &&
-                File.Exists(options.PorcupineKeywordPath))
-            {
-                return new PorcupineWakeWordService(options);
-            }
-
-            return new NullWakeWordService();
+            var readiness = sp.GetRequiredService<SpeechReadinessService>();
+            var models = sp.GetRequiredService<VoskWakeWordModelService>();
+            return new VoskWakeWordService(options, readiness, models);
         });
         services.AddSingleton<GlobalHotKeyService>();
         services.AddSingleton<OverlayViewModel>();

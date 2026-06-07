@@ -505,7 +505,7 @@
 
                             <TextBox Header="Konuşma dili" Text="{Binding SpeechLanguage, Mode=TwoWay}"
                                      PlaceholderText="tr-TR" HorizontalAlignment="Stretch" />
-                            <TextBlock Text="Türkçe için tr-TR kullanın. Windows ses tanıma ve okuma bu dile göre ayarlanır."
+                            <TextBlock Text="Türkçe için tr-TR kullanın. Vosk ve sesli okuma bu dile göre ayarlanır."
                                        Style="{StaticResource SettingDescriptionTextBlockStyle}" Margin="0,4,0,8" />
 
                             <NumberBox Header="Dinleme süresi (saniye)" Value="{Binding SpeechListenTimeoutSeconds, Mode=TwoWay}"
@@ -522,27 +522,39 @@
 
                     <Border Style="{StaticResource SettingsCardBorderStyle}">
                         <StackPanel Spacing="12">
-                            <TextBlock Text="Konuşma tanıma ve mikrofon" FontWeight="SemiBold" />
+                            <TextBlock Text="Mikrofon ve komut dinleme" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource SettingDescriptionTextBlockStyle}"
-                                       Text="Söylediklerinizin metne çevrilmesi için kullanılacak motoru ve mikrofonu seçin." />
-                            <ComboBox Header="Konuşma tanıma motoru"
+                                       Text="Overlay açıldığında komutunuzu dinleyen motor. Türkçe için Vosk önerilir; Windows paketi gerekmez." />
+
+                            <muxc:InfoBar Severity="Informational"
+                                          IsOpen="True"
+                                          IsClosable="False"
+                                          Title="Mikrofon izni"
+                                          Message="{Binding MicrophonePermissionSummary}" />
+                            <Button Content="Mikrofon iznini iste"
+                                    Command="{Binding RequestMicrophonePermissionCommand}"
+                                    HorizontalAlignment="Left" />
+
+                            <ComboBox Header="Komut dinleme motoru"
                                       ItemsSource="{x:Bind AppVM.SpeechEngineChoices, Mode=OneWay}"
                                       SelectedItem="{Binding SelectedSpeechEngine, Mode=TwoWay}"
                                       ItemTemplate="{StaticResource SettingsChoiceItemTemplate}"
                                       HorizontalAlignment="Stretch" />
-                            <TextBox Header="Whisper model dosyası yolu" Text="{Binding WhisperModelPath, Mode=TwoWay}"
-                                     PlaceholderText="C:\Models\ggml-base.bin"
-                                     Visibility="{Binding IsWhisperEngine, Converter={StaticResource BoolToVisibilityConverter}}"
-                                     HorizontalAlignment="Stretch" />
-                            <TextBlock Text="Whisper seçtiyseniz bilgisayarınıza indirdiğiniz .bin veya ggml model dosyasının tam yolunu yazın."
-                                       Style="{StaticResource SettingDescriptionTextBlockStyle}"
-                                       Visibility="{Binding IsWhisperEngine, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                            <muxc:InfoBar IsOpen="True"
+                                          IsClosable="False"
+                                          Severity="Informational"
+                                          Title="Komut dinleme"
+                                          Message="{Binding SpeechLanguageSummary}" />
+                            <TextBlock Text="{Binding SttEngineSummary}"
+                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+
                             <ComboBox Header="Mikrofon"
                                       ItemsSource="{Binding MicrophoneOptions}"
                                       SelectedItem="{Binding SelectedMicrophone, Mode=TwoWay}"
                                       DisplayMemberPath="Display"
                                       HorizontalAlignment="Stretch" />
-                            <TextBlock Text="Yanlış mikrofon seçiliyse ses algılanmayabilir. Windows yerleşik motorunda cihaz seçimi sınırlı olabilir."
+                            <TextBlock Text="Yanlış mikrofon seçiliyse ses algılanmayabilir."
                                        Style="{StaticResource SettingDescriptionTextBlockStyle}" />
                         </StackPanel>
                     </Border>
@@ -551,7 +563,13 @@
                         <StackPanel Spacing="12">
                             <TextBlock Text="Uyandırma kelimesi (isteğe bağlı)" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource SettingDescriptionTextBlockStyle}"
-                                       Text="Belirli bir kelime söylediğinizde (ör. «Hey Asistan») komut penceresi otomatik açılır. Porcupine hesabı ve eğitilmiş kelime dosyası gerekir." />
+                                       Text="Klavye kısayolu (Ctrl+Alt+A) her zaman kullanılabilir. Uyandırma kelimesi Vosk ile tamamen yerel çalışır; hesap veya API anahtarı gerekmez." />
+
+                            <muxc:InfoBar IsOpen="True"
+                                          IsClosable="False"
+                                          Severity="Informational"
+                                          Title="Uyandırma hizmeti"
+                                          Message="{Binding WakeWordServiceSummary}" />
 
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
@@ -563,18 +581,22 @@
                                     <TextBlock Text="Kapalıysa yalnızca klavye kısayolu veya tepsi menüsü ile komut verebilirsiniz."
                                                Style="{StaticResource SettingDescriptionTextBlockStyle}" />
                                 </StackPanel>
-                                <ToggleSwitch Grid.Column="1" IsOn="{Binding WakeWordEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="1"
+                                              IsOn="{Binding WakeWordEnabled, Mode=TwoWay}"
+                                              IsEnabled="{Binding IsWakeWordServiceAvailable}"
+                                              VerticalAlignment="Center" />
                             </Grid>
 
-                            <PasswordBox x:Name="PorcupineKeyBox" Header="Porcupine erişim anahtarı" PasswordChanged="PorcupineKeyBox_OnPasswordChanged" />
-                            <TextBox Header="Kelime dosyası (.ppn)" Text="{Binding PorcupineKeywordPath, Mode=TwoWay}"
-                                     PlaceholderText="C:\...\hey-asistan_tr.ppn" HorizontalAlignment="Stretch" />
-                            <TextBox Header="Dil modeli (.pv, isteğe bağlı)" Text="{Binding PorcupineModelPath, Mode=TwoWay}"
-                                     HorizontalAlignment="Stretch" />
-                            <Slider Header="Algılama hassasiyeti" Minimum="0.01" Maximum="1" StepFrequency="0.05"
-                                    Value="{Binding PorcupineSensitivity, Mode=TwoWay}" />
-                            <TextBlock Text="Düşük değer yanlış uyandırmayı azaltır; yüksek değer kelimeyi daha kolay yakalar."
-                                       Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+                            <StackPanel Spacing="12"
+                                        Visibility="{Binding WakeWordEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <ComboBox Header="Hangi kelimeyi dinlesin?"
+                                          ItemsSource="{x:Bind AppVM.WakeWordChoices, Mode=OneWay}"
+                                          SelectedItem="{Binding SelectedWakeWord, Mode=TwoWay}"
+                                          ItemTemplate="{StaticResource SettingsChoiceItemTemplate}"
+                                          HorizontalAlignment="Stretch" />
+                                <TextBlock Text="Seçtiğiniz kelimeyi söylediğinizde sesli asistan açılır. Gürültülü ortamlarda yanlış uyandırma olabilir."
+                                           Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                     </StackPanel>
@@ -690,6 +712,30 @@
                                 <TextBlock Text="Bu seçeneklerin etkinleşmesi için uygulamayı yeniden başlatmanız gerekebilir."
                                            Style="{StaticResource SettingDescriptionTextBlockStyle}" />
 
+                                <Border Style="{StaticResource SettingDividerStyle}" />
+                                <TextBlock Text="Çalışma bütçesi" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <NumberBox Header="Adım limiti"
+                                               Value="{Binding MaxSteps, Mode=TwoWay}"
+                                               Minimum="1"
+                                               Maximum="40"
+                                               SpinButtonPlacementMode="Inline"
+                                               HorizontalAlignment="Stretch" />
+                                    <NumberBox Grid.Column="1"
+                                               Header="Prompt geçmişi"
+                                               Value="{Binding MaxPriorStepsInPrompt, Mode=TwoWay}"
+                                               Minimum="1"
+                                               Maximum="20"
+                                               SpinButtonPlacementMode="Inline"
+                                               HorizontalAlignment="Stretch" />
+                                </Grid>
+                                <TextBlock Text="Uzun görevlerde adım limitini artırın; prompt geçmişi yüksekse model daha fazla önceki denemeyi görür."
+                                           Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+
                                 <Grid ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -721,6 +767,17 @@
                                 <TextBlock Text="Ekranda bu kadar az öğe bulunursa eski otomasyon yöntemine geçilir."
                                            Style="{StaticResource SettingDescriptionTextBlockStyle}" />
 
+                                <Border Style="{StaticResource SettingDividerStyle}" />
+                                <TextBlock Text="Gelişmiş ses" FontWeight="SemiBold" />
+                                <TextBlock Text="Normal kullanımda gerekmez. Whisper yalnızca geliştirici modunda burada yapılandırılır."
+                                           Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+                                <TextBox Header="Whisper model dosyası yolu" Text="{Binding WhisperModelPath, Mode=TwoWay}"
+                                         PlaceholderText="C:\Models\ggml-base.bin"
+                                         Visibility="{Binding IsWhisperEngine, Converter={StaticResource BoolToVisibilityConverter}}"
+                                         HorizontalAlignment="Stretch" />
+                                <TextBox Header="Vosk uyandırma model klasörü (isteğe bağlı)" Text="{Binding VoskModelPath, Mode=TwoWay}"
+                                         PlaceholderText="Bos birakirsaniz model otomatik indirilir"
+                                         HorizontalAlignment="Stretch" />
                                 <Button Click="OpenCapabilities_OnClick"
                                         HorizontalAlignment="Left"
                                         ToolTipService.ToolTip="Asistanın kullanabildiği tüm işlem türlerini listeler">

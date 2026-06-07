@@ -218,6 +218,16 @@ public sealed class DecisionParser
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "cmd")) &&
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "script")) =>
                 "shell icin target veya parameters.command gerekli.",
+            "notify" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "message")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "body")) =>
+                "notify icin parameters.message gerekli.",
+            "wmi_query" when string.IsNullOrWhiteSpace(target) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "query")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "wql")) =>
+                "wmi_query icin target veya parameters.query gerekli.",
+            "com_invoke" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "progId")) ||
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "method")) =>
+                "com_invoke icin parameters.progId ve parameters.method gerekli.",
             _ => null
         };
     }

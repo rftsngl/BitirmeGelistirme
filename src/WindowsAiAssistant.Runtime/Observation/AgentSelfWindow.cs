@@ -1,6 +1,6 @@
 namespace WindowsAiAssistant.Runtime.Observation;
 
-internal static class AgentSelfWindow
+public static class AgentSelfWindow
 {
     public static bool IsAssistantProcess(string? processName) =>
         !string.IsNullOrWhiteSpace(processName) &&

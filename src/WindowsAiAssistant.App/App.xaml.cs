@@ -2,6 +2,7 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using WindowsAiAssistant.App.Background;
+using WindowsAiAssistant.App.Integrations;
 using WindowsAiAssistant.App.Services;
 
 namespace WindowsAiAssistant.App;
@@ -24,6 +25,7 @@ public partial class App : Application
         }
 
         Services = AppServices.BuildServiceProvider();
+        AppNotificationIdentity.EnsureRegistered();
         InitializeComponent();
     }
 

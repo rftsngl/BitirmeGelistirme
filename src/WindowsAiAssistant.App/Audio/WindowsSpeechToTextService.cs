@@ -6,18 +6,23 @@ namespace WindowsAiAssistant.App.Audio;
 public sealed class WindowsSpeechToTextService : ISpeechToTextService
 {
     private readonly AudioOptions _options;
+    private readonly SpeechReadinessService _readiness;
 
-    public WindowsSpeechToTextService(AudioOptions options) =>
+    public WindowsSpeechToTextService(AudioOptions options, SpeechReadinessService readiness)
+    {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
+    }
 
     public async Task<string?> ListenOnceAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await _readiness.EnsureReadyForListenAsync(cancellationToken).ConfigureAwait(false);
 
         SpeechRecognizer? recognizer = null;
         try
         {
-            recognizer = CreateRecognizer();
+            recognizer = WindowsSpeechLanguageCatalog.CreateTopicRecognizer(_options.SpeechLanguage);
             recognizer.Constraints.Add(new SpeechRecognitionTopicConstraint(
                 SpeechRecognitionScenario.Dictation,
                 "dictation"));
@@ -45,9 +50,14 @@ public sealed class WindowsSpeechToTextService : ISpeechToTextService
         {
             throw;
         }
-        catch (Exception)
+        catch (SpeechAccessException)
         {
-            return null;
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new SpeechAccessException(
+                "Windows konuşma tanıması başarısız oldu. Mikrofon ve dil paketini kontrol edin.", ex);
         }
         finally
         {
@@ -55,16 +65,4 @@ public sealed class WindowsSpeechToTextService : ISpeechToTextService
         }
     }
 
-    private SpeechRecognizer CreateRecognizer()
-    {
-        if (string.IsNullOrWhiteSpace(_options.SpeechLanguage))
-        {
-            return new SpeechRecognizer();
-        }
-
-        var language = new Windows.Globalization.Language(_options.SpeechLanguage);
-        var supported = SpeechRecognizer.SupportedTopicLanguages
-            .Any(item => item.LanguageTag.Equals(language.LanguageTag, StringComparison.OrdinalIgnoreCase));
-        return supported ? new SpeechRecognizer(language) : new SpeechRecognizer();
-    }
 }

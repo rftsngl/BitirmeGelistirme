@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using WindowsAiAssistant.Agent;
 using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.Runtime.Config;
 using WindowsAiAssistant.Runtime.Policy;
@@ -17,30 +18,41 @@ public sealed class LocalAppSettingsService
     };
 
     private readonly string _localPath;
+    private readonly AgentOptions _agent;
     private readonly AudioOptions _audio;
     private readonly RuntimeOptions _runtime;
 
-    public LocalAppSettingsService(AudioOptions audio, RuntimeOptions runtime)
+    public LocalAppSettingsService(AgentOptions agent, AudioOptions audio, RuntimeOptions runtime)
     {
+        _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _audio = audio ?? throw new ArgumentNullException(nameof(audio));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _localPath = Path.Combine(AppContext.BaseDirectory, "appsettings.Local.json");
     }
 
-    public void SaveAudioAndPolicy(
+    public void SaveSettings(
+        AgentOptions agentSnapshot,
         AudioOptions audioSnapshot,
         ActionPolicy policySnapshot,
         UiAutomationOptions uiAutomationSnapshot,
         bool startWithWindows)
     {
-        ProtectPorcupineKeyForStorage(audioSnapshot);
-
+        CopyAgent(agentSnapshot, _agent);
         CopyAudio(audioSnapshot, _audio);
         CopyPolicy(policySnapshot, _runtime.ActionPolicy);
         CopyUiAutomation(uiAutomationSnapshot, _runtime.UiAutomation);
         _audio.StartWithWindows = startWithWindows;
 
         var root = LoadRootObject();
+        if (root["Agent"] is not JsonObject agentNode)
+        {
+            agentNode = new JsonObject();
+            root["Agent"] = agentNode;
+        }
+
+        agentNode["MaxSteps"] = agentSnapshot.MaxSteps;
+        agentNode["MaxPriorStepsInPrompt"] = agentSnapshot.MaxPriorStepsInPrompt;
+
         root["Audio"] = JsonSerializer.SerializeToNode(audioSnapshot, JsonOptions);
         root["Runtime"] ??= new JsonObject();
         if (root["Runtime"] is JsonObject runtimeNode)
@@ -54,18 +66,10 @@ public sealed class LocalAppSettingsService
         WindowsStartupService.SetEnabled(startWithWindows);
     }
 
-    /// <summary>
-    /// Bellekte duz metin tutulabilir; diske yazarken DPAPI ile korur.
-    /// </summary>
-    public static void ProtectPorcupineKeyForStorage(AudioOptions audio)
+    public static void CopyAgent(AgentOptions from, AgentOptions to)
     {
-        if (string.IsNullOrWhiteSpace(audio.PorcupineAccessKey) ||
-            audio.PorcupineAccessKey.StartsWith("dpapi:", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        audio.PorcupineAccessKey = SecretProtector.Protect(audio.PorcupineAccessKey.Trim());
+        to.MaxSteps = from.MaxSteps;
+        to.MaxPriorStepsInPrompt = from.MaxPriorStepsInPrompt;
     }
 
     public static void CopyAudio(AudioOptions from, AudioOptions to)
@@ -73,10 +77,7 @@ public sealed class LocalAppSettingsService
         to.BackgroundModeEnabled = from.BackgroundModeEnabled;
         to.StartMinimizedToTray = from.StartMinimizedToTray;
         to.WakeWordEnabled = from.WakeWordEnabled;
-        to.PorcupineAccessKey = from.PorcupineAccessKey;
-        to.PorcupineKeywordPath = from.PorcupineKeywordPath;
-        to.PorcupineModelPath = from.PorcupineModelPath;
-        to.PorcupineSensitivity = from.PorcupineSensitivity;
+        to.WakeWordPhrase = from.WakeWordPhrase;
         to.GlobalHotKeyEnabled = from.GlobalHotKeyEnabled;
         to.GlobalHotKey = from.GlobalHotKey;
         to.TextToSpeechEnabled = from.TextToSpeechEnabled;
@@ -87,6 +88,7 @@ public sealed class LocalAppSettingsService
         to.VoiceApprovalEnabled = from.VoiceApprovalEnabled;
         to.SpeechEngine = from.SpeechEngine;
         to.WhisperModelPath = from.WhisperModelPath;
+        to.VoskModelPath = from.VoskModelPath;
         to.InputDeviceIndex = from.InputDeviceIndex;
         to.DeveloperModeEnabled = from.DeveloperModeEnabled;
     }

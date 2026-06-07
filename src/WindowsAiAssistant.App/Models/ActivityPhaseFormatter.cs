@@ -11,14 +11,14 @@ public static class ActivityPhaseFormatter
 
         return phase switch
         {
-            "basladi" => ("Görev alındı", Truncate(detail, 120)),
-            "gozlem" => ("Masaüstü inceleniyor", "Açık pencereler, arayüz öğeleri ve ekran görüntüsü toplanıyor."),
-            "llm" => ("Düşünüyor", string.IsNullOrWhiteSpace(detail) ? "Sonraki adım planlanıyor…" : detail),
-            "gate" => ("Güvenlik kontrolü", Truncate(detail, 140)),
-            "onay" => ("Onayınız bekleniyor", Truncate(detail, 140)),
+            "basladi" => ("Görevi aldım", Truncate(detail, 120)),
+            "gozlem" => ("Ekranı okuyorum", "Pencereler, odak ve görünen kontroller taranıyor."),
+            "llm" => ("Plan netleşiyor", string.IsNullOrWhiteSpace(detail) ? "Sonraki güvenli adım seçiliyor…" : detail),
+            "gate" => ("Güvenlik süzgeci", Truncate(detail, 140)),
+            "onay" => ("Onay bekliyor", Truncate(detail, 140)),
             "eylem" => FormatEylem(detail),
-            "tamamlandi" => ("Yanıt hazırlanıyor", Truncate(detail, 160)),
-            "limit" => ("Adım limitine ulaşıldı", Truncate(detail, 160)),
+            "tamamlandi" => ("Sonuç toparlanıyor", Truncate(detail, 160)),
+            "limit" => ("Adım bütçesi doldu", Truncate(detail, 160)),
             _ => (Capitalize(phase), Truncate(detail, 140))
         };
     }
@@ -30,10 +30,10 @@ public static class ActivityPhaseFormatter
             var parts = raw.Split(new[] { "|fail|" }, 2, StringSplitOptions.None);
             var action = parts[0];
             var message = parts.Length > 1 ? parts[1] : string.Empty;
-            return ("İşlem başarısız, yeniden deneniyor", $"{FormatActionDetail(action)} — {Truncate(message, 100)}");
+            return ("İşlem tutmadı, rota değişiyor", $"{FormatActionDetail(action)} - {Truncate(message, 100)}");
         }
 
-        return ("İşlem yapılıyor", FormatActionDetail(raw));
+        return ("Uygulanıyor", FormatActionDetail(raw));
     }
 
     private static string FormatActionDetail(string raw)

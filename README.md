@@ -50,8 +50,8 @@ Hata devam ederse (Controlled Folder Access veya agresif AV):
 
 Ayarlar şu sırayla çözülür:
 
-1. **`src/WindowsAiAssistant.App/appsettings.json`** — varsayılanlar (`Agent`, `Runtime`).
-2. **`appsettings.Local.json`** (opsiyonel, git'e dahil değil) — yerel override. Örnek: [`appsettings.Local.json.example`](src/WindowsAiAssistant.App/appsettings.Local.json.example).
+1. **`src/WindowsAiAssistant.App/appsettings.json`** — varsayılanlar (`Agent`, `Runtime`, `Audio`).
+2. **`appsettings.Local.json`** (opsiyonel, git'e dahil değil) — kullanıcı tercihleri (uyandırma kelimesi, hotkey vb.). Örnek: [`appsettings.Local.json.example`](src/WindowsAiAssistant.App/appsettings.Local.json.example).
 3. **Sağlayıcı profilleri** — uygulama içi "Sağlayıcı Ayarları" sayfası; kalıcı dosya: `%LocalAppData%/WindowsAiAssistant/provider-settings.json`.
 4. **API anahtarı** — önce profilde kayıtlı anahtar, yoksa profilin `ApiKeyEnvVar` ortam değişkeni (örn. `OPENAI_API_KEY`, `GEMINI_API_KEY`).
 
@@ -67,9 +67,9 @@ Vision (ekran görüntüsü) yalnızca profilde etkinse ve model multimodal ise 
 
 ### Ses, tray ve overlay
 
-- **Ses ve Güvenlik** sayfası (`AppSettingsPage`): hotkey, TTS, STT motoru (`windows` veya `whisper`), mikrofon cihazı, Porcupine wake-word, ActionGate politikası, UI otomasyon seçenekleri.
+- **Ayarlar** sayfası (`UnifiedSettingsPage`): hotkey, TTS, mikrofon izni, uyandırma kelimesi, ActionGate politikası, UI otomasyon seçenekleri.
 - **Tray + arka plan:** `BackgroundModeEnabled` ile sistem tepsisinde çalışır; `Ctrl+Alt+A` (varsayılan) ile sesli overlay açılır.
-- **Wake-word:** Porcupine AccessKey + `.ppn` dosyası gerekir. AccessKey kayıtta DPAPI ile korunur; mikrofon `InputDeviceIndex` ile seçilir.
+- **Uyandırma kelimesi ve komut dinleme:** [Vosk](https://alphacephei.com/vosk/) ile tamamen yerel çalışır; Windows konuşma tanıma paketi veya API anahtarı gerekmez. Türkçe model (`vosk-model-small-tr-0.3`, ~35 MB) ilk kullanımda otomatik indirilir (`%LocalAppData%/WindowsAiAssistant/models`). Windows'ta Türkçe STT paketi yoksa komut dinleme otomatik olarak Vosk'a geçer.
 - **Whisper STT:** `SpeechEngine=whisper` ve geçerli `WhisperModelPath` (ggml `.bin`) gerekir; yoksa Windows STT kullanılır. [Whisper.ggml modelleri](https://huggingface.co/ggerganov/whisper.cpp/tree/main) indirilebilir.
 - **Yeniden başlatma:** Hotkey, wake-word, STT motoru ve UI otomasyon ayarları singleton servislerde tutulur; kayıttan sonra uygulama yeniden başlatılmadan etkinleşmez.
 

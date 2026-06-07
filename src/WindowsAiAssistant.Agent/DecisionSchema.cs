@@ -47,7 +47,15 @@ public static class DecisionSchema
         "mouse_click",
         "mouse_scroll",
         "mouse_drag",
-        "shell"
+        "shell",
+        "capture_screen",
+        "notify",
+        "wmi_query",
+        "schedule_task",
+        "jump_list",
+        "com_invoke",
+        "verify_user",
+        "global_hook"
     };
 
     public const string JsonSchemaExample = """

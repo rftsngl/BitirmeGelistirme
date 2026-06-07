@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using WindowsAiAssistant.Runtime.Actions;
 using WindowsAiAssistant.Runtime.Automation;
@@ -34,7 +35,15 @@ public sealed class AgentLoop
         "mouse_click",
         "mouse_scroll",
         "mouse_drag",
-        "shell"
+        "shell",
+        "capture_screen",
+        "notify",
+        "wmi_query",
+        "schedule_task",
+        "jump_list",
+        "com_invoke",
+        "verify_user",
+        "global_hook"
     };
 
     private static readonly JsonSerializerOptions LogJsonOptions = new() { WriteIndented = false };
@@ -86,7 +95,7 @@ public sealed class AgentLoop
             UserGoal = userGoal.Trim()
         };
 
-        var maxSteps = Math.Clamp(_options.MaxSteps, 1, 20);
+        var maxSteps = Math.Clamp(_options.MaxSteps, 1, 40);
         _actionGate.BeginSession();
         Report(progress, 0, maxSteps, "basladi", session.UserGoal);
 
@@ -113,7 +122,7 @@ public sealed class AgentLoop
                 cancellationToken).ConfigureAwait(false);
             lastObservation = observation;
 
-            var prompt = _promptBuilder.Build(session.UserGoal, observation, session.Steps);
+            var prompt = _promptBuilder.Build(session.UserGoal, observation, session.Steps, triggerSource);
             Report(progress, stepIndex, maxSteps, "llm", $"Adim {stepIndex + 1} karar isteniyor");
 
             var llmContent = await RequestLlmDecisionAsync(prompt, observation, cancellationToken).ConfigureAwait(false);
@@ -321,7 +330,8 @@ public sealed class AgentLoop
         }
 
         session.IsComplete = true;
-        var maxStepsMessage = $"Maksimum adim sayisina ulasildi ({maxSteps} adim). Kismi sonuc.";
+        var maxStepsMessage =
+            $"Maksimum adim sayisina ulasildi ({maxSteps} adim). Gorev tamamlanamadi; kismi sonuc.";
         await _runLogger.AppendAsync(
             new AgentRunLog
             {
@@ -332,9 +342,12 @@ public sealed class AgentLoop
                 Timestamp = DateTimeOffset.UtcNow
             },
             cancellationToken).ConfigureAwait(false);
-        var lastMessage = session.Steps.LastOrDefault()?.ActionResult?.Message ?? maxStepsMessage;
+
+        var userMessage = TryGetLastRespondMessage(session)
+            ?? await RequestFinalUserFeedbackAsync(session, lastObservation, cancellationToken).ConfigureAwait(false)
+            ?? maxStepsMessage;
         Report(progress, maxSteps - 1, maxSteps, "limit", maxStepsMessage);
-        return Complete(session, lastMessage, lastObservation, reachedMaxSteps: true);
+        return Complete(session, userMessage, lastObservation, reachedMaxSteps: true);
     }
 
     private AgentLoopResult Fail(
@@ -351,6 +364,91 @@ public sealed class AgentLoop
             ObservationSummary = observation?.ToShortSummary(),
             LogFilePath = _runLogger.GetLogFilePath(session.RunId)
         };
+
+    private static string? TryGetLastRespondMessage(AgentSession session)
+    {
+        for (var i = session.Steps.Count - 1; i >= 0; i--)
+        {
+            var step = session.Steps[i];
+            var action = step.ParsedDecision?.Action;
+            if (action is not ("respond" or "ask_user"))
+            {
+                continue;
+            }
+
+            if (step.ActionResult?.Success != true)
+            {
+                continue;
+            }
+
+            if (step.ParsedDecision?.Parameters.TryGetValue("message", out var message) == true &&
+                !string.IsNullOrWhiteSpace(message))
+            {
+                return message.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(step.ActionResult.Message))
+            {
+                return step.ActionResult.Message.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<string?> RequestFinalUserFeedbackAsync(
+        AgentSession session,
+        DesktopObservation? observation,
+        CancellationToken cancellationToken)
+    {
+        if (session.Steps.Count == 0)
+        {
+            return null;
+        }
+
+        var history = new StringBuilder();
+        foreach (var step in session.Steps.OrderBy(s => s.Index))
+        {
+            var action = step.ParsedDecision?.Action ?? "?";
+            var success = step.ActionResult?.Success == true ? "ok" : "fail";
+            var resultMessage = step.ActionResult?.Message ?? "(no result)";
+            history.AppendLine($"  - {action} -> {success}: {resultMessage}");
+        }
+
+        var prompt = new StringBuilder()
+            .AppendLine("The agent loop reached max steps without a clean user-facing respond.")
+            .AppendLine($"User goal: {session.UserGoal.Trim()}")
+            .AppendLine("Steps taken:")
+            .AppendLine(history.ToString())
+            .AppendLine()
+            .AppendLine("Reply with ONLY one JSON object matching the schema.")
+            .AppendLine("Use decisionType=complete, action=respond, isComplete=true.")
+            .AppendLine("parameters.message MUST be a concise Turkish summary for the user: what was tried and the outcome.")
+            .AppendLine("Do not mention JSON, steps, or internal logs.")
+            .ToString();
+
+        var llmContent = await RequestLlmDecisionAsync(
+                prompt,
+                observation ?? new DesktopObservation(),
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (llmContent.Error is not null || string.IsNullOrWhiteSpace(llmContent.Content))
+        {
+            return null;
+        }
+
+        var parseResult = _decisionParser.Parse(llmContent.Content);
+        if (!parseResult.Success || parseResult.Decision is null)
+        {
+            return null;
+        }
+
+        return ResolveAssistantMessage(parseResult.Decision, new ActionResult
+        {
+            Success = true,
+            Message = parseResult.Decision.Parameters.TryGetValue("message", out var msg) ? msg : string.Empty
+        });
+    }
 
     private static string Escape(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)

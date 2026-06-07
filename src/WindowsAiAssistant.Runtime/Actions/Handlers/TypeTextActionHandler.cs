@@ -12,27 +12,27 @@ public sealed class TypeTextActionHandler : IActionHandler
 
     public string ActionName => "type_text";
 
-    public Task<ActionResult> ExecuteAsync(AgentAction action, CancellationToken cancellationToken = default)
+    public async Task<ActionResult> ExecuteAsync(AgentAction action, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!action.Parameters.TryGetValue("text", out var text) || string.IsNullOrEmpty(text))
         {
-            return Task.FromResult(new ActionResult
+            return new ActionResult
             {
                 Success = false,
                 Message = "type_text icin parameters.text gerekli."
-            });
+            };
         }
 
         var (windowTitle, processName, _) = _foregroundWindow.GetForegroundInfo();
         if (string.IsNullOrWhiteSpace(processName))
         {
-            return Task.FromResult(new ActionResult
+            return new ActionResult
             {
                 Success = false,
                 Message = "Odakli bir pencere yok. Once focus_window veya launch ile bir uygulamayi one getirin."
-            });
+            };
         }
 
         var useSendInput = action.Parameters.TryGetValue("method", out var method) &&
@@ -46,23 +46,23 @@ public sealed class TypeTextActionHandler : IActionHandler
             }
             else
             {
-                DesktopInput.TypeTextViaClipboard(text);
+                await DesktopInput.TypeTextViaClipboardAsync(text, cancellationToken).ConfigureAwait(false);
             }
 
             var mode = useSendInput ? "SendInput" : "clipboard";
-            return Task.FromResult(new ActionResult
+            return new ActionResult
             {
                 Success = true,
                 Message = $"Metin yazildi ({text.Length} karakter, {mode}) -> {windowTitle}."
-            });
+            };
         }
         catch (Exception ex)
         {
-            return Task.FromResult(new ActionResult
+            return new ActionResult
             {
                 Success = false,
                 Message = $"Metin yazilamadi: {ex.Message}"
-            });
+            };
         }
     }
 }

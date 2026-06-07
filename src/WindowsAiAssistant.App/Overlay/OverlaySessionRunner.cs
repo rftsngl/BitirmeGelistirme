@@ -121,6 +121,15 @@ public sealed class OverlaySessionRunner
             }).ConfigureAwait(true);
             return;
         }
+        catch (SpeechAccessException ex) when (!token.IsCancellationRequested)
+        {
+            await window.DispatcherQueue.EnqueueAsync(() =>
+            {
+                _viewModel.SetManualInputPrompt(ex.Message);
+                return Task.CompletedTask;
+            }).ConfigureAwait(true);
+            transcript = await WaitForManualInputAsync(token).ConfigureAwait(true);
+        }
         catch (Exception ex) when (!token.IsCancellationRequested)
         {
             await window.DispatcherQueue.EnqueueAsync(() =>

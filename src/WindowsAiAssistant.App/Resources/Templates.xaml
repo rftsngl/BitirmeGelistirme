@@ -65,44 +65,62 @@
     <DataTemplate x:Key="LiveActivityTemplate">
         <Grid Margin="0,6,0,6" HorizontalAlignment="Stretch">
             <Grid HorizontalAlignment="Left" MaxWidth="820">
-                <Border Style="{StaticResource ChatAssistantBubbleStyle}"
-                        BorderBrush="{ThemeResource AccentControlElevationBorderBrush}">
-                    <StackPanel Spacing="10">
-                        <Grid ColumnSpacing="10">
+                <Border Style="{StaticResource LiveActivityBubbleStyle}">
+                    <StackPanel Spacing="12">
+                        <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Grid Width="28" Height="28">
-                                <muxc:ProgressRing Width="28"
-                                                   Height="28"
+                            <Grid Width="34" Height="34">
+                                <muxc:ProgressRing Width="34"
+                                                   Height="34"
                                                    IsActive="{Binding IsActive}" />
                                 <FontIcon Glyph="&#xE99A;"
                                           FontFamily="{StaticResource SymbolThemeFontFamily}"
-                                          FontSize="14"
+                                          FontSize="15"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
                                           Opacity="0.85" />
                             </Grid>
-                            <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{Binding LiveStatusLine}"
-                                               FontSize="15"
-                                               FontWeight="SemiBold" />
-                                    <TextBlock Text="{Binding StepProgressDisplay}"
-                                               Style="{StaticResource ChatMetaTextBlockStyle}"
-                                               VerticalAlignment="Center"
-                                               Visibility="{Binding StepProgressDisplay, Converter={StaticResource StringNotEmptyToVisibilityConverter}}" />
-                                </StackPanel>
-                                <TextBlock Text="{Binding LiveDetailLine}"
-                                           Style="{StaticResource SettingDescriptionTextBlockStyle}"
-                                           Visibility="{Binding HasLiveDetail, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="Asistan çalışıyor"
+                                           Style="{StaticResource ChatMetaTextBlockStyle}" />
+                                <TextBlock Text="{Binding LiveStatusLine}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="WrapWholeWords"
+                                           MaxLines="2" />
                             </StackPanel>
+                            <Border Grid.Column="2"
+                                    Style="{StaticResource LiveActivityPillBorderStyle}"
+                                    Visibility="{Binding StepProgressDisplay, Converter={StaticResource StringNotEmptyToVisibilityConverter}}">
+                                <TextBlock Text="{Binding StepProgressDisplay}"
+                                           Style="{StaticResource ChatMetaTextBlockStyle}"
+                                           FontWeight="SemiBold" />
+                            </Border>
                         </Grid>
 
-                        <StackPanel Spacing="4"
+                        <TextBlock Text="{Binding LiveDetailLine}"
+                                   Style="{StaticResource SettingDescriptionTextBlockStyle}"
+                                   Visibility="{Binding HasLiveDetail, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="6"
+                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Ellipse Style="{StaticResource ThinkingDotStyle}" Opacity="0.45" />
+                            <Ellipse Style="{StaticResource ThinkingDotStyle}" Opacity="0.7" />
+                            <Ellipse Style="{StaticResource ThinkingDotStyle}" />
+                            <TextBlock Text="Canlı akış"
+                                       Style="{StaticResource ChatMetaTextBlockStyle}"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="6"
                                     Visibility="{Binding HasTimeline, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <TextBlock Text="Yapılanlar" Style="{StaticResource LabelTextBlockStyle}" />
+                            <TextBlock Text="Akış" Style="{StaticResource LabelTextBlockStyle}" />
                             <ItemsControl ItemsSource="{Binding Timeline}"
                                           ItemTemplate="{StaticResource TimelineEntryTemplate}" />
                         </StackPanel>

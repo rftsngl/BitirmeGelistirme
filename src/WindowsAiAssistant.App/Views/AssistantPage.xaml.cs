@@ -18,6 +18,7 @@ public sealed partial class AssistantPage : Page
         DataContext = ViewModel;
         ViewModel.Conversation.CollectionChanged += OnConversationChanged;
         ViewModel.ScrollToEndRequested += ScrollConversationToEnd;
+        Loaded += (_, _) => CommandInputTextBox.Focus(FocusState.Programmatic);
         Unloaded += (_, _) =>
         {
             ViewModel.Conversation.CollectionChanged -= OnConversationChanged;
@@ -39,14 +40,10 @@ public sealed partial class AssistantPage : Page
         });
     }
 
-    private void CommandInputTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
+    private void CommandInputTextBox_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        var ctrlPressed = (Microsoft.UI.Input.InputKeyboardSource
-            .GetKeyStateForCurrentThread(VirtualKey.Control)
-            & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
-        var shiftPressed = (Microsoft.UI.Input.InputKeyboardSource
-            .GetKeyStateForCurrentThread(VirtualKey.Shift)
-            & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
+        var ctrlPressed = IsKeyDown(VirtualKey.Control);
+        var shiftPressed = IsKeyDown(VirtualKey.Shift);
 
         if (e.Key == VirtualKey.Escape && ViewModel.CancelRunCommand.CanExecute(null))
         {
@@ -68,12 +65,28 @@ public sealed partial class AssistantPage : Page
             return;
         }
 
+        e.Handled = true;
+        TrySubmitFromComposer();
+    }
+
+    private void TrySubmitFromComposer()
+    {
+        var text = CommandInputTextBox.Text?.Trim();
+        if (string.IsNullOrWhiteSpace(text) || ViewModel.IsBusy)
+        {
+            return;
+        }
+
+        ViewModel.CommandInput = text;
         if (ViewModel.SubmitCommand.CanExecute(null))
         {
             ViewModel.SubmitCommand.Execute(null);
-            e.Handled = true;
         }
     }
+
+    private static bool IsKeyDown(VirtualKey key) =>
+        (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key)
+         & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
 
     private void Chip_Click(object sender, RoutedEventArgs e)
     {

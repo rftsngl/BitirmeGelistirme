@@ -12,18 +12,9 @@ public sealed partial class AppSettingsPage : Page
         InitializeComponent();
         ViewModel = App.Services.GetRequiredService<AppSettingsViewModel>();
         DataContext = ViewModel;
-        Loaded += (_, _) => PorcupineKeyBox.Password = ViewModel.PorcupineAccessKey;
     }
 
     public AppSettingsViewModel ViewModel { get; }
-
-    private void PorcupineKeyBox_OnPasswordChanged(object sender, RoutedEventArgs e)
-    {
-        if (sender is PasswordBox box)
-        {
-            ViewModel.PorcupineAccessKey = box.Password;
-        }
-    }
 
     private void Save_OnClick(object sender, RoutedEventArgs e) => ViewModel.Save();
 }

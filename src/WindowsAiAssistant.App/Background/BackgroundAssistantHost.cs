@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using WindowsAiAssistant.App.Audio;
 using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.App.HotKeys;
@@ -60,6 +61,7 @@ public sealed class BackgroundAssistantHost : IDisposable
         _wakeWord.WakeWordDetected += OnActivateOverlay;
         _hotKeys.Start();
         _ = _wakeWord.StartAsync();
+        _ = RequestMicrophonePermissionInBackgroundAsync();
         _tray.SetListeningEnabled(_audioOptions.GlobalHotKeyEnabled || _audioOptions.WakeWordEnabled);
 
         if (_audioOptions.StartWithWindows)
@@ -131,6 +133,19 @@ public sealed class BackgroundAssistantHost : IDisposable
     {
         _mainWindow?.RequestExit();
         App.ShutdownApplication();
+    }
+
+    private async Task RequestMicrophonePermissionInBackgroundAsync()
+    {
+        try
+        {
+            var permissions = App.Services.GetRequiredService<MicrophonePermissionService>();
+            await permissions.RequestAccessAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Ilk acilista izin reddedilirse hotkey ile manuel giris kullanilir.
+        }
     }
 
     private async void OnListeningToggled(object? sender, EventArgs e)

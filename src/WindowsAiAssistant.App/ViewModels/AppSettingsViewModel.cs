@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using WindowsAiAssistant.Agent;
 using WindowsAiAssistant.App.Audio;
 using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.App.Mvvm;
@@ -10,10 +11,20 @@ namespace WindowsAiAssistant.App.ViewModels;
 
 public sealed class AppSettingsViewModel : ObservableObject
 {
+    private const int MinAgentSteps = 1;
+    private const int MaxAgentSteps = 40;
+    private const int MinPromptHistorySteps = 1;
+    private const int MaxPromptHistorySteps = 20;
+
+    private readonly AgentOptions _agent;
     private readonly AudioOptions _audio;
     private readonly RuntimeOptions _runtime;
     private readonly LocalAppSettingsService _localSettings;
+    private readonly MicrophonePermissionService _microphonePermissions;
+    private readonly SpeechReadinessService _speechReadiness;
     private string _statusMessage = string.Empty;
+    private string _microphonePermissionSummary = string.Empty;
+    private string _speechLanguageSummary = string.Empty;
 
     public IReadOnlyList<SettingsChoice> RiskHandlingChoices { get; } =
     [
@@ -27,30 +38,51 @@ public sealed class AppSettingsViewModel : ObservableObject
 
     public IReadOnlyList<SettingsChoice> SpeechEngineChoices { get; } =
     [
+        new("vosk", "Vosk (yerel, önerilen)",
+            "Türkçe komut dinleme için önerilir. Model bir kez indirilir, internet gerekmez."),
         new("windows", "Windows (yerleşik)",
-            "Ek kurulum gerektirmez. Türkçe konuşma tanıma dil paketinin yüklü olması gerekir."),
-        new("whisper", "Whisper (bilgisayarınızda)",
-            "İnternet gerektirmez; ggml model dosyası indirip yolunu belirtmeniz gerekir. Genelde daha iyi tanır.")
+            "Windows konuşma tanıma dil paketi yüklü olmalıdır."),
+        new("whisper", "Whisper (gelişmiş)",
+            "Yalnızca geliştirici modunda. Yerel ggml model dosyası gerekir.")
+    ];
+
+    public IReadOnlyList<SettingsChoice> WakeWordChoices { get; } =
+    [
+        new("asistan", "Asistan", "«Asistan» veya «Hey asistan» deyin (Türkçe Vosk modeli)."),
+        new("hey-asistan", "Hey asistan", "«Hey asistan» deyin (Türkçe Vosk modeli)."),
+        new("bilgisayar", "Bilgisayar", "«Bilgisayar» deyin (Türkçe Vosk modeli)."),
+        new("computer", "Computer", "İngilizce «Computer» deyin (İngilizce Vosk modeli)."),
+        new("jarvis", "Jarvis", "İngilizce «Jarvis» deyin (İngilizce Vosk modeli).")
     ];
 
     public AppSettingsViewModel(
+        AgentOptions agent,
         AudioOptions audio,
         RuntimeOptions runtime,
         LocalAppSettingsService localSettings,
-        MicrophoneDeviceService microphoneDevices)
+        MicrophoneDeviceService microphoneDevices,
+        MicrophonePermissionService microphonePermissions,
+        SpeechReadinessService speechReadiness)
     {
+        _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _audio = audio ?? throw new ArgumentNullException(nameof(audio));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         _localSettings = localSettings ?? throw new ArgumentNullException(nameof(localSettings));
+        _microphonePermissions = microphonePermissions ?? throw new ArgumentNullException(nameof(microphonePermissions));
+        _speechReadiness = speechReadiness ?? throw new ArgumentNullException(nameof(speechReadiness));
         ArgumentNullException.ThrowIfNull(microphoneDevices);
 
         MicrophoneOptions = new ObservableCollection<MicrophoneDevice>(microphoneDevices.ListDevices());
+        RequestMicrophonePermissionCommand = new AsyncRelayCommand(RequestMicrophonePermissionAsync);
+        RefreshSpeechDiagnostics();
 
         if (WindowsStartupService.IsRegistered())
         {
             _audio.StartWithWindows = true;
         }
     }
+
+    public AsyncRelayCommand RequestMicrophonePermissionCommand { get; }
 
     public ObservableCollection<MicrophoneDevice> MicrophoneOptions { get; }
 
@@ -78,28 +110,46 @@ public sealed class AppSettingsViewModel : ObservableObject
         set { _audio.WakeWordEnabled = value; OnPropertyChanged(); }
     }
 
-    public string PorcupineAccessKey
+    public bool IsWakeWordServiceAvailable =>
+        _speechReadiness.IsWakeWordServiceAvailable() || _microphonePermissions.CheckAccess() == MicrophoneAccessState.Granted;
+
+    public bool IsSttServiceAvailable => _speechReadiness.IsSttServiceAvailable();
+
+    public string WakeWordServiceSummary => _speechReadiness.DescribeWakeWordSupport();
+
+    public string SttEngineSummary => _speechReadiness.DescribeActiveSttEngine();
+
+    public string VoskModelPath
     {
-        get => _audio.PorcupineAccessKey;
-        set { _audio.PorcupineAccessKey = value ?? string.Empty; OnPropertyChanged(); }
+        get => _audio.VoskModelPath;
+        set { _audio.VoskModelPath = value ?? string.Empty; OnPropertyChanged(); }
     }
 
-    public string PorcupineKeywordPath
+    public string WakeWordPhrase
     {
-        get => _audio.PorcupineKeywordPath;
-        set { _audio.PorcupineKeywordPath = value ?? string.Empty; OnPropertyChanged(); }
+        get => _audio.WakeWordPhrase;
+        set
+        {
+            _audio.WakeWordPhrase = string.IsNullOrWhiteSpace(value) ? "asistan" : value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedWakeWord));
+        }
     }
 
-    public string PorcupineModelPath
+    public SettingsChoice? SelectedWakeWord
     {
-        get => _audio.PorcupineModelPath;
-        set { _audio.PorcupineModelPath = value ?? string.Empty; OnPropertyChanged(); }
-    }
+        get => WakeWordChoices.FirstOrDefault(choice =>
+            choice.Value.Equals(_audio.WakeWordPhrase, StringComparison.OrdinalIgnoreCase))
+               ?? WakeWordChoices[0];
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
 
-    public double PorcupineSensitivity
-    {
-        get => _audio.PorcupineSensitivity;
-        set { _audio.PorcupineSensitivity = (float)Math.Clamp(value, 0.01, 1.0); OnPropertyChanged(); }
+            WakeWordPhrase = value.Value;
+        }
     }
 
     public bool GlobalHotKeyEnabled
@@ -149,10 +199,11 @@ public sealed class AppSettingsViewModel : ObservableObject
         get => _audio.SpeechEngine;
         set
         {
-            _audio.SpeechEngine = string.IsNullOrWhiteSpace(value) ? "windows" : value;
+            _audio.SpeechEngine = string.IsNullOrWhiteSpace(value) ? "vosk" : value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedSpeechEngine));
             OnPropertyChanged(nameof(IsWhisperEngine));
+            RefreshSpeechDiagnostics();
         }
     }
 
@@ -203,6 +254,38 @@ public sealed class AppSettingsViewModel : ObservableObject
     }
 
     public bool IsDeveloperMode => _audio.DeveloperModeEnabled;
+
+    public int MaxSteps
+    {
+        get => _agent.MaxSteps;
+        set
+        {
+            var next = Math.Clamp(value, MinAgentSteps, MaxAgentSteps);
+            if (_agent.MaxSteps == next)
+            {
+                return;
+            }
+
+            _agent.MaxSteps = next;
+            OnPropertyChanged();
+        }
+    }
+
+    public int MaxPriorStepsInPrompt
+    {
+        get => _agent.MaxPriorStepsInPrompt;
+        set
+        {
+            var next = Math.Clamp(value, MinPromptHistorySteps, MaxPromptHistorySteps);
+            if (_agent.MaxPriorStepsInPrompt == next)
+            {
+                return;
+            }
+
+            _agent.MaxPriorStepsInPrompt = next;
+            OnPropertyChanged();
+        }
+    }
 
     public string NormalHandling
     {
@@ -320,8 +403,50 @@ public sealed class AppSettingsViewModel : ObservableObject
         private set => SetField(ref _statusMessage, value);
     }
 
+    public string MicrophonePermissionSummary
+    {
+        get => _microphonePermissionSummary;
+        private set => SetField(ref _microphonePermissionSummary, value);
+    }
+
+    public string SpeechLanguageSummary
+    {
+        get => _speechLanguageSummary;
+        private set => SetField(ref _speechLanguageSummary, value);
+    }
+
+    public bool IsMicrophoneGranted =>
+        _microphonePermissions.CheckAccess() == MicrophoneAccessState.Granted;
+
+    public void RefreshSpeechDiagnostics()
+    {
+        MicrophonePermissionSummary = MicrophonePermissionService.Describe(_microphonePermissions.CheckAccess());
+        SpeechLanguageSummary = _speechReadiness.DescribeLanguageSupport();
+        OnPropertyChanged(nameof(IsMicrophoneGranted));
+        OnPropertyChanged(nameof(IsWakeWordServiceAvailable));
+        OnPropertyChanged(nameof(IsSttServiceAvailable));
+        OnPropertyChanged(nameof(WakeWordServiceSummary));
+        OnPropertyChanged(nameof(SttEngineSummary));
+    }
+
+    public async Task RequestMicrophonePermissionAsync()
+    {
+        var state = await _microphonePermissions.RequestAccessAsync().ConfigureAwait(true);
+        RefreshSpeechDiagnostics();
+        StatusMessage = MicrophonePermissionService.Describe(state);
+    }
+
     public void Save()
     {
+        var agentSnapshot = new AgentOptions
+        {
+            MaxSteps = Math.Clamp(_agent.MaxSteps, MinAgentSteps, MaxAgentSteps),
+            MaxPriorStepsInPrompt = Math.Clamp(
+                _agent.MaxPriorStepsInPrompt,
+                MinPromptHistorySteps,
+                MaxPromptHistorySteps)
+        };
+
         var audioSnapshot = new AudioOptions();
         LocalAppSettingsService.CopyAudio(_audio, audioSnapshot);
         var policySnapshot = new ActionPolicy
@@ -335,8 +460,9 @@ public sealed class AppSettingsViewModel : ObservableObject
         var uiAutomationSnapshot = new UiAutomationOptions();
         LocalAppSettingsService.CopyUiAutomation(_runtime.UiAutomation, uiAutomationSnapshot);
 
-        _localSettings.SaveAudioAndPolicy(audioSnapshot, policySnapshot, uiAutomationSnapshot, StartWithWindows);
+        _localSettings.SaveSettings(agentSnapshot, audioSnapshot, policySnapshot, uiAutomationSnapshot, StartWithWindows);
+        RefreshSpeechDiagnostics();
         StatusMessage =
-            "Ayarlar kaydedildi. Sesli asistan kısayolu, uyandırma kelimesi ve konuşma motoru değişiklikleri için uygulamayı yeniden başlatın.";
+            "Ayarlar kaydedildi. Sesli asistan, uyandırma kelimesi ve gelişmiş konuşma motoru değişiklikleri için uygulamayı yeniden başlatın.";
     }
 }

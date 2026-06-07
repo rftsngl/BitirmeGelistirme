@@ -49,7 +49,7 @@ public sealed partial class UnifiedSettingsPage : Page
         AudioSection.DataContext = AppVM;
         SecuritySection.DataContext = AppVM;
         DeveloperSection.DataContext = AppVM;
-        PorcupineKeyBox.Password = AppVM.PorcupineAccessKey;
+        AppVM.RefreshSpeechDiagnostics();
     }
 
     private void SyncListSelectionToViewModel()
@@ -75,11 +75,6 @@ public sealed partial class UnifiedSettingsPage : Page
 
     private void ApiKeyPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
         => ProviderVM.ApiKeyInput = ApiKeyPasswordBox.Password;
-
-    private void PorcupineKeyBox_OnPasswordChanged(object sender, RoutedEventArgs e)
-    {
-        if (sender is PasswordBox box) AppVM.PorcupineAccessKey = box.Password;
-    }
 
     private async void SetActive_OnClick(object sender, RoutedEventArgs e)
         => await ProviderVM.SetActiveAsync().ConfigureAwait(true);

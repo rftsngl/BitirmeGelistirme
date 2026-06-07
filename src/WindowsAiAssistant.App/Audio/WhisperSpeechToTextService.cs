@@ -13,21 +13,20 @@ namespace WindowsAiAssistant.App.Audio;
 public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposable
 {
     private readonly AudioOptions _options;
+    private readonly SpeechReadinessService _readiness;
     private readonly object _gate = new();
     private WhisperFactory? _factory;
 
-    public WhisperSpeechToTextService(AudioOptions options) =>
+    public WhisperSpeechToTextService(AudioOptions options, SpeechReadinessService readiness)
+    {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
+    }
 
     public async Task<string?> ListenOnceAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
-        if (string.IsNullOrWhiteSpace(_options.WhisperModelPath) ||
-            !File.Exists(_options.WhisperModelPath))
-        {
-            return null;
-        }
+        await _readiness.EnsureReadyForListenAsync(cancellationToken).ConfigureAwait(false);
 
         float[]? samples;
         try

@@ -99,7 +99,7 @@ public sealed class ConversationItem : ObservableObject
     }
 
     public string StepProgressDisplay =>
-        MaxSteps > 0 ? $"Adım {Math.Clamp(CurrentStepIndex, 1, MaxSteps)}/{MaxSteps}" : string.Empty;
+        MaxSteps > 0 ? $"Adım {Math.Clamp(CurrentStepIndex, 1, MaxSteps)} / {MaxSteps}" : string.Empty;
 
     public ObservableCollection<ActivityTimelineEntry> Timeline { get; } = [];
 

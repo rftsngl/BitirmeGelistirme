@@ -1,60 +1,91 @@
 # Build outputs
 [Bb]in/
 [Oo]bj/
+[Ll]og/
+[Ll]ogs/
 out/
 publish/
-*.dll
-*.exe
-*.pdb
-*.ilk
-*.exp
+AppPackages/
+BundleArtifacts/
+artifacts/
 
-# Visual Studio
+# Visual Studio / MSBuild
 .vs/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/settings.json
+.cursor/
+.cursorignore
 *.user
+*.rsuser
 *.suo
 *.userosscache
 *.sln.docstates
+*.binlog
+msbuild.log
+msbuild.err
+UpgradeLog*.XML
+UpgradeLog*.htm
+xaml-build.log*
+xaml_stdout.txt
+xaml_stderr.txt
 
 # Rider / ReSharper
 .idea/
 _ReSharper*/
 *.[Rr]e[Ss]harper
-
-# VS Code local workspace files
-.vscode/*
-.cursor/
-!.vscode/extensions.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/settings.json
+*.DotSettings.user
 
 # NuGet
 *.nupkg
 *.snupkg
 packages/
 !packages/build/
+project.lock.json
 
-# Test and coverage outputs
-Docs/
-tests/
+# Test and coverage
 TestResults/
 *.trx
 *.coverage
 *.coveragexml
 
-# Logs
+# WinUI / Windows App SDK
+*.xbf
+*.pri
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+
+# Logs and debug artifacts
 *.log
-logs/
+debug-*.log
 
 # OS files
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Local app settings overrides
-appsettings.Development.json
-appsettings.Local.json
-.cursorignore
+# Secrets and local overrides
+.env
+.env.*
+**/appsettings.Development.json
+**/appsettings.Local.json
+!**/appsettings.Local.json.example
+provider-settings.json
+secrets.json
+*.pfx
+*.p12
 
-#Files
+# Ses / STT modelleri (buyuk dosyalar, yerel indirme)
+# Not: "models/" kullanmayin — Windows'ta src/**/Models/ kaynak klasorunu de etkiler.
+/models/
+/whisper/
+vosk-model*/
+ggml-*.bin
+
+# Proje disi / kisisel klasorler
 BitirmeRapor/

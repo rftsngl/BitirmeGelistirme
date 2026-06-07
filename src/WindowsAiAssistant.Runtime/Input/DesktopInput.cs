@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using WindowsAiAssistant.Runtime.Automation;
 
 namespace WindowsAiAssistant.Runtime.Input;
 
@@ -15,6 +16,23 @@ internal static class DesktopInput
     {
         ArgumentNullException.ThrowIfNull(text);
 
+        if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
+        {
+            PasteTextViaClipboard(text);
+            return;
+        }
+
+        TypeTextViaClipboardAsync(text).GetAwaiter().GetResult();
+    }
+
+    public static Task TypeTextViaClipboardAsync(string text, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return StaTaskRunner.RunAsync(() => PasteTextViaClipboard(text), cancellationToken);
+    }
+
+    private static void PasteTextViaClipboard(string text)
+    {
         var previous = Clipboard.ContainsText() ? Clipboard.GetText() : null;
         try
         {

@@ -4,8 +4,8 @@
   "_ornek_lmstudio": "LM Studio / Ollama gibi yerel bir OpenAI-uyumlu sunucu icin asagidaki Agent blogunu kullanin.",
 
   "Agent": {
-    "MaxSteps": 5,
-    "MaxPriorStepsInPrompt": 5,
+    "MaxSteps": 10,
+    "MaxPriorStepsInPrompt": 10,
     "Model": {
       "Provider": "OpenAICompatible",
       "BaseUrl": "http://localhost:1234/v1",
@@ -35,17 +35,14 @@
     }
   },
 
-  "_ornek_ses": "Sesli popup, tray, STT ve wake-word. Porcupine AccessKey kayit sirasinda DPAPI ile korunur (dpapi:...). Whisper icin ggml model dosyasi indirip WhisperModelPath'e yazin.",
+  "_ornek_ses": "Sesli popup, tray, STT ve uyandirma kelimesi. Wake-word Windows yerlesik API ile calisir. Whisper icin ggml model dosyasi indirip WhisperModelPath'e yazin.",
 
   "Audio": {
     "BackgroundModeEnabled": true,
     "StartMinimizedToTray": true,
     "StartWithWindows": false,
     "WakeWordEnabled": false,
-    "PorcupineAccessKey": "",
-    "PorcupineKeywordPath": "",
-    "PorcupineModelPath": "",
-    "PorcupineSensitivity": 0.5,
+    "WakeWordPhrase": "asistan",
     "GlobalHotKeyEnabled": true,
     "GlobalHotKey": "Ctrl+Alt+A",
     "TextToSpeechEnabled": true,
@@ -53,8 +50,9 @@
     "SpeechListenTimeoutSeconds": 12,
     "OverlayAutoCloseSeconds": 10,
     "VoiceApprovalEnabled": true,
-    "SpeechEngine": "windows",
+    "SpeechEngine": "vosk",
     "WhisperModelPath": "",
+    "VoskModelPath": "",
     "InputDeviceIndex": -1
   }
 }

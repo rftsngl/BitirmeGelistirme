@@ -54,14 +54,12 @@
 
             <Border Style="{StaticResource CardBorderStyle}" Padding="16">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="Wake-word (Porcupine)" FontWeight="SemiBold" />
-                    <TextBlock Text="AccessKey ve .ppn dosyası olmadan hotkey kullanılır. NuGet: Porcupine + PvRecorder yüklü."
-                               Opacity="0.75" TextWrapping="Wrap" />
-                    <ToggleSwitch Header="Wake-word etkin" IsOn="{Binding WakeWordEnabled, Mode=TwoWay}" />
-                    <PasswordBox x:Name="PorcupineKeyBox" Header="Porcupine AccessKey" PasswordChanged="PorcupineKeyBox_OnPasswordChanged" />
-                    <TextBox Header="Keyword (.ppn) dosya yolu" Text="{Binding PorcupineKeywordPath, Mode=TwoWay}" />
-                    <TextBox Header="Model (.pv) dosya yolu (opsiyonel)" Text="{Binding PorcupineModelPath, Mode=TwoWay}" />
-                    <Slider Header="Hassasiyet" Minimum="0.01" Maximum="1" StepFrequency="0.05" Value="{Binding PorcupineSensitivity, Mode=TwoWay}" />
+                    <TextBlock Text="Uyandırma kelimesi (Vosk)" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding WakeWordServiceSummary}" Opacity="0.75" TextWrapping="Wrap" />
+                    <ToggleSwitch Header="Uyandırma kelimesi etkin" IsOn="{Binding WakeWordEnabled, Mode=TwoWay}" IsEnabled="{Binding IsWakeWordServiceAvailable}" />
+                    <ComboBox Header="Kelime" ItemsSource="{x:Bind ViewModel.WakeWordChoices, Mode=OneWay}"
+                              SelectedItem="{Binding SelectedWakeWord, Mode=TwoWay}"
+                              DisplayMemberPath="Display" HorizontalAlignment="Stretch" />
                 </StackPanel>
             </Border>
 

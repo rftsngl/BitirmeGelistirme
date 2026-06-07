@@ -277,7 +277,7 @@ public sealed class AssistantViewModel : ObservableObject
                 stepInfoText = $"{physicalSteps} adım";
             }
 
-            var badge = result.ReachedMaxSteps ? $"Adım limiti ({result.Session.Steps.Count}/{result.Session.Steps.Count})" : "Tamamlandı";
+            var badge = result.ReachedMaxSteps ? $"Adım bütçesi ({result.Session.Steps.Count}/{result.Session.Steps.Count})" : "Tamamlandı";
             var logPath = result.LogFilePath ?? string.Empty;
             var showLogAction = DeveloperModeEnabled && !string.IsNullOrWhiteSpace(logPath);
             Conversation.Add(new ConversationItem
@@ -295,8 +295,8 @@ public sealed class AssistantViewModel : ObservableObject
             });
             StatusMessage = result.ReachedMaxSteps
                 ? DeveloperModeEnabled
-                    ? $"Adım limitine ulaşıldı ({result.Session.Steps.Count} adım, {physicalSteps} fiziksel). Log: {result.LogFilePath}"
-                    : $"Adım limitine ulaşıldı ({result.Session.Steps.Count} adım, {physicalSteps} fiziksel)."
+                    ? $"Adım bütçesi doldu ({result.Session.Steps.Count} adım, {physicalSteps} fiziksel). Log: {result.LogFilePath}"
+                    : $"Adım bütçesi doldu ({result.Session.Steps.Count} adım, {physicalSteps} fiziksel)."
                 : DeveloperModeEnabled
                     ? $"Tamamlandı — {stepInfoText}. Log: {result.LogFilePath}"
                     : "Tamamlandı.";

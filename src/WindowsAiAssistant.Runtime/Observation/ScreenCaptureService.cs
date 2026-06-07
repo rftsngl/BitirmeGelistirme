@@ -1,6 +1,8 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using WindowsAiAssistant.Runtime.Config;
+using WindowsAiAssistant.Runtime.Observation;
 
 namespace WindowsAiAssistant.Runtime.Observation;
 
@@ -15,17 +17,17 @@ public sealed class ScreenCaptureService
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
-    public ScreenshotObservation Capture(string runId, int stepIndex)
+    public ScreenshotObservation Capture(string runId, int stepIndex) =>
+        CaptureRegion(runId, stepIndex, ResolvePrimaryBounds(), "primary");
+
+    public ScreenshotObservation CaptureRegion(string runId, int stepIndex, Rectangle bounds, string label)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
 
-        var screenBounds = System.Windows.Forms.Screen.PrimaryScreen?.Bounds
-                           ?? new Rectangle(0, 0, 1920, 1080);
-
-        using var fullBitmap = new Bitmap(screenBounds.Width, screenBounds.Height);
+        using var fullBitmap = new Bitmap(bounds.Width, bounds.Height);
         using (var graphics = Graphics.FromImage(fullBitmap))
         {
-            graphics.CopyFromScreen(screenBounds.Location, Point.Empty, screenBounds.Size);
+            graphics.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
         }
 
         using var visionBitmap = ResizeIfNeeded(fullBitmap, MaxVisionWidth);
@@ -33,7 +35,7 @@ public sealed class ScreenCaptureService
         var directory = Path.GetFullPath(_options.ScreenshotsDirectory);
         Directory.CreateDirectory(directory);
 
-        var fileName = $"{runId}_step{stepIndex}.png";
+        var fileName = $"{runId}_step{stepIndex}_{label}.png";
         var filePath = Path.Combine(directory, fileName);
         visionBitmap.Save(filePath, ImageFormat.Png);
 
@@ -50,6 +52,52 @@ public sealed class ScreenCaptureService
             CapturedAt = DateTimeOffset.UtcNow
         };
     }
+
+    public IReadOnlyList<(Rectangle Bounds, string Label)> ListMonitorBounds()
+    {
+        var screens = System.Windows.Forms.Screen.AllScreens;
+        if (screens.Length == 0)
+        {
+            return [(new Rectangle(0, 0, 1920, 1080), "primary")];
+        }
+
+        return screens
+            .Select((screen, index) => (screen.Bounds, index == 0 ? "primary" : $"monitor{index}"))
+            .ToList();
+    }
+
+    public Rectangle ResolveMonitorBounds(string? monitor)
+    {
+        var normalized = (monitor ?? "primary").Trim().ToLowerInvariant();
+        var screens = System.Windows.Forms.Screen.AllScreens;
+        if (screens.Length == 0)
+        {
+            return new Rectangle(0, 0, 1920, 1080);
+        }
+
+        if (normalized is "primary" or "0")
+        {
+            return screens[0].Bounds;
+        }
+
+        if (normalized.StartsWith("monitor", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(normalized["monitor".Length..], out var index) &&
+            index >= 0 &&
+            index < screens.Length)
+        {
+            return screens[index].Bounds;
+        }
+
+        if (int.TryParse(normalized, out var numeric) && numeric >= 0 && numeric < screens.Length)
+        {
+            return screens[numeric].Bounds;
+        }
+
+        return screens[0].Bounds;
+    }
+
+    private static Rectangle ResolvePrimaryBounds() =>
+        System.Windows.Forms.Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
 
     private static Bitmap ResizeIfNeeded(Bitmap original, int maxWidth)
     {

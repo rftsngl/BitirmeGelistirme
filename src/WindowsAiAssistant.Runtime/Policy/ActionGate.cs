@@ -1,9 +1,26 @@
 using WindowsAiAssistant.Runtime.Actions;
+using WindowsAiAssistant.Runtime.Observation;
 
 namespace WindowsAiAssistant.Runtime.Policy;
 
 public sealed class ActionGate
 {
+    private static readonly HashSet<string> AssistantForegroundBlockedActions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "type_text",
+        "press_key",
+        "press_shortcut",
+        "click_element",
+        "focus_element",
+        "set_value",
+        "select_element",
+        "expand_collapse",
+        "invoke_toggle",
+        "scroll",
+        "mouse_click",
+        "mouse_scroll",
+        "mouse_drag"
+    };
     private static readonly HashSet<string> SafeActions = new(StringComparer.OrdinalIgnoreCase)
     {
         "respond",
@@ -11,7 +28,9 @@ public sealed class ActionGate
         "stop",
         "wait",
         "read_element",
-        "list_windows"
+        "list_windows",
+        "wmi_query",
+        "capture_screen"
     };
 
     private static readonly HashSet<string> KnownActions = new(StringComparer.OrdinalIgnoreCase)
@@ -21,7 +40,9 @@ public sealed class ActionGate
         "click_element", "focus_element", "read_element", "set_value",
         "select_element", "expand_collapse", "invoke_toggle", "scroll",
         "focus_window", "window_state", "move_window", "list_windows", "launch",
-        "mouse_click", "mouse_scroll", "mouse_drag", "shell"
+        "mouse_click", "mouse_scroll", "mouse_drag", "shell",
+        "capture_screen", "notify", "wmi_query", "schedule_task", "jump_list",
+        "com_invoke", "verify_user", "global_hook"
     };
 
     private static readonly string[] DestructiveShellPatterns =
@@ -35,10 +56,14 @@ public sealed class ActionGate
     };
 
     private readonly ActionPolicy _policy;
+    private readonly ForegroundWindowService _foregroundWindow;
     private readonly HashSet<string> _sessionApprovals = new(StringComparer.OrdinalIgnoreCase);
 
-    public ActionGate(ActionPolicy policy) =>
+    public ActionGate(ActionPolicy policy, ForegroundWindowService foregroundWindow)
+    {
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
+        _foregroundWindow = foregroundWindow ?? throw new ArgumentNullException(nameof(foregroundWindow));
+    }
 
     public void BeginSession() => _sessionApprovals.Clear();
 
@@ -53,6 +78,12 @@ public sealed class ActionGate
     public GateDecision Evaluate(AgentAction action)
     {
         ArgumentNullException.ThrowIfNull(action);
+
+        var assistantSelfBlock = TryDenyAssistantSelfAutomation(action);
+        if (assistantSelfBlock is not null)
+        {
+            return assistantSelfBlock;
+        }
 
         if (!KnownActions.Contains(action.Action))
         {
@@ -130,6 +161,30 @@ public sealed class ActionGate
         };
     }
 
+    private GateDecision? TryDenyAssistantSelfAutomation(AgentAction action)
+    {
+        if (!AssistantForegroundBlockedActions.Contains(action.Action))
+        {
+            return null;
+        }
+
+        var (_, processName, _) = _foregroundWindow.GetForegroundInfo();
+        if (!AgentSelfWindow.IsAssistantProcess(processName))
+        {
+            return null;
+        }
+
+        return new GateDecision
+        {
+            Outcome = GateOutcome.Deny,
+            Risk = ActionRisk.Normal,
+            Reason =
+                "Windows AI Assistant penceresine fiziksel/UI otomasyonu uygulanamaz. " +
+                "Kullaniciya respond ile Turkce don.",
+            Summary = $"{action.Action} engellendi (asistan penceresi odakta)"
+        };
+    }
+
     private static GateDecision Allow(ActionRisk risk, string summary, string approvalKey, string reason) =>
         new()
         {
@@ -158,7 +213,9 @@ public sealed class ActionGate
             "launch" => IsKnownLaunchTarget(action) ? ActionRisk.Normal : ActionRisk.Sensitive,
             "open_app" or "open_url" or "type_text" or "click_element" or "focus_element" or
             "select_element" or "expand_collapse" or "invoke_toggle" or "scroll" or
-            "focus_window" or "move_window" or "mouse_scroll" => ActionRisk.Normal,
+            "focus_window" or "move_window" or "mouse_scroll" or "notify" or "jump_list" => ActionRisk.Normal,
+            "schedule_task" or "com_invoke" or "global_hook" => ActionRisk.Sensitive,
+            "verify_user" => ActionRisk.Safe,
             _ => ActionRisk.Normal
         };
     }

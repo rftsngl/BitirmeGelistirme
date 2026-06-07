@@ -93,72 +93,88 @@
             </ScrollViewer>
         </Border>
 
-        <Border Grid.Row="2"
-                Style="{StaticResource CardBorderStyle}"
-                Padding="14,12"
-                HorizontalAlignment="Stretch">
-            <Grid ColumnSpacing="10" RowSpacing="8">
+        <StackPanel Grid.Row="2" Spacing="8">
+            <Border Style="{StaticResource ChatComposerShellStyle}">
+                <Grid ColumnSpacing="4" RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBox x:Name="CommandInputTextBox"
+                             Grid.Row="0"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="2"
+                             Style="{StaticResource ChatComposerTextBoxStyle}"
+                             PlaceholderText="Bir şey yazın…"
+                             MinHeight="48"
+                             MaxHeight="180"
+                             Text="{Binding CommandInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             PreviewKeyDown="CommandInputTextBox_PreviewKeyDown"
+                             IsEnabled="{Binding IsNotBusy}" />
+
+                    <StackPanel Grid.Row="1"
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="6"
+                                Margin="0,0,4,4"
+                                HorizontalAlignment="Right">
+                        <muxc:ProgressRing Width="20"
+                                           Height="20"
+                                           IsActive="{Binding IsBusy}"
+                                           Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        <Button Style="{StaticResource ChatComposerIconButtonStyle}"
+                                IsEnabled="{Binding IsNotBusy}"
+                                Click="VoiceButton_Click"
+                                ToolTipService.ToolTip="Sesli komut">
+                            <FontIcon Glyph="&#xE720;"
+                                      FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                      FontSize="15" />
+                        </Button>
+                        <Button x:Name="SubmitButton"
+                                Style="{StaticResource ChatComposerSendButtonStyle}"
+                                Command="{Binding SubmitCommand}"
+                                ToolTipService.ToolTip="Gönder (Enter)">
+                            <FontIcon Glyph="&#xE724;"
+                                      FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                      FontSize="15" />
+                        </Button>
+                        <Button Style="{StaticResource ChatComposerIconButtonStyle}"
+                                Command="{Binding CancelRunCommand}"
+                                IsEnabled="{Binding IsBusy}"
+                                ToolTipService.ToolTip="Durdur (Esc)">
+                            <FontIcon Glyph="&#xE711;"
+                                      FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                      FontSize="14" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <TextBox x:Name="CommandInputTextBox"
-                         Grid.Row="0" Grid.Column="0"
-                         PlaceholderText="Mesajınızı yazın… Enter gönderir, Shift+Enter yeni satır."
-                         AcceptsReturn="True"
-                         TextWrapping="Wrap"
-                         MinHeight="56"
-                         MaxHeight="160"
-                         Text="{Binding CommandInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         KeyDown="CommandInputTextBox_KeyDown"
-                         IsEnabled="{Binding IsNotBusy}" />
-
-                <StackPanel Grid.Row="0" Grid.Column="1"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Bottom"
-                            Spacing="6"
-                            Margin="4,0,0,0">
-                    <muxc:ProgressRing Width="22"
-                                       Height="22"
-                                       IsActive="{Binding IsBusy}"
-                                       Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
-                    <Button IsEnabled="{Binding IsNotBusy}"
-                            Click="VoiceButton_Click"
-                            ToolTipService.ToolTip="Sesli komut penceresini aç">
-                        <FontIcon Glyph="&#xE720;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" />
-                    </Button>
-                    <Button x:Name="SubmitButton"
-                            Style="{ThemeResource AccentButtonStyle}"
-                            Command="{Binding SubmitCommand}"
-                            ToolTipService.ToolTip="Gönder (Enter)">
-                        <FontIcon Glyph="&#xE724;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="16" />
-                    </Button>
-                    <Button Command="{Binding CancelRunCommand}"
-                            IsEnabled="{Binding IsBusy}"
-                            ToolTipService.ToolTip="Durdur (Esc)">
-                        <FontIcon Glyph="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="14" />
-                    </Button>
-                </StackPanel>
-
-                <StackPanel Grid.Row="1" Grid.ColumnSpan="2"
-                            Orientation="Horizontal"
-                            Spacing="8">
-                    <Button Style="{StaticResource GhostButtonStyle}" Command="{Binding ClearSessionCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE894;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="13" />
-                            <TextBlock Text="Sohbeti temizle" />
-                        </StackPanel>
-                    </Button>
-                    <TextBlock Text="Esc ile durdur · Ctrl+L odak"
-                               Style="{StaticResource ChatMetaTextBlockStyle}"
-                               VerticalAlignment="Center" />
-                </StackPanel>
+                <Button Style="{StaticResource GhostButtonStyle}"
+                        Command="{Binding ClearSessionCommand}"
+                        Padding="4,2">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE894;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" />
+                        <TextBlock Text="Temizle" FontSize="12" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Grid.Column="1"
+                           Text="Enter gönder · Shift+Enter yeni satır · Esc durdur"
+                           Style="{StaticResource ChatMetaTextBlockStyle}"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right"
+                           TextAlignment="Right" />
             </Grid>
-        </Border>
+        </StackPanel>
     </Grid>
 </Page>

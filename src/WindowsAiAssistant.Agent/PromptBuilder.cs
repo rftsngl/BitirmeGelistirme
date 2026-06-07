@@ -15,16 +15,27 @@ public sealed class PromptBuilder
         _providerOptions = providerOptions ?? throw new ArgumentNullException(nameof(providerOptions));
     }
 
-    public string Build(string userGoal, DesktopObservation observation, IEnumerable<AgentStep> priorSteps)
+    public string Build(
+        string userGoal,
+        DesktopObservation observation,
+        IEnumerable<AgentStep> priorSteps,
+        string? triggerSource = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userGoal);
         ArgumentNullException.ThrowIfNull(observation);
         ArgumentNullException.ThrowIfNull(priorSteps);
 
         var builder = new StringBuilder();
-        builder.AppendLine("You are an autonomous Windows desktop operator. The user gives a GOAL in natural language;");
-        builder.AppendLine("YOU decide the method, the order of steps and which tools to use. You are NOT limited to a fixed");
-        builder.AppendLine("catalog of scenarios: combine general capabilities step by step and use observation feedback to adapt.");
+        builder.AppendLine("You are an autonomous Windows desktop operator. The user states a GOAL;");
+        builder.AppendLine("YOU decide whether it needs desktop actions or a direct reply, then act step by step.");
+        builder.AppendLine();
+        builder.AppendLine("Operator loop (always follow):");
+        builder.AppendLine("1) Read the user goal and current observation.");
+        builder.AppendLine("2) CONVERSATION ONLY (greeting, small talk, general question, no desktop change):");
+        builder.AppendLine("   use decisionType=complete, action=respond, parameters.message in Turkish — ONE step, no execute_action.");
+        builder.AppendLine("3) DESKTOP GOAL (open app, change settings, type in another app, file/shell work):");
+        builder.AppendLine("   pick ONE tool (shell / UI automation / launch), execute, read lastActionResult, repeat until done.");
+        builder.AppendLine("4) When finished (or blocked), respond to the user in Turkish with outcome or what you need.");
         builder.AppendLine();
         builder.AppendLine("Reply with ONLY one JSON object. No markdown, no code fences, no extra text.");
         builder.AppendLine("Use the field name decisionType (never use type).");
@@ -57,6 +68,17 @@ public sealed class PromptBuilder
         builder.AppendLine("   - open_url target=https://..., launch target=<full exe path|ms-settings:|command with args>.");
         builder.AppendLine("   - For arbitrary paths/arguments or discovery, prefer SHELL instead of inventing a macro.");
         builder.AppendLine();
+        builder.AppendLine("4) WINDOWS INTEGRATIONS — backend services exposed as actions (use when shell/cmd is not enough):");
+        builder.AppendLine("   - capture_screen: parameters.monitor=primary|all|monitor1, parameters.method=legacy|wgc");
+        builder.AppendLine("   - notify: parameters.title, parameters.message (Toast / Action Center)");
+        builder.AppendLine("   - wmi_query: target=WQL query, parameters.namespace optional (default root\\\\cimv2)");
+        builder.AppendLine("   - schedule_task: parameters.mode=create|delete|list|run, name, command, trigger=logon|daily|once, arguments");
+        builder.AppendLine("   - jump_list: parameters.mode=set|clear, parameters.tasks=\"Title|args;Title2|args2\"");
+        builder.AppendLine("   - com_invoke: parameters.progId (e.g. Excel.Application), method, arguments, close=true|false");
+        builder.AppendLine("   - verify_user: parameters.message (Windows Hello / kullanici onayi)");
+        builder.AppendLine("   - global_hook: parameters.mode=start|stop|peek, parameters.type=keyboard|mouse|both");
+        builder.AppendLine("   - Prefer shell for generic discovery; use these when structured Windows APIs are clearer.");
+        builder.AppendLine();
         builder.AppendLine("UI rules:");
         builder.AppendLine("- NEVER automate the Windows AI Assistant chat window (process WindowsAiAssistant). Do not click ONAYLANDI/REDDEDILDI badges or chat text.");
         builder.AppendLine("- elementId MUST be copied exactly from uiElements (format: prefix-name-hash, e.g. btn-tamam-a1b2). Never use visible labels as target.");
@@ -72,9 +94,23 @@ public sealed class PromptBuilder
         builder.AppendLine("  if a UIA action fails, focus_window first or re-read uiElements before retrying.");
         builder.AppendLine("- Keep trying reasonable shell/UIA/system alternatives until the goal is reached. Do NOT report failure, stop or ask_user just because the first attempt failed.");
         builder.AppendLine("- Use ask_user ONLY for information you genuinely cannot obtain yourself — never to ask the user to perform a step you could perform.");
-        builder.AppendLine("- Do NOT respond/complete until the required actions actually succeeded (verify via observation).");
-        builder.AppendLine("- Finish with decisionType complete (action respond/stop) or respond with isComplete=true.");
+        builder.AppendLine("- For DESKTOP goals: do NOT respond/complete until required actions actually succeeded (verify via observation).");
+        builder.AppendLine("- For CONVERSATION-ONLY goals: respond immediately with decisionType complete; never type_text or click in any app.");
+        builder.AppendLine("- Finish desktop work with decisionType complete (action respond/stop) or respond with isComplete=true.");
         builder.AppendLine();
+        if (string.Equals(triggerSource, "chat", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.AppendLine("Trigger context: chat UI. The user typed in the assistant window.");
+            builder.AppendLine("- Greetings and casual chat are conversation-only — respond in Turkish, no desktop automation.");
+            builder.AppendLine("- Never automate the assistant's own chat/input (process WindowsAiAssistant).");
+            builder.AppendLine();
+        }
+        else if (string.Equals(triggerSource, "voice_overlay", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.AppendLine("Trigger context: voice overlay. Prefer concise Turkish respond when no desktop action is needed.");
+            builder.AppendLine();
+        }
+
         builder.AppendLine("Safety:");
         builder.AppendLine("- Avoid or require approval for operations that cause data loss, are irreversible, escalate privileges,");
         builder.AppendLine("  or expose secrets. Never print or exfiltrate credentials, tokens or private data.");
@@ -90,6 +126,10 @@ public sealed class PromptBuilder
         builder.AppendLine("- focus_window: target=<windowId|partial title> | window_state: target=<windowId>, parameters.state=minimize|maximize|restore|close");
         builder.AppendLine("- move_window: target=<windowId>, parameters.x,y,width,height | open_url: target=https://...");
         builder.AppendLine("- mouse_click: parameters.elementId OR parameters.x+parameters.y | mouse_drag: parameters.startX,startY,endX,endY");
+        builder.AppendLine("- capture_screen: parameters.monitor, parameters.method | notify: parameters.title, parameters.message");
+        builder.AppendLine("- wmi_query: target/query, parameters.namespace | schedule_task: parameters.mode,name,command,trigger,arguments");
+        builder.AppendLine("- jump_list: parameters.mode, parameters.tasks | com_invoke: parameters.progId,method,arguments,close");
+        builder.AppendLine("- verify_user: parameters.message | global_hook: parameters.mode,type,maxEvents");
         builder.AppendLine();
         builder.AppendLine("Current desktop observation:");
         builder.AppendLine(observation.ToPromptSummary());
