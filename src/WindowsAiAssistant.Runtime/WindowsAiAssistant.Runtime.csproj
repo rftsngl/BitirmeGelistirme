@@ -9,6 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>WindowsAiAssistant.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
     <PackageReference Include="FlaUI.UIA2" Version="5.0.0" />
     <PackageReference Include="NAudio" Version="2.3.0" />

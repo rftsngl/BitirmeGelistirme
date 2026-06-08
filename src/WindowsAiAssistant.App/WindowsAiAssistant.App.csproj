@@ -23,8 +23,15 @@
     <ProjectReference Include="..\WindowsAiAssistant.Agent\WindowsAiAssistant.Agent.csproj" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(ANTIVIRUS_SAFE_BUILD)' == '1'">
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(OS)' == 'Windows_NT'">win-x64</RuntimeIdentifier>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -33,9 +40,9 @@
     <WindowsAppSdkUndockedRegFreeWinRTInitialize>true</WindowsAppSdkUndockedRegFreeWinRTInitialize>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
-    <Version>1.0.3</Version>
-    <AssemblyVersion>1.0.3.0</AssemblyVersion>
-    <FileVersion>1.0.3.0</FileVersion>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
     <AssemblyTitle>Windows AI Assistant</AssemblyTitle>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
@@ -64,16 +71,20 @@
     </Content>
   </ItemGroup>
 
-  <!-- Calisan uygulamayi build oncesi sonlandirir; cikti DLL kilidinden kaynaklanan
-       MSB3021/MSB3027 hatalarini kalici olarak onler. Surec yoksa cikti/exit-kodu
-       yok sayilir (idempotent). -->
-  <Target Name="StopRunningAppBeforeBuild" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT'">
-    <Exec Command="taskkill /F /IM WindowsAiAssistant.App.exe /T &gt;nul 2&gt;&amp;1 &amp; exit /b 0" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low" />
-  </Target>
+  <PropertyGroup>
+    <_WhisperEnsureScript>$(MSBuildThisFileDirectory)..\..\scripts\ensure-whisper-medium.ps1</_WhisperEnsureScript>
+    <_WhisperBundledModel>$(MSBuildProjectDirectory)\Assets\Models\whisper\ggml-medium.bin</_WhisperBundledModel>
+  </PropertyGroup>
 
   <Target Name="EnsureWhisperMediumModel" BeforeTargets="PrepareForBuild" Condition="'$(OS)' == 'Windows_NT' and '$(SkipWhisperModelOnPublish)' != 'true'">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\..\scripts\ensure-whisper-medium.ps1&quot; -ProjectDir &quot;$(MSBuildProjectDirectory)&quot;"
+    <Exec Condition="Exists('$(_WhisperEnsureScript)')"
+          Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_WhisperEnsureScript)&quot; -ProjectDir &quot;$(MSBuildProjectDirectory)&quot;"
           StandardOutputImportance="high" />
+    <Message Condition="!Exists('$(_WhisperEnsureScript)') and Exists('$(_WhisperBundledModel)')"
+             Importance="high"
+             Text="ensure-whisper-medium.ps1 bulunamadi; mevcut Whisper modeli kullaniliyor: $(_WhisperBundledModel)" />
+    <Warning Condition="!Exists('$(_WhisperEnsureScript)') and !Exists('$(_WhisperBundledModel)')"
+             Text="ensure-whisper-medium.ps1 bulunamadi ve ggml-medium.bin yok. Build devam eder; ilk calistirmada Ayarlar uzerinden model indirilebilir." />
   </Target>
 
   <Target Name="IncludeWhisperModelOutput" AfterTargets="EnsureWhisperMediumModel" BeforeTargets="AssignTargetPaths" Condition="'$(OS)' == 'Windows_NT'">

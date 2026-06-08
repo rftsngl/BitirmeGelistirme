@@ -1,6 +1,6 @@
 namespace WindowsAiAssistant.Runtime.Actions;
 
-internal static class ActionParameterReader
+public static class ActionParameterReader
 {
     public static string? GetTargetOrParameter(AgentAction action, params string[] parameterKeys)
     {

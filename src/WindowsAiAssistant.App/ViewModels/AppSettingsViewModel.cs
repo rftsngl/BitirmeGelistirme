@@ -523,6 +523,83 @@ public sealed class AppSettingsViewModel : ObservableObject
         }
     }
 
+    public bool PlanningEnabled
+    {
+        get => _agent.PlanningEnabled;
+        set
+        {
+            if (_agent.PlanningEnabled == value)
+            {
+                return;
+            }
+
+            _agent.PlanningEnabled = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool PlanRevisionEnabled
+    {
+        get => _agent.PlanRevisionEnabled;
+        set
+        {
+            if (_agent.PlanRevisionEnabled == value)
+            {
+                return;
+            }
+
+            _agent.PlanRevisionEnabled = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool CompletionVerificationEnabled
+    {
+        get => _agent.CompletionVerificationEnabled;
+        set
+        {
+            if (_agent.CompletionVerificationEnabled == value)
+            {
+                return;
+            }
+
+            _agent.CompletionVerificationEnabled = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string PlannerModelOverride
+    {
+        get => _agent.PlannerModelOverride ?? string.Empty;
+        set
+        {
+            var next = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_agent.PlannerModelOverride, next, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _agent.PlannerModelOverride = next;
+            OnPropertyChanged();
+        }
+    }
+
+    public string VerifierModelOverride
+    {
+        get => _agent.VerifierModelOverride ?? string.Empty;
+        set
+        {
+            var next = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_agent.VerifierModelOverride, next, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _agent.VerifierModelOverride = next;
+            OnPropertyChanged();
+        }
+    }
+
     public string NormalHandling
     {
         get => _runtime.ActionPolicy.Normal.ToString();
@@ -680,7 +757,16 @@ public sealed class AppSettingsViewModel : ObservableObject
             MaxPriorStepsInPrompt = Math.Clamp(
                 _agent.MaxPriorStepsInPrompt,
                 MinPromptHistorySteps,
-                MaxPromptHistorySteps)
+                MaxPromptHistorySteps),
+            PlanningEnabled = _agent.PlanningEnabled,
+            PlanRevisionEnabled = _agent.PlanRevisionEnabled,
+            CompletionVerificationEnabled = _agent.CompletionVerificationEnabled,
+            PlannerModelOverride = string.IsNullOrWhiteSpace(_agent.PlannerModelOverride)
+                ? null
+                : _agent.PlannerModelOverride.Trim(),
+            VerifierModelOverride = string.IsNullOrWhiteSpace(_agent.VerifierModelOverride)
+                ? null
+                : _agent.VerifierModelOverride.Trim()
         };
 
         var audioSnapshot = new AudioOptions();

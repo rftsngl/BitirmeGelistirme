@@ -81,8 +81,8 @@ internal static class GoalRoutingHints
         var audio = TryResolveAudioRoute(userGoal);
         if (audio is not null)
         {
-            builder.AppendLine("MANDATORY — SYSTEM AUDIO GOAL:");
-            builder.AppendLine($"- User wants system/master volume control. FIRST action MUST be audio_power with parameters.mode={audio.Mode}.");
+            builder.AppendLine("SUGGESTED — SYSTEM AUDIO GOAL (you decide):");
+            builder.AppendLine($"- Strong option: audio_power with parameters.mode={audio.Mode}.");
             if (audio.Level is not null)
             {
                 builder.AppendLine($"- Also set parameters.level={audio.Level} (0-100).");
@@ -96,20 +96,21 @@ internal static class GoalRoutingHints
 
         if (TryBuildFastNetworkDecision(userGoal) is not null)
         {
-            builder.AppendLine("MANDATORY — NETWORK STATUS GOAL:");
-            builder.AppendLine("- FIRST action MUST be network_status with parameters.mode=status (or adapters for adapter list).");
+            builder.AppendLine("SUGGESTED — NETWORK STATUS GOAL (you decide):");
+            builder.AppendLine("- Strong option: network_status with parameters.mode=status (or adapters for adapter list).");
             builder.AppendLine("- Do NOT open Settings UI or click network tray icons for a simple status query.");
             builder.AppendLine();
         }
 
         if (TryBuildFastPerfDecision(userGoal) is not null)
         {
-            builder.AppendLine("MANDATORY — PERFORMANCE SNAPSHOT GOAL:");
-            builder.AppendLine("- FIRST action MUST be perf_counter with parameters.mode=snapshot.");
+            builder.AppendLine("SUGGESTED — PERFORMANCE SNAPSHOT GOAL (you decide):");
+            builder.AppendLine("- Strong option: perf_counter with parameters.mode=snapshot.");
             builder.AppendLine("- Do NOT open Task Manager UI for a quick CPU/RAM/disk summary.");
             builder.AppendLine();
         }
 
+        FastRoutePromptHints.Append(builder, userGoal, observation);
         PlaybookPromptHints.Append(builder, userGoal, observation);
 
         if (observation.UiCaptureSkipReason is not null &&

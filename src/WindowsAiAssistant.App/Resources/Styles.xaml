@@ -199,6 +199,26 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <Style x:Key="PlanPanelBorderStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AccentControlElevationBorderBrush}" />
+        <Setter Property="BorderThickness" Value="3,1,1,1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="12,10" />
+    </Style>
+
+    <Style x:Key="PlanSkillBadgeBorderStyle" TargetType="Border" BasedOn="{StaticResource BadgeBorderStyle}">
+        <Setter Property="Background" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource AccentControlElevationBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style x:Key="PlanRevisionBadgeBorderStyle" TargetType="Border" BasedOn="{StaticResource BadgeBorderStyle}">
+        <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
     <Style x:Key="ThinkingDotStyle" TargetType="Ellipse">
         <Setter Property="Width" Value="5" />
         <Setter Property="Height" Value="5" />

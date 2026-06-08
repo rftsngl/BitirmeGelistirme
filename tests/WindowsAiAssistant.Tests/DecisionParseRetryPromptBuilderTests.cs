@@ -38,6 +38,23 @@ public sealed class DecisionParseRetryPromptBuilderTests
     }
 
     [Fact]
+    public void Build_InvalidElementId_WindowGoal_SuggestsListWindows()
+    {
+        var failed = DecisionParseResult.Fail(
+            "click_element icin gecerli elementId gerekli.",
+            DecisionParseErrorCode.InvalidElementId);
+
+        var prompt = DecisionParseRetryPromptBuilder.Build(
+            "base prompt",
+            failed,
+            uiElements: null,
+            userGoal: "acik pencereleri ozetle");
+
+        Assert.Contains("list_windows", prompt, StringComparison.Ordinal);
+        Assert.Contains("STRATEGY CHANGE", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_MissingDecisionType_MentionsDecisionTypeField()
     {
         var failed = DecisionParseResult.Fail(

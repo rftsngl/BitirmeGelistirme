@@ -14,6 +14,52 @@
     <converters:SpeechModelStateToBackgroundBrushConverter x:Key="SpeechModelStateToBackgroundBrushConverter" />
     <converters:SpeechModelStateToForegroundBrushConverter x:Key="SpeechModelStateToForegroundBrushConverter" />
 
+    <DataTemplate x:Key="PlanStepTemplate">
+        <Grid ColumnSpacing="10" Margin="0,3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Ellipse Grid.Column="0"
+                     Width="8"
+                     Height="8"
+                     Fill="{ThemeResource TextFillColorSecondaryBrush}"
+                     Opacity="0.45"
+                     VerticalAlignment="Top"
+                     Margin="0,5,0,0"
+                     Visibility="{Binding IsPending, Converter={StaticResource BoolToVisibilityConverter}}" />
+            <FontIcon Grid.Column="0"
+                      Glyph="&#xE768;"
+                      FontFamily="{StaticResource SymbolThemeFontFamily}"
+                      FontSize="12"
+                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                      VerticalAlignment="Top"
+                      Margin="0,2,0,0"
+                      Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}" />
+            <FontIcon Grid.Column="0"
+                      Glyph="&#xE73E;"
+                      FontFamily="{StaticResource SymbolThemeFontFamily}"
+                      FontSize="12"
+                      Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                      VerticalAlignment="Top"
+                      Margin="0,2,0,0"
+                      Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibilityConverter}}" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding StepLabel}"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                       TextWrapping="WrapWholeWords"
+                       Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding StepLabel}"
+                       FontSize="13"
+                       TextWrapping="WrapWholeWords"
+                       Opacity="0.88"
+                       Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}" />
+        </Grid>
+    </DataTemplate>
+
     <DataTemplate x:Key="TimelineEntryTemplate">
         <Grid ColumnSpacing="10" Margin="0,2">
             <Grid.ColumnDefinitions>
@@ -107,6 +153,60 @@
                         <TextBlock Text="{Binding LiveDetailLine}"
                                    Style="{StaticResource SettingDescriptionTextBlockStyle}"
                                    Visibility="{Binding HasLiveDetail, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                        <Border Style="{StaticResource PlanPanelBorderStyle}"
+                                Visibility="{Binding HasPlanPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel Spacing="8">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE8FD;"
+                                              FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                              FontSize="14"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                              VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="Yürütme planı"
+                                               Style="{StaticResource LabelTextBlockStyle}"
+                                               VerticalAlignment="Center"
+                                               Opacity="0.92" />
+                                    <StackPanel Grid.Column="2"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
+                                                VerticalAlignment="Center">
+                                        <Border Style="{StaticResource PlanSkillBadgeBorderStyle}"
+                                                Visibility="{Binding HasSkillDomainLabel, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding SkillDomainLabel}"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Border>
+                                        <Border Style="{StaticResource PlanRevisionBadgeBorderStyle}"
+                                                Visibility="{Binding HasPlanRevisionLabel, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding PlanRevisionLabel}"
+                                                       FontSize="11"
+                                                       Opacity="0.85" />
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="{Binding PlanHeadline}"
+                                           FontSize="13"
+                                           TextWrapping="WrapWholeWords"
+                                           Visibility="{Binding HasPlanHeadline, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                <TextBlock Text="{Binding PlanProgressLine}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                           TextWrapping="WrapWholeWords"
+                                           Visibility="{Binding HasPlanProgressLine, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                <ItemsControl ItemsSource="{Binding PlanSteps}"
+                                              ItemTemplate="{StaticResource PlanStepTemplate}"
+                                              Visibility="{Binding HasPlanSteps, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            </StackPanel>
+                        </Border>
 
                         <StackPanel Orientation="Horizontal"
                                     Spacing="6"
@@ -252,6 +352,53 @@
                             </Border>
                         </Grid>
                         <TextBlock Text="{Binding Body}" Style="{StaticResource ChatBodyTextBlockStyle}" />
+                        <Border Style="{StaticResource PlanPanelBorderStyle}"
+                                Visibility="{Binding HasPlanPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel Spacing="8">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE8FD;"
+                                              FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                              FontSize="14"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                              VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="Kullanılan plan"
+                                               Style="{StaticResource LabelTextBlockStyle}"
+                                               VerticalAlignment="Center"
+                                               Opacity="0.92" />
+                                    <StackPanel Grid.Column="2"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
+                                                VerticalAlignment="Center">
+                                        <Border Style="{StaticResource PlanSkillBadgeBorderStyle}"
+                                                Visibility="{Binding HasSkillDomainLabel, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding SkillDomainLabel}"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        </Border>
+                                        <Border Style="{StaticResource PlanRevisionBadgeBorderStyle}"
+                                                Visibility="{Binding HasPlanRevisionLabel, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding PlanRevisionLabel}"
+                                                       FontSize="11"
+                                                       Opacity="0.85" />
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="{Binding PlanHeadline}"
+                                           FontSize="13"
+                                           TextWrapping="WrapWholeWords"
+                                           Visibility="{Binding HasPlanHeadline, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                <ItemsControl ItemsSource="{Binding PlanSteps}"
+                                              ItemTemplate="{StaticResource PlanStepTemplate}"
+                                              Visibility="{Binding HasPlanSteps, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            </StackPanel>
+                        </Border>
                         <Grid ColumnSpacing="16"
                               RowSpacing="4"
                               Visibility="{Binding DeveloperModeEnabled, Converter={StaticResource BoolToVisibilityConverter}}">

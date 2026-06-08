@@ -8,11 +8,13 @@ internal static class DecisionParseRetryPromptBuilder
     internal static string Build(
         string originalPrompt,
         DecisionParseResult failed,
-        IReadOnlyList<UiElementSnapshot>? uiElements)
+        IReadOnlyList<UiElementSnapshot>? uiElements,
+        string? userGoal = null)
     {
         var builder = new StringBuilder(originalPrompt);
         builder.AppendLine();
         builder.AppendLine($"Your previous reply was invalid: {failed.ErrorMessage}");
+        StrategyRecoveryPromptBuilder.AppendParseRetryStrategy(builder, failed, userGoal, uiElements);
 
         switch (failed.ErrorCode)
         {
@@ -48,7 +50,8 @@ internal static class DecisionParseRetryPromptBuilder
 
         if (uiElements is null || uiElements.Count == 0)
         {
-            builder.AppendLine("uiElements is empty — use focus_window + a P1/P2/P3 action instead of click_element.");
+            builder.AppendLine("uiElements is empty — use list_windows, shell, P1 integrations, or respond from visibleWindows.");
+            builder.AppendLine("Do NOT use click_element until valid elementIds exist.");
             return;
         }
 

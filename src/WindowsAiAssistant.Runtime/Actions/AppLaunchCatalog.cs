@@ -59,7 +59,43 @@ internal static class AppLaunchCatalog
             ["spotify.exe"] = "spotify.exe",
             ["vscode"] = "code.exe",
             ["code"] = "code.exe",
-            ["visual studio code"] = "code.exe"
+            ["visual studio code"] = "code.exe",
+            ["word"] = "winword.exe",
+            ["winword"] = "winword.exe",
+            ["microsoft word"] = "winword.exe",
+            ["excel"] = "excel.exe",
+            ["powerpoint"] = "powerpnt.exe",
+            ["powerpnt"] = "powerpnt.exe"
+        };
+
+    private static readonly IReadOnlyDictionary<string, string[]> ProcessNameHints =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["word"] = ["WINWORD"],
+            ["winword"] = ["WINWORD"],
+            ["winword.exe"] = ["WINWORD"],
+            ["microsoft word"] = ["WINWORD"],
+            ["excel"] = ["EXCEL"],
+            ["excel.exe"] = ["EXCEL"],
+            ["powerpoint"] = ["POWERPNT"],
+            ["powerpnt"] = ["POWERPNT"],
+            ["powerpnt.exe"] = ["POWERPNT"],
+            ["chrome"] = ["chrome"],
+            ["chrome.exe"] = ["chrome"],
+            ["edge"] = ["msedge"],
+            ["msedge"] = ["msedge"],
+            ["msedge.exe"] = ["msedge"],
+            ["firefox"] = ["firefox"],
+            ["firefox.exe"] = ["firefox"],
+            ["notepad"] = ["notepad"],
+            ["notepad.exe"] = ["notepad"],
+            ["code"] = ["Code"],
+            ["vscode"] = ["Code"],
+            ["visual studio code"] = ["Code"],
+            ["discord"] = ["Discord"],
+            ["spotify"] = ["Spotify"],
+            ["steam"] = ["steam"],
+            ["steam.exe"] = ["steam"]
         };
 
     private static readonly IReadOnlyDictionary<string, string[]> CommonRelativeInstallPaths =
@@ -156,6 +192,43 @@ internal static class AppLaunchCatalog
 
         executable = normalized;
         return true;
+    }
+
+    /// <summary>
+    /// open_app hedefi icin olasi calisan process adlarini dondurur (pencere yeniden kullanimi icin).
+    /// </summary>
+    public static bool TryResolveProcessNamesForOpenApp(string? target, out string[] processNames)
+    {
+        processNames = Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return false;
+        }
+
+        var normalized = target.Trim();
+        if (ProcessNameHints.TryGetValue(normalized, out var hinted))
+        {
+            processNames = hinted;
+            return true;
+        }
+
+        if (Map.TryGetValue(normalized, out var mapped))
+        {
+            var stem = Path.GetFileNameWithoutExtension(mapped);
+            if (!string.IsNullOrWhiteSpace(stem))
+            {
+                processNames = [stem];
+                return true;
+            }
+        }
+
+        if (normalized.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            processNames = [Path.GetFileNameWithoutExtension(normalized)];
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

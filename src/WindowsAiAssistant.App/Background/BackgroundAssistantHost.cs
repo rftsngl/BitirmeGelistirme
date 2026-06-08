@@ -67,7 +67,7 @@ public sealed class BackgroundAssistantHost : IDisposable
         _hotKeys.Start();
         _ = StartWakeWordIfEnabledAsync();
         _ = RequestMicrophonePermissionInBackgroundAsync();
-        SafeFireAndForget.Run(_speechWarmup.WarmupAsync, nameof(SpeechWarmupService.WarmupAsync));
+        SafeFireAndForget.Run(() => _speechWarmup.WarmupAsync(), nameof(SpeechWarmupService.WarmupAsync));
         _tray.SetListeningEnabled(_audioOptions.GlobalHotKeyEnabled || _audioOptions.WakeWordEnabled);
 
         if (_audioOptions.StartWithWindows)

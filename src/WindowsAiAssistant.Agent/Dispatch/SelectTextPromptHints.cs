@@ -22,7 +22,7 @@ internal static class SelectTextPromptHints
             return;
         }
 
-        builder.AppendLine("MANDATORY — TEXT SELECTION GOAL:");
+        builder.AppendLine("SUGGESTED — TEXT SELECTION GOAL (you decide):");
         builder.AppendLine("- Prefer keyboard selection before free-coordinate mouse:");
         builder.AppendLine("  * select all: select_text mode=all OR press_shortcut Ctrl+A");
         builder.AppendLine("  * extend selection: select_text mode=extend_left|extend_right|extend_up|extend_down");

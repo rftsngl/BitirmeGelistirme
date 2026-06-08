@@ -285,7 +285,7 @@ public sealed class AssistantViewModel : ObservableObject
             var badge = result.ReachedMaxSteps ? $"Adım bütçesi ({result.Session.Steps.Count}/{result.Session.Steps.Count})" : "Tamamlandı";
             var logPath = result.LogFilePath ?? string.Empty;
             var showLogAction = DeveloperModeEnabled && !string.IsNullOrWhiteSpace(logPath);
-            Conversation.Add(new ConversationItem
+            var resultItem = new ConversationItem
             {
                 DeveloperModeEnabled = DeveloperModeEnabled,
                 Kind = ConversationItemKind.ResultCard,
@@ -297,7 +297,9 @@ public sealed class AssistantViewModel : ObservableObject
                 LogPath = logPath,
                 PrimaryCommand = showLogAction ? new RelayCommand(() => OpenLog(logPath)) : null,
                 PrimaryCommandLabel = showLogAction ? "Logu Aç" : string.Empty
-            });
+            };
+            PlanUiSync.ApplyFromSession(resultItem, result.Session);
+            Conversation.Add(resultItem);
             StatusMessage = result.ReachedMaxSteps
                 ? DeveloperModeEnabled
                     ? $"Adım bütçesi doldu ({result.Session.Steps.Count} adım, {physicalSteps} fiziksel). Log: {result.LogFilePath}"
@@ -354,6 +356,11 @@ public sealed class AssistantViewModel : ObservableObject
             _liveActivityItem.MaxSteps = progress.MaxSteps;
             _liveActivityItem.LiveStatusLine = label;
             _liveActivityItem.LiveDetailLine = detail;
+            if (progress.PlanSteps is { Count: > 0 } || !string.IsNullOrWhiteSpace(progress.PlanHeadline))
+            {
+                PlanUiSync.ApplyFromProgress(_liveActivityItem, progress);
+            }
+
             AppendTimelineEntry(_liveActivityItem, label, detail, progress.Phase);
             OnPropertyChanged(nameof(UserFriendlyStatus));
         }

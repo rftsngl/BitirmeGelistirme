@@ -8,6 +8,11 @@ public sealed class AgentOptions
     public int MaxPriorStepsInPrompt { get; set; } = 10;
     public int MaxParseRetries { get; set; } = 2;
     public int MaxSameActionFailures { get; set; } = 3;
+    public bool PlanningEnabled { get; set; } = true;
+    public bool PlanRevisionEnabled { get; set; } = true;
+    public bool CompletionVerificationEnabled { get; set; } = true;
+    public string? PlannerModelOverride { get; set; }
+    public string? VerifierModelOverride { get; set; }
     public string UserResponseLanguage { get; set; } = "tr";
     public string SystemPrompt { get; set; } =
         "You are an autonomous Windows desktop operator. TOOL PRIORITY: integrations first, then launch/open, " +

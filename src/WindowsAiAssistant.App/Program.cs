@@ -128,6 +128,10 @@ public static class AppServices
         services.AddSingleton<RunLogReader>();
         services.AddSingleton<PromptBuilder>();
         services.AddSingleton<DecisionParser>();
+        services.AddSingleton<WindowsAiAssistant.Agent.Planning.ExecutionPlanParser>();
+        services.AddSingleton<WindowsAiAssistant.Agent.Planning.PlanningPhaseService>();
+        services.AddSingleton<WindowsAiAssistant.Agent.Planning.CompletionVerifierService>();
+        services.AddSingleton<WindowsAiAssistant.Agent.Skills.SkillRouter>();
         services.AddSingleton<ITaskDispatchRouter, TaskDispatchRouter>();
         services.AddSingleton<AiClient>();
         services.AddSingleton<ProviderConnectionTester>();

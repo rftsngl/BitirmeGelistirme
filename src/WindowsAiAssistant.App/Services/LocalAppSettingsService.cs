@@ -52,6 +52,26 @@ public sealed class LocalAppSettingsService
 
         agentNode["MaxSteps"] = agentSnapshot.MaxSteps;
         agentNode["MaxPriorStepsInPrompt"] = agentSnapshot.MaxPriorStepsInPrompt;
+        agentNode["PlanningEnabled"] = agentSnapshot.PlanningEnabled;
+        agentNode["PlanRevisionEnabled"] = agentSnapshot.PlanRevisionEnabled;
+        agentNode["CompletionVerificationEnabled"] = agentSnapshot.CompletionVerificationEnabled;
+        if (!string.IsNullOrWhiteSpace(agentSnapshot.PlannerModelOverride))
+        {
+            agentNode["PlannerModelOverride"] = agentSnapshot.PlannerModelOverride;
+        }
+        else
+        {
+            agentNode.Remove("PlannerModelOverride");
+        }
+
+        if (!string.IsNullOrWhiteSpace(agentSnapshot.VerifierModelOverride))
+        {
+            agentNode["VerifierModelOverride"] = agentSnapshot.VerifierModelOverride;
+        }
+        else
+        {
+            agentNode.Remove("VerifierModelOverride");
+        }
 
         root["Audio"] = JsonSerializer.SerializeToNode(audioSnapshot, JsonOptions);
         root["Runtime"] ??= new JsonObject();
@@ -72,6 +92,11 @@ public sealed class LocalAppSettingsService
         to.MaxPriorStepsInPrompt = from.MaxPriorStepsInPrompt;
         to.MaxParseRetries = from.MaxParseRetries;
         to.MaxSameActionFailures = from.MaxSameActionFailures;
+        to.PlanningEnabled = from.PlanningEnabled;
+        to.PlanRevisionEnabled = from.PlanRevisionEnabled;
+        to.CompletionVerificationEnabled = from.CompletionVerificationEnabled;
+        to.PlannerModelOverride = from.PlannerModelOverride;
+        to.VerifierModelOverride = from.VerifierModelOverride;
         to.UserResponseLanguage = from.UserResponseLanguage;
     }
 

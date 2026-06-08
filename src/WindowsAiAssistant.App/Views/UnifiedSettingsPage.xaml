@@ -972,6 +972,59 @@
                                 <TextBlock Text="Uzun görevlerde adım limitini artırın; prompt geçmişi yüksekse model daha fazla önceki denemeyi görür."
                                            Style="{StaticResource SettingDescriptionTextBlockStyle}" />
 
+                                <Border Style="{StaticResource SettingDividerStyle}" />
+                                <TextBlock Text="Akıllı planlama" FontWeight="SemiBold" />
+                                <TextBlock Text="Karmaşık görevlerde asistan önce plan oluşturur, uygun beceri alanını seçer ve tamamlamadan önce sonucu doğrular."
+                                           Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Planlama" Style="{StaticResource SettingTitleTextBlockStyle}" />
+                                        <TextBlock Text="Görevi adımlara bölmek için ek bir planlama çağrısı yapılır."
+                                                   Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding PlanningEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Plan revizyonu" Style="{StaticResource SettingTitleTextBlockStyle}" />
+                                        <TextBlock Text="Adım başarısız olursa plan güncellenir (en fazla 2 revizyon)."
+                                                   Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding PlanRevisionEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Tamamlama doğrulaması" Style="{StaticResource SettingTitleTextBlockStyle}" />
+                                        <TextBlock Text="Yanıt vermeden önce hedefin gerçekten tamamlandığı kontrol edilir."
+                                                   Style="{StaticResource SettingDescriptionTextBlockStyle}" />
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding CompletionVerificationEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <TextBox Header="Planlayıcı model (isteğe bağlı)"
+                                         Text="{Binding PlannerModelOverride, Mode=TwoWay}"
+                                         PlaceholderText="Boş bırakılırsa ana model kullanılır"
+                                         HorizontalAlignment="Stretch" />
+                                <TextBox Header="Doğrulayıcı model (isteğe bağlı)"
+                                         Text="{Binding VerifierModelOverride, Mode=TwoWay}"
+                                         PlaceholderText="Boş bırakılırsa ana model kullanılır"
+                                         HorizontalAlignment="Stretch" />
+
                                 <Grid ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />

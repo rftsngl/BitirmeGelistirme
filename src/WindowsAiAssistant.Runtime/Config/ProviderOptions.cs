@@ -15,4 +15,25 @@ public sealed class ProviderOptions
     public double? Temperature { get; set; }
     public int? MaxTokens { get; set; }
     public bool VisionEnabled { get; set; }
+
+    public ProviderOptions WithModel(string model)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(model);
+        return new ProviderOptions
+        {
+            Provider = Provider,
+            BaseUrl = BaseUrl,
+            Endpoint = Endpoint,
+            Model = model.Trim(),
+            ApiKeyEnvironmentVariable = ApiKeyEnvironmentVariable,
+            RequestTimeoutSeconds = RequestTimeoutSeconds,
+            RequiresApiKey = RequiresApiKey,
+            AuthScheme = AuthScheme,
+            ApiKeyHeaderName = ApiKeyHeaderName,
+            RuntimeApiKey = RuntimeApiKey,
+            Temperature = Temperature,
+            MaxTokens = MaxTokens,
+            VisionEnabled = VisionEnabled
+        };
+    }
 }

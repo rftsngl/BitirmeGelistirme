@@ -1,3 +1,5 @@
+using WindowsAiAssistant.Agent.Planning;
+
 namespace WindowsAiAssistant.Agent;
 
 public sealed class AgentSession
@@ -6,6 +8,11 @@ public sealed class AgentSession
     public required string UserGoal { get; init; }
     public IList<AgentStep> Steps { get; } = [];
     public bool IsComplete { get; set; }
+    public ExecutionPlan? ExecutionPlan { get; set; }
+    public WorkflowSkillDomain SkillDomain { get; set; } = WorkflowSkillDomain.GenericDesktop;
+    public int CurrentPlanStepIndex { get; set; }
+    public int PlanRevisionCount { get; set; }
+    public int ConsecutiveStepFailures { get; set; }
 
     private readonly Dictionary<string, int> _actionFailCounts = new(StringComparer.OrdinalIgnoreCase);
 

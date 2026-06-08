@@ -1,4 +1,6 @@
 using System.Text;
+using WindowsAiAssistant.Agent.Planning;
+using WindowsAiAssistant.Agent.Skills;
 using WindowsAiAssistant.Runtime.Config;
 using WindowsAiAssistant.Runtime.Observation;
 
@@ -8,11 +10,13 @@ public sealed class PromptBuilder
 {
     private readonly AgentOptions _options;
     private readonly ProviderOptions _providerOptions;
+    private readonly SkillRouter _skillRouter;
 
-    public PromptBuilder(AgentOptions options, ProviderOptions providerOptions)
+    public PromptBuilder(AgentOptions options, ProviderOptions providerOptions, SkillRouter skillRouter)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _providerOptions = providerOptions ?? throw new ArgumentNullException(nameof(providerOptions));
+        _skillRouter = skillRouter ?? throw new ArgumentNullException(nameof(skillRouter));
     }
 
     public bool VisionEnabled => _providerOptions.VisionEnabled;
@@ -21,7 +25,8 @@ public sealed class PromptBuilder
         string userGoal,
         DesktopObservation observation,
         IEnumerable<AgentStep> priorSteps,
-        string? triggerSource = null)
+        string? triggerSource = null,
+        AgentPromptContext? promptContext = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userGoal);
         ArgumentNullException.ThrowIfNull(observation);
@@ -73,6 +78,7 @@ public sealed class PromptBuilder
         builder.AppendLine("  run script/command → shell | clipboard → clipboard | Windows service → service_control | logs → event_log");
         builder.AppendLine("  new document/file in focused app → press_shortcut Ctrl+N | save → Ctrl+S | known Office automation → com_invoke");
         builder.AppendLine("  WMI/system query → wmi_query | registry → registry_op | file by name → file_search | notification history → notification_listen");
+        builder.AppendLine("  open/summarize windows → list_windows OR respond from visibleWindows in observation (no click_element)");
         builder.AppendLine();
         builder.AppendLine("1) WINDOWS INTEGRATIONS — P1 backend actions (structured APIs, prefer over UI):");
         builder.AppendLine("   - capture_screen: parameters.monitor=primary|all|monitor1, parameters.method=legacy|wgc");
@@ -83,6 +89,7 @@ public sealed class PromptBuilder
         builder.AppendLine("   - com_invoke: parameters.progId (e.g. Excel.Application), method, arguments, close=true|false");
         builder.AppendLine("   - verify_user: parameters.message (Windows Hello / kullanici onayi)");
         builder.AppendLine("   - global_hook: parameters.mode=start|stop|peek, parameters.type=keyboard|mouse|both");
+        builder.AppendLine("   - list_windows: (no params) lists visible windows — use for window inventory/summary goals");
         builder.AppendLine("   - service_control: parameters.mode=list|status|start|stop|restart, name/serviceName");
         builder.AppendLine("   - event_log: parameters.mode=list|read, log/logName=Application|System|Security, level=error|warning, hours, maxEntries");
         builder.AppendLine("   - registry_op: parameters.mode=read|write|delete, hive=HKCU|HKLM, path, name, value, kind=string|dword");
@@ -124,6 +131,8 @@ public sealed class PromptBuilder
         builder.AppendLine("   - wait: parameters.ms to pause before the next step when the UI needs time.");
         builder.AppendLine();
         builder.AppendLine("Planning rules (autonomous operator):");
+        builder.AppendLine("- BEFORE open_app/launch: check visibleWindows — if the app is already open, focus_window instead of launching again.");
+        builder.AppendLine("- After opening an app once, keep working in that same window for follow-up steps (new doc, type text, save).");
         builder.AppendLine("- Work ONE step at a time. After each step read observation.lastActionResult (incl. shell exitCode/stdout/stderr) before deciding the next.");
         builder.AppendLine("- A failed step is FEEDBACK, not the end — the loop continues. On failure CHANGE strategy (move DOWN the priority list, not sideways):");
         builder.AppendLine("  e.g. if click_element fails → try P1 integration or P3 shell, NOT another blind click_element;");
@@ -154,6 +163,21 @@ public sealed class PromptBuilder
         }
 
         GoalRoutingHints.AppendPromptHints(builder, userGoal, observation, triggerSource);
+
+        var executionPlan = promptContext?.ExecutionPlan;
+        if (executionPlan is not null)
+        {
+            builder.AppendLine(PlanningPromptBuilder.ToPromptSection(executionPlan, promptContext?.CurrentPlanStepIndex));
+            builder.AppendLine();
+            PlanAwareObservationHints.Append(builder, executionPlan, observation, promptContext?.CurrentPlanStepIndex ?? 0);
+        }
+
+        _skillRouter.AppendSkillHints(
+            builder,
+            promptContext?.SkillDomain ?? WorkflowSkillDomain.GenericDesktop,
+            userGoal,
+            observation,
+            executionPlan);
 
         builder.AppendLine("Safety:");
         builder.AppendLine("- Avoid or require approval for operations that cause data loss, are irreversible, escalate privileges,");
@@ -195,6 +219,7 @@ public sealed class PromptBuilder
         }
         AppendScreenshotContext(builder, observation);
         builder.AppendLine();
+        StrategyRecoveryPromptBuilder.AppendPriorFailureHints(builder, priorSteps);
         AppendStepHistory(builder, priorSteps);
         builder.AppendLine($"User goal: {userGoal.Trim()}");
 

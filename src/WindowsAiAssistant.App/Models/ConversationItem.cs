@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using WindowsAiAssistant.Agent.Planning;
 using WindowsAiAssistant.App.Mvvm;
 
 namespace WindowsAiAssistant.App.Models;
@@ -24,6 +25,11 @@ public sealed class ConversationItem : ObservableObject
     private string _liveDetailLine = string.Empty;
     private int _currentStepIndex;
     private int _maxSteps;
+    private string _planSummary = string.Empty;
+    private string _planProgressLine = string.Empty;
+    private string _planHeadline = string.Empty;
+    private string _skillDomainLabel = string.Empty;
+    private string _planRevisionLabel = string.Empty;
 
     public required ConversationItemKind Kind { get; init; }
     public bool DeveloperModeEnabled { get; init; }
@@ -100,6 +106,89 @@ public sealed class ConversationItem : ObservableObject
 
     public string StepProgressDisplay =>
         MaxSteps > 0 ? $"Adım {Math.Clamp(CurrentStepIndex, 1, MaxSteps)} / {MaxSteps}" : string.Empty;
+
+    public string PlanSummary
+    {
+        get => _planSummary;
+        set
+        {
+            if (SetField(ref _planSummary, value))
+            {
+                OnPropertyChanged(nameof(HasPlanSummary));
+            }
+        }
+    }
+
+    public string PlanProgressLine
+    {
+        get => _planProgressLine;
+        set
+        {
+            if (SetField(ref _planProgressLine, value))
+            {
+                OnPropertyChanged(nameof(HasPlanProgressLine));
+            }
+        }
+    }
+
+    public bool HasPlanSummary => !string.IsNullOrWhiteSpace(PlanSummary);
+
+    public bool HasPlanProgressLine => !string.IsNullOrWhiteSpace(PlanProgressLine);
+
+    public string PlanHeadline
+    {
+        get => _planHeadline;
+        set
+        {
+            if (SetField(ref _planHeadline, value))
+            {
+                OnPropertyChanged(nameof(HasPlanHeadline));
+                OnPropertyChanged(nameof(HasPlanPanel));
+            }
+        }
+    }
+
+    public string SkillDomainLabel
+    {
+        get => _skillDomainLabel;
+        set
+        {
+            if (SetField(ref _skillDomainLabel, value))
+            {
+                OnPropertyChanged(nameof(HasSkillDomainLabel));
+            }
+        }
+    }
+
+    public string PlanRevisionLabel
+    {
+        get => _planRevisionLabel;
+        set
+        {
+            if (SetField(ref _planRevisionLabel, value))
+            {
+                OnPropertyChanged(nameof(HasPlanRevisionLabel));
+            }
+        }
+    }
+
+    public bool HasPlanHeadline => !string.IsNullOrWhiteSpace(PlanHeadline);
+
+    public bool HasSkillDomainLabel => !string.IsNullOrWhiteSpace(SkillDomainLabel);
+
+    public bool HasPlanRevisionLabel => !string.IsNullOrWhiteSpace(PlanRevisionLabel);
+
+    public ObservableCollection<PlanStepDisplayLine> PlanSteps { get; } = [];
+
+    public bool HasPlanSteps => PlanSteps.Count > 0;
+
+    public bool HasPlanPanel => HasPlanSteps || HasPlanHeadline || HasPlanProgressLine;
+
+    public void NotifyPlanChanged()
+    {
+        OnPropertyChanged(nameof(HasPlanSteps));
+        OnPropertyChanged(nameof(HasPlanPanel));
+    }
 
     public ObservableCollection<ActivityTimelineEntry> Timeline { get; } = [];
 

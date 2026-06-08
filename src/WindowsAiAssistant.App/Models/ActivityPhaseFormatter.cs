@@ -13,6 +13,8 @@ public static class ActivityPhaseFormatter
         {
             "basladi" => ("Görevi aldım", Truncate(detail, 120)),
             "gozlem" => ("Ekranı okuyorum", "Pencereler, odak ve görünen kontroller taranıyor."),
+            "planlama" => ("Planlıyorum", string.IsNullOrWhiteSpace(detail) ? "Hedefi adımlara bölüp en verimli yolu seçiyorum…" : detail),
+            "dogrulama" => ("Doğruluyorum", string.IsNullOrWhiteSpace(detail) ? "Hedefin gerçekten tamamlandığını kontrol ediyorum…" : detail),
             "llm" => ("Düşünüyorum", FriendlyLlmDetail(detail)),
             "gate" => ("Güvenlik süzgeci", Truncate(detail, 140)),
             "onay" => ("Onay bekliyor", Truncate(detail, 140)),

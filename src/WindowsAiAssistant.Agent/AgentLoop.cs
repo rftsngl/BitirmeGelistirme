@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using WindowsAiAssistant.Agent.Dispatch;
+using WindowsAiAssistant.Agent.Planning;
+using WindowsAiAssistant.Agent.Skills;
 using WindowsAiAssistant.Runtime.Actions;
 using WindowsAiAssistant.Runtime.Automation;
 using WindowsAiAssistant.Runtime.Debugging;
@@ -76,6 +78,9 @@ public sealed class AgentLoop
     private readonly IActionApprovalHandler _approvalHandler;
     private readonly RunLogger _runLogger;
     private readonly ForegroundFocusService _foregroundFocus;
+    private readonly PlanningPhaseService _planningPhase;
+    private readonly SkillRouter _skillRouter;
+    private readonly CompletionVerifierService _completionVerifier;
 
     public AgentLoop(
         AgentOptions options,
@@ -88,7 +93,10 @@ public sealed class AgentLoop
         ITaskDispatchRouter taskDispatchRouter,
         IActionApprovalHandler approvalHandler,
         RunLogger runLogger,
-        ForegroundFocusService foregroundFocus)
+        ForegroundFocusService foregroundFocus,
+        PlanningPhaseService planningPhase,
+        SkillRouter skillRouter,
+        CompletionVerifierService completionVerifier)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _observationService = observationService ?? throw new ArgumentNullException(nameof(observationService));
@@ -101,6 +109,9 @@ public sealed class AgentLoop
         _approvalHandler = approvalHandler ?? throw new ArgumentNullException(nameof(approvalHandler));
         _runLogger = runLogger ?? throw new ArgumentNullException(nameof(runLogger));
         _foregroundFocus = foregroundFocus ?? throw new ArgumentNullException(nameof(foregroundFocus));
+        _planningPhase = planningPhase ?? throw new ArgumentNullException(nameof(planningPhase));
+        _skillRouter = skillRouter ?? throw new ArgumentNullException(nameof(skillRouter));
+        _completionVerifier = completionVerifier ?? throw new ArgumentNullException(nameof(completionVerifier));
     }
 
     public async Task<AgentLoopResult> RunAsync(
@@ -121,7 +132,7 @@ public sealed class AgentLoop
         var maxSteps = Math.Clamp(_options.MaxSteps, 1, 40);
         using var runScope = new AgentRunScope(session.RunId, session.UserGoal, triggerSource);
         _actionGate.BeginSession(session.RunId);
-        Report(progress, 0, maxSteps, "basladi", session.UserGoal);
+        Report(progress, 0, maxSteps, "basladi", session.UserGoal, session);
 
         _foregroundFocus.BeginAutomationSession(session.UserGoal);
         _foregroundFocus.TryPrepareForDesktopAutomation();
@@ -133,7 +144,7 @@ public sealed class AgentLoop
             cancellationToken.ThrowIfCancellationRequested();
 
             var lastStep = session.Steps.LastOrDefault();
-            Report(progress, stepIndex, maxSteps, "gozlem", "Masaustu durumu ve ekran goruntusu aliniyor");
+            Report(progress, stepIndex, maxSteps, "gozlem", "Masaustu durumu ve ekran goruntusu aliniyor", session);
 
             var previousObservation = lastObservation;
             var observation = await _observationService.CaptureAsync(
@@ -150,80 +161,134 @@ public sealed class AgentLoop
                 cancellationToken).ConfigureAwait(false);
             lastObservation = observation;
 
-            AgentDecision decision;
-            string llmRawOutput = string.Empty;
-
-            var fastDecision = _taskDispatchRouter.TryResolve(session.UserGoal, observation);
-            if (fastDecision is not null &&
-                !session.Steps.Any(step =>
-                    string.Equals(step.ParsedDecision?.Action, fastDecision.Action, StringComparison.OrdinalIgnoreCase)))
+            if (stepIndex == 0 && session.ExecutionPlan is null)
             {
-                decision = fastDecision;
-                llmRawOutput = JsonSerializer.Serialize(new
+                Report(progress, stepIndex, maxSteps, "planlama", "Hedef analiz ediliyor ve yurutme plani olusturuluyor", session);
+                session.ExecutionPlan = await _planningPhase
+                    .TryCreatePlanAsync(session.UserGoal, observation, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (session.ExecutionPlan is not null)
                 {
-                    fastRoute = fastDecision.Action,
-                    mode = fastDecision.Parameters.GetValueOrDefault("mode")
-                }, LogJsonOptions);
-                Report(progress, stepIndex, maxSteps, "llm",
-                    $"Hizli yol — dogrudan {fastDecision.Action}");
+                    session.SkillDomain = _skillRouter.ResolveDomain(
+                        session.UserGoal,
+                        observation,
+                        session.ExecutionPlan);
+                    await _runLogger.AppendAsync(
+                        new AgentRunLog
+                        {
+                            RunId = session.RunId,
+                            StepIndex = -1,
+                            UserGoal = session.UserGoal,
+                            ObservationSummaryJson =
+                                $"{{\"planning\":true,\"estimatedSteps\":{session.ExecutionPlan.EstimatedSteps},\"stepCount\":{session.ExecutionPlan.Steps.Count},\"domain\":\"{session.SkillDomain}\"}}",
+                            LlmRawOutput = PlanningPromptBuilder.ToPromptSection(session.ExecutionPlan, session.CurrentPlanStepIndex),
+                            Timestamp = DateTimeOffset.UtcNow
+                        },
+                        cancellationToken).ConfigureAwait(false);
+                    Report(progress, stepIndex, maxSteps, "planlama", PlanProgressTracker.FormatProgressLine(session), session);
+                }
             }
-            else
-            {
-                var prompt = _promptBuilder.Build(session.UserGoal, observation, session.Steps, triggerSource);
-                Report(progress, stepIndex, maxSteps, "llm", $"Adim {stepIndex + 1} karar isteniyor");
 
-                var llmContent = await RequestLlmDecisionAsync(prompt, observation, cancellationToken).ConfigureAwait(false);
+            var prompt = _promptBuilder.Build(
+                session.UserGoal,
+                observation,
+                session.Steps,
+                triggerSource,
+                CreatePromptContext(session));
+            Report(progress, stepIndex, maxSteps, "llm", $"Adim {stepIndex + 1} karar isteniyor", session);
+
+            var llmContent = await RequestLlmDecisionAsync(prompt, observation, cancellationToken).ConfigureAwait(false);
+            if (llmContent.Error is not null)
+            {
+                return Fail(session, llmContent.Error, lastObservation, AgentErrorKind.Provider);
+            }
+
+            var uiElements = observation.UiTree?.Elements;
+            var parseResult = _decisionParser.Parse(llmContent.Content!, uiElements);
+            var maxParseRetries = Math.Clamp(_options.MaxParseRetries, 0, 5);
+            var parseRetryCount = 0;
+            var llmRawOutput = llmContent.Content ?? string.Empty;
+
+            while (!parseResult.Success && parseRetryCount < maxParseRetries)
+            {
+                var retryReason = parseResult.ErrorMessage ?? "bilinmeyen sebep";
+                var retryPrompt = DecisionParseRetryPromptBuilder.Build(
+                    prompt,
+                    parseResult,
+                    uiElements,
+                    session.UserGoal);
+                llmContent = await RequestLlmDecisionAsync(retryPrompt, observation, cancellationToken).ConfigureAwait(false);
                 if (llmContent.Error is not null)
                 {
                     return Fail(session, llmContent.Error, lastObservation, AgentErrorKind.Provider);
                 }
 
-                var uiElements = observation.UiTree?.Elements;
-                var parseResult = _decisionParser.Parse(llmContent.Content!, uiElements);
-                var maxParseRetries = Math.Clamp(_options.MaxParseRetries, 0, 5);
-                var parseRetryCount = 0;
+                llmRawOutput = llmContent.Content ?? llmRawOutput;
 
-                while (!parseResult.Success && parseRetryCount < maxParseRetries)
-                {
-                    var retryReason = parseResult.ErrorMessage ?? "bilinmeyen sebep";
-                    var retryPrompt = DecisionParseRetryPromptBuilder.Build(prompt, parseResult, uiElements);
-                    llmContent = await RequestLlmDecisionAsync(retryPrompt, observation, cancellationToken).ConfigureAwait(false);
-                    if (llmContent.Error is not null)
+                await _runLogger.AppendAsync(
+                    new AgentRunLog
                     {
-                        return Fail(session, llmContent.Error, lastObservation, AgentErrorKind.Provider);
-                    }
+                        RunId = session.RunId,
+                        StepIndex = stepIndex,
+                        UserGoal = session.UserGoal,
+                        ObservationSummaryJson =
+                            $"{{\"parseRetryReason\":\"{Escape(retryReason)}\",\"parseRetryCount\":{parseRetryCount + 1},\"parseErrorCode\":\"{parseResult.ErrorCode}\"}}",
+                        LlmRawOutput = llmRawOutput,
+                        Timestamp = DateTimeOffset.UtcNow
+                    },
+                    cancellationToken).ConfigureAwait(false);
 
-                    await _runLogger.AppendAsync(
-                        new AgentRunLog
-                        {
-                            RunId = session.RunId,
-                            StepIndex = stepIndex,
-                            UserGoal = session.UserGoal,
-                            ObservationSummaryJson =
-                                $"{{\"parseRetryReason\":\"{Escape(retryReason)}\",\"parseRetryCount\":{parseRetryCount + 1},\"parseErrorCode\":\"{parseResult.ErrorCode}\"}}",
-                            LlmRawOutput = llmRawOutput,
-                            Timestamp = DateTimeOffset.UtcNow
-                        },
-                        cancellationToken).ConfigureAwait(false);
+                parseResult = _decisionParser.Parse(llmContent.Content!, uiElements);
+                parseRetryCount++;
+            }
 
-                    parseResult = _decisionParser.Parse(llmContent.Content!, uiElements);
-                    parseRetryCount++;
+            if (!parseResult.Success || parseResult.Decision is null)
+            {
+                var actionable = parseResult.ErrorMessage ?? "Karar okunamadi.";
+                if (parseResult.ErrorCode == DecisionParseErrorCode.InvalidElementId)
+                {
+                    actionable += " Farkli bir arac veya yanit yolu denenecek.";
                 }
 
-                if (!parseResult.Success || parseResult.Decision is null)
+                var parseFailCount = session.RecordActionFailure("decision_parse", parseResult.ErrorCode.ToString());
+                var maxParseFailures = Math.Clamp(_options.MaxSameActionFailures, 2, 10);
+                session.Steps.Add(new AgentStep
                 {
-                    var actionable = parseResult.ErrorMessage ?? "Karar okunamadi.";
-                    if (parseResult.ErrorCode == DecisionParseErrorCode.InvalidElementId)
+                    Index = stepIndex,
+                    LlmRawOutput = llmRawOutput,
+                    ActionResult = new ActionResult
                     {
-                        actionable += " Gecerli elementId kullanin veya focus_window + entegrasyon aksiyonu deneyin.";
+                        Success = false,
+                        Message = $"Karar parse hatasi: {actionable}"
                     }
+                });
 
+                await _runLogger.AppendAsync(
+                    new AgentRunLog
+                    {
+                        RunId = session.RunId,
+                        StepIndex = stepIndex,
+                        UserGoal = session.UserGoal,
+                        ObservationSummaryJson =
+                            $"{{\"parseRecovery\":true,\"parseFailCount\":{parseFailCount},\"errorCode\":\"{parseResult.ErrorCode}\"}}",
+                        LlmRawOutput = llmRawOutput,
+                        Timestamp = DateTimeOffset.UtcNow
+                    },
+                    cancellationToken).ConfigureAwait(false);
+
+                Report(progress, stepIndex, maxSteps, "parse", $"Karar gecersiz — alternatif yol denenecek ({parseFailCount}/{maxParseFailures})", session);
+
+                if (parseFailCount >= maxParseFailures)
+                {
                     return Fail(session, actionable, lastObservation, AgentErrorKind.Decision);
                 }
 
-                decision = parseResult.Decision;
-                llmRawOutput = llmContent.Content!;
+                continue;
             }
+
+            var decision = parseResult.Decision;
+            llmRawOutput = llmContent.Content!;
 
             var agentAction = decision.ToAgentAction();
 
@@ -280,7 +345,7 @@ public sealed class AgentLoop
             // #endregion
 
             var gateDecision = _actionGate.Evaluate(agentAction);
-            Report(progress, stepIndex, maxSteps, "gate", gateDecision.Summary);
+            Report(progress, stepIndex, maxSteps, "gate", gateDecision.Summary, session);
 
             bool? userApproved = null;
             ActionResult actionResult;
@@ -295,14 +360,14 @@ public sealed class AgentLoop
             }
             else if (gateDecision.Outcome == GateOutcome.RequireApproval)
             {
-                Report(progress, stepIndex, maxSteps, "onay", gateDecision.Summary);
+                Report(progress, stepIndex, maxSteps, "onay", gateDecision.Summary, session);
                 userApproved = await _approvalHandler
                     .RequestApprovalAsync(gateDecision, agentAction, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (userApproved == true)
                 {
-                    Report(progress, stepIndex, maxSteps, "eylem", decision.Action);
+                    Report(progress, stepIndex, maxSteps, "eylem", decision.Action, session);
                     actionResult = await _actionExecutor
                         .ExecuteAsync(agentAction, cancellationToken)
                         .ConfigureAwait(false);
@@ -318,7 +383,7 @@ public sealed class AgentLoop
             }
             else
             {
-                Report(progress, stepIndex, maxSteps, "eylem", decision.Action);
+                Report(progress, stepIndex, maxSteps, "eylem", decision.Action, session);
                 actionResult = await _actionExecutor
                     .ExecuteAsync(agentAction, cancellationToken)
                     .ConfigureAwait(false);
@@ -326,7 +391,7 @@ public sealed class AgentLoop
 
             if (!actionResult.Success && decision.Action is not ("respond" or "ask_user" or "stop"))
             {
-                Report(progress, stepIndex, maxSteps, "eylem", $"{decision.Action}|fail|{actionResult.Message}");
+                Report(progress, stepIndex, maxSteps, "eylem", $"{decision.Action}|fail|{actionResult.Message}", session);
             }
 
             session.Steps.Add(new AgentStep
@@ -377,6 +442,31 @@ public sealed class AgentLoop
                 },
                 cancellationToken).ConfigureAwait(false);
 
+            if (!actionResult.Success)
+            {
+                PlanProgressTracker.RecordStepOutcome(session, success: false);
+                if (PlanRevisionTrigger.ShouldRevise(_options, session, stepIndex, maxSteps, lastStepFailed: true))
+                {
+                    Report(progress, stepIndex, maxSteps, "planlama", "Plan guncelleniyor", session);
+                    var revised = await _planningPhase
+                        .TryRevisePlanAsync(
+                            session,
+                            observation,
+                            "Ardışık başarısız adımlar veya adım bütçesi baskısı",
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (revised is not null)
+                    {
+                        session.ExecutionPlan = revised;
+                        session.SkillDomain = _skillRouter.ResolveDomain(
+                            session.UserGoal,
+                            observation,
+                            session.ExecutionPlan);
+                        Report(progress, stepIndex, maxSteps, "planlama", PlanProgressTracker.FormatProgressLine(session), session);
+                    }
+                }
+            }
+
             // Otonom operatör: başarısız bir eylem ölü nokta değil, geri bildirimdir — ancak aynı
             // action+target tekrar tekrar basarisiz olursa donguyu durdur (F-018).
             if (!actionResult.Success)
@@ -391,7 +481,7 @@ public sealed class AgentLoop
                         var loopStopMessage =
                             $"'{decision.Action}' islemi {failCount} kez basarisiz oldu. " +
                             "Farkli bir yol deneyin veya hedefi netlestirin.";
-                        Report(progress, stepIndex, maxSteps, "limit", loopStopMessage);
+                        Report(progress, stepIndex, maxSteps, "limit", loopStopMessage, session);
                         await _runLogger.AppendAsync(
                             new AgentRunLog
                             {
@@ -411,13 +501,28 @@ public sealed class AgentLoop
             }
 
             session.ResetActionFailure(decision.Action, decision.Target);
+            if (actionResult.Success)
+            {
+                PlanProgressTracker.RecordStepOutcome(session, success: true);
+            }
 
             if (actionResult.Success &&
                 _taskDispatchRouter.ShouldCompleteAfterRoute(session.UserGoal, decision.Action))
             {
-                session.IsComplete = true;
                 var fastMessage = ResolveAssistantMessage(decision, actionResult);
-                Report(progress, stepIndex, maxSteps, "tamamlandi", fastMessage);
+                if (!await AuthorizeCompletionAsync(
+                        session,
+                        decision,
+                        fastMessage,
+                        observation,
+                        cancellationToken).ConfigureAwait(false))
+                {
+                    Report(progress, stepIndex, maxSteps, "dogrulama", "Hedef henuz tamamlanmadi; devam ediliyor", session);
+                    continue;
+                }
+
+                session.IsComplete = true;
+                Report(progress, stepIndex, maxSteps, "tamamlandi", fastMessage, session);
                 await _runLogger.AppendAsync(
                     new AgentRunLog
                     {
@@ -437,9 +542,21 @@ public sealed class AgentLoop
 
             if (!ShouldContinueLoop(decision, out var stopReason))
             {
-                session.IsComplete = true;
                 var message = ResolveAssistantMessage(decision, actionResult);
-                Report(progress, stepIndex, maxSteps, "tamamlandi", message);
+                if (decision.Action is not "ask_user" &&
+                    !await AuthorizeCompletionAsync(
+                        session,
+                        decision,
+                        message,
+                        observation,
+                        cancellationToken).ConfigureAwait(false))
+                {
+                    Report(progress, stepIndex, maxSteps, "dogrulama", "Hedef henuz tamamlanmadi; devam ediliyor", session);
+                    continue;
+                }
+
+                session.IsComplete = true;
+                Report(progress, stepIndex, maxSteps, "tamamlandi", message, session);
                 await _runLogger.AppendAsync(
                     new AgentRunLog
                     {
@@ -471,8 +588,50 @@ public sealed class AgentLoop
         var userMessage = TryGetLastRespondMessage(session)
             ?? await RequestFinalUserFeedbackAsync(session, lastObservation, cancellationToken).ConfigureAwait(false)
             ?? maxStepsMessage;
-        Report(progress, maxSteps - 1, maxSteps, "limit", maxStepsMessage);
+        Report(progress, maxSteps - 1, maxSteps, "limit", maxStepsMessage, session);
         return Complete(session, userMessage, lastObservation, reachedMaxSteps: true);
+    }
+
+    private static AgentPromptContext CreatePromptContext(AgentSession session) =>
+        new()
+        {
+            ExecutionPlan = session.ExecutionPlan,
+            CurrentPlanStepIndex = session.CurrentPlanStepIndex,
+            SkillDomain = session.SkillDomain
+        };
+
+    private async Task<bool> AuthorizeCompletionAsync(
+        AgentSession session,
+        AgentDecision decision,
+        string proposedMessage,
+        DesktopObservation observation,
+        CancellationToken cancellationToken)
+    {
+        if (decision.Action.Equals("ask_user", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var verification = await _completionVerifier
+            .VerifyAsync(session.UserGoal, session.ExecutionPlan, observation, proposedMessage, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (verification.IsComplete)
+        {
+            return true;
+        }
+
+        session.Steps.Add(new AgentStep
+        {
+            Index = session.Steps.Count,
+            ActionResult = new ActionResult
+            {
+                Success = false,
+                Message = $"Tamamlanma dogrulamasi basarisiz: {verification.MissingWork}"
+            }
+        });
+
+        return false;
     }
 
     private AgentLoopResult Fail(
@@ -549,6 +708,7 @@ public sealed class AgentLoop
             .AppendLine("Reply with ONLY one JSON object matching the schema.")
             .AppendLine("Use decisionType=complete, action=respond, isComplete=true.")
             .AppendLine("parameters.message MUST be a concise Turkish summary for the user: what was tried and the outcome.")
+            .AppendLine("If the goal may be incomplete, say so honestly — do NOT claim success you cannot verify.")
             .AppendLine("Do not mention JSON, steps, or internal logs.")
             .ToString();
 
@@ -691,14 +851,29 @@ public sealed class AgentLoop
         int stepIndex,
         int maxSteps,
         string phase,
-        string? detail)
+        string? detail,
+        AgentSession? session = null)
     {
         progress?.Report(new AgentStepProgress
         {
             StepIndex = stepIndex,
             MaxSteps = maxSteps,
             Phase = phase,
-            Detail = detail
+            Detail = detail,
+            PlanSummary = session?.ExecutionPlan is not null
+                ? PlanProgressTracker.FormatSummaryCard(session)
+                : null,
+            PlanHeadline = session?.ExecutionPlan is not null
+                ? PlanProgressTracker.GetPlanHeadline(session)
+                : null,
+            PlanSteps = session?.ExecutionPlan is not null
+                ? PlanProgressTracker.BuildStepLines(session)
+                : null,
+            PlanProgressLine = session?.ExecutionPlan is not null
+                ? PlanProgressTracker.FormatProgressLine(session)
+                : null,
+            SkillDomain = session?.SkillDomain.ToString(),
+            PlanRevision = session?.PlanRevisionCount > 0 ? session.PlanRevisionCount + 1 : null
         });
     }
 }
