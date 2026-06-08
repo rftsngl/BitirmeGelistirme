@@ -1,4 +1,10 @@
-# Build outputs
+# =============================================================================
+# Windows AI Assistant — .gitignore
+# Repo: kaynak kod, test, release scriptleri, kurulum tanimi.
+# Disarida: build ciktisi, yerel modeller, gizliler, kisisel/taslak dosyalar.
+# =============================================================================
+
+# --- Derleme ve publish ciktisi ---
 [Bb]in/
 [Oo]bj/
 [Ll]og/
@@ -9,25 +15,26 @@ publish-*/
 AppPackages/
 BundleArtifacts/
 artifacts/
-
-# Publish ciktisi (dotnet publish, zip)
 /dist/
-# installer/ ve scripts/ kaynak olarak takip edilir; yalnizca derleme ciktisi dist/ altinda kalir
 
-# Visual Studio / MSBuild
+# --- IDE / editor ---
 .vs/
-.vscode/
-.tmp-edgetts-probe/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/launch.json
-.cursor/
-.cursorignore
+.idea/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
 *.user
 *.rsuser
 *.suo
 *.userosscache
 *.sln.docstates
+.cursor/
+.cursorignore
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# --- MSBuild / WinUI gecici ---
 *.binlog
 msbuild.log
 msbuild.err
@@ -36,27 +43,6 @@ UpgradeLog*.htm
 xaml-build.log*
 xaml_stdout.txt
 xaml_stderr.txt
-
-# Rider / ReSharper
-.idea/
-_ReSharper*/
-*.[Rr]e[Ss]harper
-*.DotSettings.user
-
-# NuGet
-*.nupkg
-*.snupkg
-packages/
-!packages/build/
-project.lock.json
-
-# Test and coverage
-TestResults/
-*.trx
-*.coverage
-*.coveragexml
-
-# WinUI / Windows App SDK
 *.xbf
 *.pri
 *.appx
@@ -64,17 +50,24 @@ TestResults/
 *.msix
 *.msixbundle
 
-# Logs and debug artifacts
+# --- Test / coverage ---
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# --- NuGet paketleri (restore ile gelir) ---
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+project.lock.json
+
+# --- Log ve debug ---
 *.log
 debug-*.log
 
-# OS files
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# Secrets and local overrides
+# --- Gizliler ve yerel yapilandirma ---
 .env
 .env.*
 **/appsettings.Development.json
@@ -85,8 +78,8 @@ secrets.json
 *.pfx
 *.p12
 
-# Ses / STT modelleri (buyuk dosyalar, yerel indirme)
-# Not: "models/" kullanmayin — Windows'ta src/**/Models/ kaynak klasorunu de etkiler.
+# --- Ses modelleri (buyuk; Ayarlar veya script ile indirilir) ---
+# Dikkat: kok "models/" kullanmayin — src/**/Models/ kaynak kodunu etkiler.
 /models/
 /whisper/
 **/Assets/Models/
@@ -94,9 +87,18 @@ vosk-model*/
 ggml-*.bin
 *.gguf
 
-# Proje disi / kisisel klasorler
+# --- Yerel deneme / tek seferlik araclar ---
+.tmp-*/
+scripts/SpeechLangDiag/
+scripts/update-plan-checkboxes.py
+
+# --- Kisisel / bitirme / ic taslak dokumanlar (repoda gerekmez) ---
 BitirmeRapor/
-docs/
-docs/plan/
-Agents.md
 Rapor/
+docs/
+
+# --- Isletim sistemi ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
