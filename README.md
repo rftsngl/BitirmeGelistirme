@@ -348,7 +348,7 @@ Office COM otomasyonu yalnızca izin verilen ProgID ve metotlarla sınırlıdır
 
 **Güncel kurulum dosyası:** `WindowsAiAssistant-Setup-1.1.0.exe`
 
-Tam değişiklik listesi için [CHANGELOG.md](CHANGELOG.md) dosyasına bakın. Geliştiriciler için paketleme adımları [RELEASE.md](RELEASE.md) içindedir.
+Tam değişiklik listesi için [CHANGELOG.md](CHANGELOG.md) dosyasına bakın. Paketleme ve GitHub release: `.\scripts\release.ps1`
 
 ### 1.1.0 öne çıkanlar
 
@@ -393,11 +393,34 @@ dotnet build src/WindowsAiAssistant.App/WindowsAiAssistant.App.csproj
 - **Sürüm:** `Directory.Build.props`
 - **Yapılandırma:** `src/WindowsAiAssistant.App/appsettings.json`
 
+### Release (geliştirici)
+
+Proje kökünde PowerShell:
+
+```powershell
+# 1 — test + build
+.\scripts\release.ps1 -Step Test
+
+# 2 — publish + Setup.exe
+.\scripts\release.ps1 -Step Package
+
+# 3 — GitHub Release (tag + .exe yükleme)
+.\scripts\release.ps1 -Step GitHub
+
+# Hepsi (GitHub adımında onay sorar)
+.\scripts\release.ps1 -Step All
+```
+
+Whisper modelini kuruluma dahil etmek için: `-IncludeWhisperModel`  
+`main`'i push edip release: `-Step GitHub -PushMain`
+
+Sürüm numarası: `Directory.Build.props` → aynı değeri `app.manifest` ve `installer/WindowsAiAssistant.iss` ile eşitle.
+
 ### Ek dokümantasyon
 
 - Kod asistanı kuralları: [AGENTS.md](AGENTS.md)
 - Sürüm geçmişi: [CHANGELOG.md](CHANGELOG.md)
-- Release / paketleme: [RELEASE.md](RELEASE.md)
+- Release script: `scripts/release.ps1`
 - Sistem denetimi: [docs/full-repo-audit.md](docs/full-repo-audit.md)
 
 ---
