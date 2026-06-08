@@ -83,7 +83,7 @@
              Text="ensure-whisper-medium.ps1 bulunamadi ve ggml-medium.bin yok. Build devam eder; ilk calistirmada Ayarlar uzerinden model indirilebilir." />
   </Target>
 
-  <Target Name="IncludeWhisperModelOutput" AfterTargets="EnsureWhisperMediumModel" BeforeTargets="AssignTargetPaths" Condition="'$(OS)' == 'Windows_NT'">
+  <Target Name="IncludeWhisperModelOutput" AfterTargets="EnsureWhisperMediumModel" BeforeTargets="AssignTargetPaths" Condition="'$(OS)' == 'Windows_NT' and '$(SkipWhisperModelOnPublish)' != 'true'">
     <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\Assets\Models\whisper\ggml-medium.bin')">
       <Content Include="$(MSBuildProjectDirectory)\Assets\Models\whisper\ggml-medium.bin">
         <Link>models\whisper\ggml-medium.bin</Link>
