@@ -10,11 +10,9 @@ AppPackages/
 BundleArtifacts/
 artifacts/
 
-# Publish / installer ciktisi (dotnet publish, Inno Setup, zip)
+# Publish ciktisi (dotnet publish, zip)
 /dist/
-installer/
-scripts/
-Directory.Build.props
+# installer/ ve scripts/ kaynak olarak takip edilir; yalnizca derleme ciktisi dist/ altinda kalir
 
 # Visual Studio / MSBuild
 .vs/
@@ -101,5 +99,4 @@ BitirmeRapor/
 docs/
 docs/plan/
 Agents.md
-.github/
 Rapor/

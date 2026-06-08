@@ -1,0 +1,20 @@
+<Project>
+  <PropertyGroup>
+    <!-- Tek sürüm kaynağı — release öncesi burayı, app.manifest ve installer/WindowsAiAssistant.iss ile eşitleyin -->
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <InformationalVersion>1.1.0</InformationalVersion>
+
+    <Product>Windows AI Assistant</Product>
+    <AssemblyTitle>Windows AI Assistant</AssemblyTitle>
+    <Description>Windows masaüstü için sesli ve yazılı yapay zekâ asistanı. Uygulama açma, dosya işlemleri, sistem yönetimi ve çok adımlı otonom görevler.</Description>
+    <Company>Windows AI Assistant</Company>
+    <Authors>rftsngl</Authors>
+    <Copyright>Copyright © 2026 rftsngl</Copyright>
+
+    <RepositoryUrl>https://github.com/rftsngl/BitirmeGelistirme</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/rftsngl/BitirmeGelistirme</PackageProjectUrl>
+  </PropertyGroup>
+</Project>
