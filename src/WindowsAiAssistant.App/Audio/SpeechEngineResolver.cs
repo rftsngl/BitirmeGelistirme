@@ -1,4 +1,5 @@
 using WindowsAiAssistant.App.Configuration;
+using WindowsAiAssistant.Runtime.Audio;
 
 namespace WindowsAiAssistant.App.Audio;
 
@@ -18,7 +19,7 @@ internal static class SpeechEngineResolver
 
         if (readiness.UsesVoskForStt())
         {
-            return new VoskSpeechToTextService(options, readiness, voskModels);
+            return new VoskSpeechToTextService(options, readiness, voskModels, microphone);
         }
 
         return new WindowsSpeechToTextService(options, readiness);

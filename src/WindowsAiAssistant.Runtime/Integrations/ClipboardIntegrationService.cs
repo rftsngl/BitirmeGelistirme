@@ -6,7 +6,7 @@ namespace WindowsAiAssistant.Runtime.Integrations;
 
 public sealed class ClipboardIntegrationService : IClipboardIntegrationService
 {
-    public ActionResult Execute(string mode, string? text = null)
+    public Task<ActionResult> ExecuteAsync(string mode, string? text = null, CancellationToken cancellationToken = default)
     {
         var normalized = (mode ?? "read").Trim().ToLowerInvariant();
         return StaTaskRunner.RunAsync(() => normalized switch
@@ -15,7 +15,7 @@ public sealed class ClipboardIntegrationService : IClipboardIntegrationService
             "write" or "set" => Write(text),
             "clear" => Clear(),
             _ => IntegrationResultHelper.Fail($"Desteklenen modlar: read, write, clear. Verilen: {mode}")
-        }).GetAwaiter().GetResult();
+        }, cancellationToken);
     }
 
     private static ActionResult Read()

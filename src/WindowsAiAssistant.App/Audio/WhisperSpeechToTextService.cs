@@ -3,6 +3,7 @@ using NAudio.Wave;
 using Whisper.net;
 using WindowsAiAssistant.App.Configuration;
 using WindowsAiAssistant.App.Services;
+using WindowsAiAssistant.Runtime.Audio;
 
 namespace WindowsAiAssistant.App.Audio;
 
@@ -29,6 +30,28 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
         _models = models ?? throw new ArgumentNullException(nameof(models));
         _microphone = microphone ?? throw new ArgumentNullException(nameof(microphone));
+    }
+
+    public async Task WarmupAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_readiness.UsesWhisperForStt())
+        {
+            return;
+        }
+
+        try
+        {
+            await _readiness.EnsureReadyForListenAsync(cancellationToken).ConfigureAwait(false);
+            _ = GetFactory();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write(ex, "WhisperSpeechToTextService.Warmup");
+        }
     }
 
     public async Task<string?> ListenOnceAsync(
@@ -100,7 +123,7 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService, IDisposab
         int? listenTimeoutSeconds,
         IProgress<SpeechListenProgress>? progress)
     {
-        using var micSession = await _microphone.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        using var micSession = await _microphone.AcquireAsync("stt", cancellationToken).ConfigureAwait(false);
 
         var maxWaitSeconds = Math.Clamp(listenTimeoutSeconds ?? _options.SpeechListenTimeoutSeconds, 3, 60);
         var vad = new VoiceActivityDetector(

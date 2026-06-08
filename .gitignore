@@ -18,6 +18,7 @@ Directory.Build.props
 
 # Visual Studio / MSBuild
 .vs/
+.vscode/
 .tmp-edgetts-probe/
 .vscode/*
 !.vscode/extensions.json
@@ -97,3 +98,7 @@ ggml-*.bin
 
 # Proje disi / kisisel klasorler
 BitirmeRapor/
+docs/
+docs/plan/
+Agents.md
+.github/

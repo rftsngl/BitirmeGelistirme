@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using WindowsAiAssistant.App.Services;
 using WindowsAiAssistant.App.ViewModels;
 
 namespace WindowsAiAssistant.App.Views;
@@ -17,13 +18,16 @@ public sealed partial class HistoryPage : Page
 
     public HistoryViewModel ViewModel { get; }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
-        await ViewModel.RefreshAsync().ConfigureAwait(true);
+        SafeFireAndForget.Run(() => ViewModel.RefreshAsync(), nameof(HistoryPage.OnLoaded));
     }
 
-    private async void DeleteSelected_OnClick(object sender, RoutedEventArgs e)
+    private void DeleteSelected_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(DeleteSelectedAsync, nameof(DeleteSelected_OnClick));
+
+    private async Task DeleteSelectedAsync()
     {
         if (ViewModel.SelectedItem is null)
         {
@@ -48,7 +52,10 @@ public sealed partial class HistoryPage : Page
         await ViewModel.DeleteSelectedAsync().ConfigureAwait(true);
     }
 
-    private async void ClearAll_OnClick(object sender, RoutedEventArgs e)
+    private void ClearAll_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(ClearAllAsync, nameof(ClearAll_OnClick));
+
+    private async Task ClearAllAsync()
     {
         var dialog = new ContentDialog
         {

@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Text;
+using WindowsAiAssistant.Runtime.Debugging;
+using WindowsAiAssistant.Runtime.Policy;
+using WindowsAiAssistant.Runtime.Session;
 
 namespace WindowsAiAssistant.Runtime.Actions.Handlers;
 
@@ -43,6 +46,18 @@ public sealed class ShellActionHandler : IActionHandler
         var timeoutMs = ActionParameterReader.TryGetInt(action, "timeoutMs", out var ms)
             ? Math.Clamp(ms, 1000, MaxTimeoutMs)
             : DefaultTimeoutMs;
+
+        DebugAgentLog.Write(
+            "F009",
+            "ShellActionHandler.ExecuteAsync",
+            "shell command audit",
+            new
+            {
+                shell,
+                command = ShellSecurityPolicy.SanitizeForAudit(command),
+                destructive = ShellSecurityPolicy.IsDestructive(command)
+            },
+            AgentRunScope.Current?.RunId);
 
         var startInfo = BuildStartInfo(shell, command);
 

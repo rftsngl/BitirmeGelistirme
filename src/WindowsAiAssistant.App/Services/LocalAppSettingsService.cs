@@ -70,6 +70,9 @@ public sealed class LocalAppSettingsService
     {
         to.MaxSteps = from.MaxSteps;
         to.MaxPriorStepsInPrompt = from.MaxPriorStepsInPrompt;
+        to.MaxParseRetries = from.MaxParseRetries;
+        to.MaxSameActionFailures = from.MaxSameActionFailures;
+        to.UserResponseLanguage = from.UserResponseLanguage;
     }
 
     public static void CopyAudio(AudioOptions from, AudioOptions to)

@@ -99,6 +99,7 @@ public sealed class CapabilitiesViewModel : ObservableObject
         NewItem("type_text", "\uE765", "Odaklı pencereye metin yazar (clipboard/SendInput).", "Klavye"),
         NewItem("press_key", "\uE92E", "Tek tuş gönderir.", "Klavye"),
         NewItem("press_shortcut", "\uE92E", "Klavye kısayolu gönderir (Ctrl+A...).", "Klavye"),
+        NewItem("select_text", "\uE92E", "Metin seçimi: all, extend_*, word, line.", "Klavye"),
         NewItem("click_element", "\uE7C9", "UIA elementine tıklar (pattern -> mouse fallback).", "UI Element"),
         NewItem("focus_element", "\uE7B3", "UIA elementine odak verir.", "UI Element"),
         NewItem("read_element", "\uE890", "Element metnini/degerini okur.", "UI Element"),
@@ -111,7 +112,8 @@ public sealed class CapabilitiesViewModel : ObservableObject
         NewItem("focus_window", "\uE737", "Pencereyi öne getirir/odaklar.", "Pencere"),
         NewItem("window_state", "\uE740", "Pencere durumu: minimize/maximize/restore/close.", "Pencere"),
         NewItem("move_window", "\uE759", "Pencereyi taşır/boyutlandırır.", "Pencere"),
-        NewItem("mouse_click", "\uE962", "Koordinat veya element merkezine tıklar (fallback).", "Mouse"),
+        NewItem("mouse_click", "\uE962", "Sol/sağ/orta tık; element veya koordinat (fallback).", "Mouse"),
+        NewItem("mouse_move", "\uE962", "İmleci koordinata taşır (fallback).", "Mouse"),
         NewItem("mouse_scroll", "\uE962", "Mouse tekerleği ile kaydırır.", "Mouse"),
         NewItem("mouse_drag", "\uE962", "Mouse ile sürükle-bırak yapar (fallback).", "Mouse")
     ];

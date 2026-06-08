@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using WindowsAiAssistant.Agent;
+using WindowsAiAssistant.Agent.Dispatch;
 using WindowsAiAssistant.App.Integrations;
 using WindowsAiAssistant.App.Audio;
 using WindowsAiAssistant.App.Background;
@@ -10,9 +11,11 @@ using WindowsAiAssistant.App.ProviderSettings;
 using WindowsAiAssistant.App.Services;
 using WindowsAiAssistant.App.Tray;
 using WindowsAiAssistant.App.ViewModels;
+using WindowsAiAssistant.Runtime.Audio;
 using WindowsAiAssistant.Runtime.Actions;
 using WindowsAiAssistant.Runtime.Actions.Handlers;
 using WindowsAiAssistant.Runtime.Automation;
+using WindowsAiAssistant.Runtime.Debugging;
 using WindowsAiAssistant.Runtime.Logging;
 using WindowsAiAssistant.Runtime.Observation;
 using WindowsAiAssistant.Runtime.Policy;
@@ -26,6 +29,7 @@ public static class AppServices
     public static ServiceProvider BuildServiceProvider()
     {
         var (agentOptions, runtimeOptions, audioOptions) = AppConfiguration.Load();
+        DebugAgentLog.Configure(runtimeOptions);
         var services = new ServiceCollection();
 
         services.AddSingleton(agentOptions);
@@ -79,6 +83,7 @@ public static class AppServices
         services.AddSingleton<IActionHandler, TypeTextActionHandler>();
         services.AddSingleton<IActionHandler, PressKeyActionHandler>();
         services.AddSingleton<IActionHandler, PressShortcutActionHandler>();
+        services.AddSingleton<IActionHandler, SelectTextActionHandler>();
         services.AddSingleton<IActionHandler, ClickElementActionHandler>();
         services.AddSingleton<IActionHandler, FocusElementActionHandler>();
         services.AddSingleton<IActionHandler, ReadElementActionHandler>();
@@ -93,6 +98,7 @@ public static class AppServices
         services.AddSingleton<IActionHandler, ListWindowsActionHandler>();
         services.AddSingleton<IActionHandler, LaunchActionHandler>();
         services.AddSingleton<IActionHandler, MouseClickActionHandler>();
+        services.AddSingleton<IActionHandler, MouseMoveActionHandler>();
         services.AddSingleton<IActionHandler, MouseScrollActionHandler>();
         services.AddSingleton<IActionHandler, MouseDragActionHandler>();
         services.AddSingleton<IActionHandler, ShellActionHandler>();
@@ -122,6 +128,7 @@ public static class AppServices
         services.AddSingleton<RunLogReader>();
         services.AddSingleton<PromptBuilder>();
         services.AddSingleton<DecisionParser>();
+        services.AddSingleton<ITaskDispatchRouter, TaskDispatchRouter>();
         services.AddSingleton<AiClient>();
         services.AddSingleton<ProviderConnectionTester>();
         services.AddSingleton<AgentLoop>();
@@ -156,6 +163,7 @@ public static class AppServices
                 SpeechEngineResolver.Create(options, readiness, voskModels, whisperModels, microphone));
         });
         services.AddSingleton<ISpeechToTextService>(sp => sp.GetRequiredService<SwitchableSpeechToTextService>());
+        services.AddSingleton<SpeechWarmupService>();
         services.AddSingleton<EdgeTextToSpeechService>();
         services.AddSingleton<WindowsTextToSpeechService>();
         services.AddSingleton<ITextToSpeechService, HybridTextToSpeechService>();

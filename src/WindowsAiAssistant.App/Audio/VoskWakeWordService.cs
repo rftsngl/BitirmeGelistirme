@@ -2,6 +2,7 @@ using System.Text.Json;
 using NAudio.Wave;
 using Vosk;
 using WindowsAiAssistant.App.Configuration;
+using WindowsAiAssistant.Runtime.Audio;
 
 namespace WindowsAiAssistant.App.Audio;
 
@@ -102,7 +103,7 @@ public sealed class VoskWakeWordService : IWakeWordService
 
     private async Task RunListenSessionAsync(CancellationToken cancellationToken)
     {
-        using var micSession = await _microphone.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        using var micSession = await _microphone.AcquireAsync("wake_word", cancellationToken).ConfigureAwait(false);
 
         Model? model = null;
         VoskRecognizer? recognizer = null;

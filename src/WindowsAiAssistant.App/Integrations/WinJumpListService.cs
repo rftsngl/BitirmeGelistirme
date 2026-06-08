@@ -6,22 +6,26 @@ namespace WindowsAiAssistant.App.Integrations;
 
 public sealed class WinJumpListService : IJumpListService
 {
-    public ActionResult Update(string mode, string? tasks = null)
+    public async Task<ActionResult> UpdateAsync(
+        string mode,
+        string? tasks = null,
+        CancellationToken cancellationToken = default)
     {
         var normalized = (mode ?? "set").Trim().ToLowerInvariant();
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             AppNotificationIdentity.EnsureRegistered();
 
             if (normalized is "clear" or "reset")
             {
-                var current = JumpList.LoadCurrentAsync().AsTask().GetAwaiter().GetResult();
+                var current = await JumpList.LoadCurrentAsync().AsTask().ConfigureAwait(false);
                 current.Items.Clear();
-                current.SaveAsync().AsTask().GetAwaiter().GetResult();
+                await current.SaveAsync().AsTask().ConfigureAwait(false);
                 return new ActionResult { Success = true, Message = "Jump List temizlendi." };
             }
 
-            var jumpList = JumpList.LoadCurrentAsync().AsTask().GetAwaiter().GetResult();
+            var jumpList = await JumpList.LoadCurrentAsync().AsTask().ConfigureAwait(false);
             jumpList.Items.Clear();
 
             var entries = ParseTasks(tasks);
@@ -34,7 +38,7 @@ public sealed class WinJumpListService : IJumpListService
                 jumpList.Items.Add(item);
             }
 
-            jumpList.SaveAsync().AsTask().GetAwaiter().GetResult();
+            await jumpList.SaveAsync().AsTask().ConfigureAwait(false);
             return new ActionResult
             {
                 Success = true,
@@ -46,6 +50,8 @@ public sealed class WinJumpListService : IJumpListService
             return new ActionResult
             {
                 Success = false,
+                ErrorCode = ActionFailureCodes.HandlerException,
+                ExceptionType = ex.GetType().Name,
                 Message = $"Jump List guncellenemedi: {ex.Message}"
             };
         }

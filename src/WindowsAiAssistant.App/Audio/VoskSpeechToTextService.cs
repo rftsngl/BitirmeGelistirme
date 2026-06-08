@@ -2,6 +2,7 @@ using System.Text.Json;
 using NAudio.Wave;
 using Vosk;
 using WindowsAiAssistant.App.Configuration;
+using WindowsAiAssistant.Runtime.Audio;
 
 namespace WindowsAiAssistant.App.Audio;
 
@@ -13,6 +14,7 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
     private readonly AudioOptions _options;
     private readonly SpeechReadinessService _readiness;
     private readonly VoskWakeWordModelService _models;
+    private readonly MicrophoneSessionCoordinator _microphone;
     private readonly object _modelGate = new();
     private Model? _cachedModel;
     private string? _cachedModelPath;
@@ -20,11 +22,13 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
     public VoskSpeechToTextService(
         AudioOptions options,
         SpeechReadinessService readiness,
-        VoskWakeWordModelService models)
+        VoskWakeWordModelService models,
+        MicrophoneSessionCoordinator microphone)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
         _models = models ?? throw new ArgumentNullException(nameof(models));
+        _microphone = microphone ?? throw new ArgumentNullException(nameof(microphone));
     }
 
     public async Task<string?> ListenOnceAsync(
@@ -37,6 +41,8 @@ public sealed class VoskSpeechToTextService : ISpeechToTextService, IDisposable
 
         var modelPath = await _models.EnsureSttModelAsync(cancellationToken).ConfigureAwait(false);
         var model = GetOrLoadModel(modelPath);
+
+        using var micSession = await _microphone.AcquireAsync("stt", cancellationToken).ConfigureAwait(false);
 
         VoskRecognizer? recognizer = null;
         WaveInEvent? waveIn = null;

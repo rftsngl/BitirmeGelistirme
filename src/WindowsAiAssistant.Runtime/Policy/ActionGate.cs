@@ -1,4 +1,5 @@
 using WindowsAiAssistant.Runtime.Actions;
+using WindowsAiAssistant.Runtime.Debugging;
 using WindowsAiAssistant.Runtime.Observation;
 
 namespace WindowsAiAssistant.Runtime.Policy;
@@ -10,6 +11,7 @@ public sealed class ActionGate
         "type_text",
         "press_key",
         "press_shortcut",
+        "select_text",
         "click_element",
         "focus_element",
         "set_value",
@@ -18,6 +20,7 @@ public sealed class ActionGate
         "invoke_toggle",
         "scroll",
         "mouse_click",
+        "mouse_move",
         "mouse_scroll",
         "mouse_drag"
     };
@@ -41,26 +44,16 @@ public sealed class ActionGate
     private static readonly HashSet<string> KnownActions = new(StringComparer.OrdinalIgnoreCase)
     {
         "respond", "ask_user", "stop", "wait",
-        "open_app", "open_url", "type_text", "press_key", "press_shortcut",
+        "open_app", "open_url", "type_text", "press_key", "press_shortcut", "select_text",
         "click_element", "focus_element", "read_element", "set_value",
         "select_element", "expand_collapse", "invoke_toggle", "scroll",
         "focus_window", "window_state", "move_window", "list_windows", "launch",
-        "mouse_click", "mouse_scroll", "mouse_drag", "shell",
+        "mouse_click", "mouse_move", "mouse_scroll", "mouse_drag", "shell",
         "capture_screen", "notify", "wmi_query", "schedule_task", "jump_list",
         "com_invoke", "verify_user", "global_hook",
         "service_control", "event_log", "registry_op", "clipboard", "install_package",
         "network_status", "audio_power", "perf_counter", "file_search", "notification_listen",
         "shell_session", "file_watch", "credential_store"
-    };
-
-    private static readonly string[] DestructiveShellPatterns =
-    {
-        "rm ", "rmdir", "rd ", "del ", "erase ", "remove-item", "remove-itemproperty",
-        "clear-content", "format ", "format-volume", "diskpart", "shutdown",
-        "restart-computer", "stop-computer", "stop-process", "taskkill /f",
-        "reg delete", "cipher /w", "fsutil", "takeown", "icacls", "net user",
-        "bcdedit", "mkfs", "dd if=", "-verb runas", "runas ", "sc delete",
-        "schtasks /delete"
     };
 
     private readonly ActionPolicy _policy;
@@ -78,7 +71,13 @@ public sealed class ActionGate
         _foregroundFocus = foregroundFocus ?? throw new ArgumentNullException(nameof(foregroundFocus));
     }
 
-    public void BeginSession() => _sessionApprovals.Clear();
+    public string? ActiveRunId { get; private set; }
+
+    public void BeginSession(string? runId = null)
+    {
+        _sessionApprovals.Clear();
+        ActiveRunId = runId;
+    }
 
     public void RememberSessionApproval(string approvalKey)
     {
@@ -195,16 +194,26 @@ public sealed class ActionGate
                 return null;
             }
         }
+        else
+        {
+            var focusFailure = _foregroundFocus.LastPrepareFailureReason;
+            DebugAgentLog.Write(
+                "POL01",
+                "ActionGate.TryDenyAssistantSelfAutomation",
+                "focus restore failed before self-automation deny",
+                new { action.Action, processName, focusFailure });
+        }
 
+        var processDetail = string.IsNullOrWhiteSpace(processName) ? "bilinmiyor" : processName;
         return new GateDecision
         {
             Outcome = GateOutcome.Deny,
             Risk = ActionRisk.Normal,
             Reason =
                 "Windows AI Assistant penceresine fiziksel/UI otomasyonu uygulanamaz. " +
-                "Once focus_window ile hedef uygulamaya gec, sonra type_text/click dene. " +
+                $"Odakli process: '{processDetail}'. Once focus_window ile hedef uygulamaya gec, sonra type_text/click dene. " +
                 "Kullaniciya respond ile Turkce don.",
-            Summary = $"{action.Action} engellendi (asistan penceresi odakta; hedef uygulama odaklanamadi)"
+            Summary = $"{action.Action} engellendi (asistan penceresi odakta; hedef uygulama odaklanamadi: {processDetail})"
         };
     }
 
@@ -218,7 +227,7 @@ public sealed class ActionGate
             ApprovalKey = approvalKey
         };
 
-    private static ActionRisk ClassifyRisk(AgentAction action)
+    private ActionRisk ClassifyRisk(AgentAction action)
     {
         if (SafeActions.Contains(action.Action))
         {
@@ -229,9 +238,11 @@ public sealed class ActionGate
         {
             "window_state" => IsCloseState(action) ? ActionRisk.Destructive : ActionRisk.Normal,
             "set_value" => ActionRisk.Sensitive,
-            "press_key" or "press_shortcut" => ActionRisk.Sensitive,
+            "press_key" or "press_shortcut" => IsKnownSafeShortcut(action) ? ActionRisk.Normal : ActionRisk.Sensitive,
+            "select_text" => IsKnownSafeSelectText(action) ? ActionRisk.Normal : ActionRisk.Sensitive,
             "mouse_drag" => ActionRisk.Sensitive,
-            "mouse_click" => UsesFreeCoordinates(action) ? ActionRisk.Sensitive : ActionRisk.Normal,
+            "mouse_move" => ActionRisk.Sensitive,
+            "mouse_click" => ClassifyMouseClickRisk(action),
             "shell" => IsDestructiveShell(action) ? ActionRisk.Destructive : ActionRisk.Sensitive,
             "launch" => IsKnownLaunchTarget(action) ? ActionRisk.Normal : ActionRisk.Sensitive,
             "install_package" => IsPackageUninstall(action) ? ActionRisk.Destructive : ActionRisk.Sensitive,
@@ -301,6 +312,19 @@ public sealed class ActionGate
                state.Equals("close", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static ActionRisk ClassifyMouseClickRisk(AgentAction action)
+    {
+        var button = ActionParameterReader.GetTargetOrParameter(action, "button");
+        if (!string.IsNullOrWhiteSpace(button) &&
+            !button.Equals("left", StringComparison.OrdinalIgnoreCase) &&
+            !button.Equals("l", StringComparison.OrdinalIgnoreCase))
+        {
+            return ActionRisk.Sensitive;
+        }
+
+        return UsesFreeCoordinates(action) ? ActionRisk.Sensitive : ActionRisk.Normal;
+    }
+
     private static bool UsesFreeCoordinates(AgentAction action)
     {
         var elementId = ActionParameterReader.GetTargetOrParameter(action, "elementId");
@@ -316,20 +340,79 @@ public sealed class ActionGate
     private static bool IsDestructiveShell(AgentAction action)
     {
         var command = ActionParameterReader.GetTargetOrParameter(action, "command", "cmd", "script");
-        if (string.IsNullOrWhiteSpace(command))
-        {
-            return false;
-        }
-
-        var normalized = command.ToLowerInvariant();
-        return DestructiveShellPatterns.Any(pattern =>
-            normalized.Contains(pattern, StringComparison.Ordinal));
+        return ShellSecurityPolicy.IsDestructive(command);
     }
 
     private static bool IsKnownLaunchTarget(AgentAction action)
     {
         var target = ActionParameterReader.GetTargetOrParameter(action, "app", "command", "uri");
         return AppLaunchCatalog.TryResolve(target, out _, out _);
+    }
+
+    private bool IsKnownSafeShortcut(AgentAction action)
+    {
+        if (!action.Action.Equals("press_shortcut", StringComparison.OrdinalIgnoreCase) &&
+            !action.Action.Equals("press_key", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var shortcut = ActionParameterReader.GetTargetOrParameter(action, "shortcut", "keys", "key");
+        if (string.IsNullOrWhiteSpace(shortcut))
+        {
+            return false;
+        }
+
+        var normalized = NormalizeShortcut(shortcut);
+        foreach (var candidate in _policy.SafeShortcuts)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            if (string.Equals(NormalizeShortcut(candidate), normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsKnownSafeSelectText(AgentAction action)
+    {
+        if (!action.Action.Equals("select_text", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var mode = ActionParameterReader.GetTargetOrParameter(action, "mode");
+        if (!string.IsNullOrWhiteSpace(mode))
+        {
+            return mode.Trim().ToLowerInvariant() is
+                "all" or "select_all" or "everything" or
+                "extend_left" or "left" or
+                "extend_right" or "right" or
+                "extend_up" or "up" or
+                "extend_down" or "down" or
+                "word" or "line";
+        }
+
+        var shortcut = ActionParameterReader.GetTargetOrParameter(action, "shortcut");
+        return !string.IsNullOrWhiteSpace(shortcut) &&
+               (shortcut.Contains("Ctrl+A", StringComparison.OrdinalIgnoreCase) ||
+                shortcut.Contains("Ctrl+Shift+", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeShortcut(string value)
+    {
+        var trimmed = value.Trim().Replace(" ", string.Empty, StringComparison.Ordinal);
+        return trimmed
+            .Replace("Control+", "Ctrl+", StringComparison.OrdinalIgnoreCase)
+            .Replace("Ctl+", "Ctrl+", StringComparison.OrdinalIgnoreCase)
+            .Replace("Alt+", "Alt+", StringComparison.OrdinalIgnoreCase)
+            .Replace("Shift+", "Shift+", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildApprovalKey(AgentAction action, ActionRisk risk)
@@ -349,6 +432,7 @@ public sealed class ActionGate
             "type_text" => ActionParameterReader.GetTargetOrParameter(action, "text") ?? string.Empty,
             "press_key" => ActionParameterReader.GetTargetOrParameter(action, "key") ?? string.Empty,
             "press_shortcut" => ActionParameterReader.GetTargetOrParameter(action, "shortcut", "keys") ?? string.Empty,
+            "select_text" => ActionParameterReader.GetTargetOrParameter(action, "mode", "shortcut") ?? string.Empty,
             "window_state" => $"{ActionParameterReader.GetTargetOrParameter(action, "windowId", "title")}|state={ActionParameterReader.GetTargetOrParameter(action, "state")}",
             "set_value" => $"{ActionParameterReader.GetTargetOrParameter(action, "elementId")}|value={ActionParameterReader.GetTargetOrParameter(action, "value", "text")}",
             "mouse_click" => ActionParameterReader.GetTargetOrParameter(action, "elementId") ??

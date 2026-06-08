@@ -24,7 +24,7 @@ public interface ITaskSchedulerIntegrationService
 
 public interface IJumpListService
 {
-    ActionResult Update(string mode, string? tasks = null);
+    Task<ActionResult> UpdateAsync(string mode, string? tasks = null, CancellationToken cancellationToken = default);
 }
 
 public interface IComAutomationService
@@ -59,7 +59,7 @@ public interface IRegistryOperationService
 
 public interface IClipboardIntegrationService
 {
-    ActionResult Execute(string mode, string? text = null);
+    Task<ActionResult> ExecuteAsync(string mode, string? text = null, CancellationToken cancellationToken = default);
 }
 
 public interface IPackageInstallService

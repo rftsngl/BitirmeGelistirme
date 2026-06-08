@@ -14,6 +14,7 @@ public sealed class BackgroundAssistantHost : IDisposable
     private readonly TrayIconService _tray;
     private readonly GlobalHotKeyService _hotKeys;
     private readonly IWakeWordService _wakeWord;
+    private readonly SpeechWarmupService _speechWarmup;
     private readonly AssistantOverlayWindow _overlay;
     private MainWindow? _mainWindow;
     private int _overlayBusy;
@@ -26,12 +27,14 @@ public sealed class BackgroundAssistantHost : IDisposable
         TrayIconService tray,
         GlobalHotKeyService hotKeys,
         IWakeWordService wakeWord,
+        SpeechWarmupService speechWarmup,
         AssistantOverlayWindow overlay)
     {
         _audioOptions = audioOptions ?? throw new ArgumentNullException(nameof(audioOptions));
         _tray = tray ?? throw new ArgumentNullException(nameof(tray));
         _hotKeys = hotKeys ?? throw new ArgumentNullException(nameof(hotKeys));
         _wakeWord = wakeWord ?? throw new ArgumentNullException(nameof(wakeWord));
+        _speechWarmup = speechWarmup ?? throw new ArgumentNullException(nameof(speechWarmup));
         _overlay = overlay ?? throw new ArgumentNullException(nameof(overlay));
     }
 
@@ -64,6 +67,7 @@ public sealed class BackgroundAssistantHost : IDisposable
         _hotKeys.Start();
         _ = StartWakeWordIfEnabledAsync();
         _ = RequestMicrophonePermissionInBackgroundAsync();
+        SafeFireAndForget.Run(_speechWarmup.WarmupAsync, nameof(SpeechWarmupService.WarmupAsync));
         _tray.SetListeningEnabled(_audioOptions.GlobalHotKeyEnabled || _audioOptions.WakeWordEnabled);
 
         if (_audioOptions.StartWithWindows)
@@ -149,15 +153,16 @@ public sealed class BackgroundAssistantHost : IDisposable
         _mainWindow?.ShowFromTray();
     }
 
-    private async void OnActivateOverlay(object? sender, EventArgs e)
+    private void OnActivateOverlay(object? sender, EventArgs e) =>
+        SafeFireAndForget.Run(() => OnActivateOverlayAsync(), nameof(OnActivateOverlay));
+
+    private async Task OnActivateOverlayAsync()
     {
         if (!_tray.IsListeningEnabled)
         {
             return;
         }
 
-        // If a session is already running (e.g. TTS playback), cancel it.
-        // The user can press the hotkey again to start a fresh session.
         if (Interlocked.CompareExchange(ref _overlayBusy, 1, 0) != 0)
         {
             _overlay.HideOverlay();
@@ -167,11 +172,9 @@ public sealed class BackgroundAssistantHost : IDisposable
         var resumeWakeWord = _audioOptions.WakeWordEnabled && _tray.IsListeningEnabled;
         try
         {
-            // Uyandirma servisi mikrofonu acik tutuyor; komut dinleme baslamadan once serbest birak.
             if (resumeWakeWord)
             {
                 await _wakeWord.StopAsync().ConfigureAwait(false);
-                // WaveIn surucusunun mikrofonu birakmasi icin kisa bekleme
                 await Task.Delay(320).ConfigureAwait(false);
             }
 
@@ -186,9 +189,9 @@ public sealed class BackgroundAssistantHost : IDisposable
                 {
                     await _wakeWord.StartAsync().ConfigureAwait(false);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Hotkey ile manuel kullanim devam eder.
+                    CrashLog.Write(ex, $"{nameof(OnActivateOverlayAsync)}.ResumeWakeWord");
                 }
             }
         }
@@ -207,13 +210,16 @@ public sealed class BackgroundAssistantHost : IDisposable
             var permissions = App.Services.GetRequiredService<MicrophonePermissionService>();
             await permissions.RequestAccessAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
-            // Ilk acilista izin reddedilirse hotkey ile manuel giris kullanilir.
+            CrashLog.Write(ex, nameof(RequestMicrophonePermissionInBackgroundAsync));
         }
     }
 
-    private async void OnListeningToggled(object? sender, EventArgs e)
+    private void OnListeningToggled(object? sender, EventArgs e) =>
+        SafeFireAndForget.Run(() => OnListeningToggledAsync(), nameof(OnListeningToggled));
+
+    private async Task OnListeningToggledAsync()
     {
         if (_tray.IsListeningEnabled)
         {

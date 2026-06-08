@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 using WindowsAiAssistant.App.Overlay;
+using WindowsAiAssistant.App.Services;
 using WindowsAiAssistant.App.ViewModels;
 
 namespace WindowsAiAssistant.App.Views;
@@ -97,9 +98,10 @@ public sealed partial class AssistantPage : Page
         }
     }
 
-    private async void VoiceButton_Click(object sender, RoutedEventArgs e)
-    {
-        var overlay = App.Services.GetRequiredService<AssistantOverlayWindow>();
-        await overlay.RunVoiceSessionAsync().ConfigureAwait(true);
-    }
+    private void VoiceButton_Click(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(async () =>
+        {
+            var overlay = App.Services.GetRequiredService<AssistantOverlayWindow>();
+            await overlay.RunVoiceSessionAsync().ConfigureAwait(true);
+        }, nameof(VoiceButton_Click));
 }

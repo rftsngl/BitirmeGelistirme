@@ -19,6 +19,8 @@ public sealed class ForegroundFocusService : IDisposable
     private NativeMethods.WinEventDelegate? _winEventDelegate;
     private bool _disposed;
 
+    public string? LastPrepareFailureReason { get; private set; }
+
     private static readonly (string[] Keywords, string[] ProcessNames, string[] TitleHints)[] GoalAppHints =
     [
         (["cursor"], ["Cursor"], ["Cursor"]),
@@ -91,11 +93,37 @@ public sealed class ForegroundFocusService : IDisposable
 
     public void BeginAutomationSession(string? userGoal) => _sessionUserGoal = userGoal;
 
-    /// <summary>
-    /// Asistan odaktayken once oturum yakalamasi, son dis pencere ve kullanici hedefindeki uygulamayi dener.
-    /// Zaten dis bir uygulama odaktaysa true doner.
-    /// </summary>
-    public bool TryPrepareForDesktopAutomation()
+    public bool TryPrepareForDesktopAutomation(int maxAttempts = 3, int delayMs = 150)
+    {
+        LastPrepareFailureReason = null;
+
+        if (!IsAssistantForeground())
+        {
+            return true;
+        }
+
+        var attempts = Math.Clamp(maxAttempts, 1, 5);
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            if (TryPrepareOnce())
+            {
+                return true;
+            }
+
+            if (attempt < attempts)
+            {
+                Thread.Sleep(Math.Clamp(delayMs, 50, 1000));
+            }
+        }
+
+        var (_, processName, _) = ReadForegroundInfo();
+        LastPrepareFailureReason =
+            $"Odak geri yuklenemedi ({attempts} deneme). Odakli process: '{processName}'. " +
+            "focus_window ile hedef uygulamaya gecin.";
+        return false;
+    }
+
+    private bool TryPrepareOnce()
     {
         if (!IsAssistantForeground())
         {
@@ -112,18 +140,26 @@ public sealed class ForegroundFocusService : IDisposable
             return true;
         }
 
-        if (TryFocusWindowFromUserGoal(_sessionUserGoal))
+        return TryFocusWindowFromUserGoal(_sessionUserGoal);
+    }
+
+    private static (string Title, string ProcessName, int ProcessId) ReadForegroundInfo()
+    {
+        var handle = NativeMethods.GetForegroundWindow();
+        if (handle == IntPtr.Zero)
         {
-            return true;
+            return (string.Empty, string.Empty, 0);
         }
 
-        return false;
+        NativeMethods.GetWindowThreadProcessId(handle, out var processId);
+        return (ReadWindowTitle(handle), ResolveProcessName(processId), (int)processId);
     }
 
     public void Clear()
     {
         _captured = null;
         _sessionUserGoal = null;
+        LastPrepareFailureReason = null;
     }
 
     public void Dispose()

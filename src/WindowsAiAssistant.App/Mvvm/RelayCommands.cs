@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using WindowsAiAssistant.App.Services;
 
 namespace WindowsAiAssistant.App.Mvvm;
 
@@ -70,12 +71,14 @@ public sealed class AsyncRelayCommand : ICommand
 {
     private readonly Func<Task> _executeAsync;
     private readonly Func<bool>? _canExecute;
+    private readonly string _context;
     private bool _isRunning;
 
-    public AsyncRelayCommand(Func<Task> executeAsync, Func<bool>? canExecute = null)
+    public AsyncRelayCommand(Func<Task> executeAsync, Func<bool>? canExecute = null, string? context = null)
     {
         _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
         _canExecute = canExecute;
+        _context = context ?? "AsyncRelayCommand";
     }
 
     public event EventHandler? CanExecuteChanged;
@@ -83,7 +86,10 @@ public sealed class AsyncRelayCommand : ICommand
     public bool CanExecute(object? parameter) =>
         !_isRunning && (_canExecute?.Invoke() ?? true);
 
-    public async void Execute(object? parameter)
+    public void Execute(object? parameter) =>
+        SafeFireAndForget.Run(ExecuteCoreAsync, _context);
+
+    private async Task ExecuteCoreAsync()
     {
         if (_isRunning)
         {
@@ -94,7 +100,7 @@ public sealed class AsyncRelayCommand : ICommand
         RaiseCanExecuteChanged();
         try
         {
-            await _executeAsync();
+            await _executeAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -110,12 +116,14 @@ public sealed class AsyncRelayCommand<T> : ICommand
 {
     private readonly Func<T?, Task> _executeAsync;
     private readonly Func<T?, bool>? _canExecute;
+    private readonly string _context;
     private bool _isRunning;
 
-    public AsyncRelayCommand(Func<T?, Task> executeAsync, Func<T?, bool>? canExecute = null)
+    public AsyncRelayCommand(Func<T?, Task> executeAsync, Func<T?, bool>? canExecute = null, string? context = null)
     {
         _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
         _canExecute = canExecute;
+        _context = context ?? "AsyncRelayCommand<T>";
     }
 
     public event EventHandler? CanExecuteChanged;
@@ -123,7 +131,10 @@ public sealed class AsyncRelayCommand<T> : ICommand
     public bool CanExecute(object? parameter) =>
         !_isRunning && (_canExecute?.Invoke((T?)parameter) ?? true);
 
-    public async void Execute(object? parameter)
+    public void Execute(object? parameter) =>
+        SafeFireAndForget.Run(() => ExecuteCoreAsync((T?)parameter), _context);
+
+    private async Task ExecuteCoreAsync(T? parameter)
     {
         if (_isRunning)
         {
@@ -134,7 +145,7 @@ public sealed class AsyncRelayCommand<T> : ICommand
         RaiseCanExecuteChanged();
         try
         {
-            await _executeAsync((T?)parameter);
+            await _executeAsync(parameter).ConfigureAwait(false);
         }
         finally
         {

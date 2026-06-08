@@ -15,6 +15,8 @@ public sealed class PromptBuilder
         _providerOptions = providerOptions ?? throw new ArgumentNullException(nameof(providerOptions));
     }
 
+    public bool VisionEnabled => _providerOptions.VisionEnabled;
+
     public string Build(
         string userGoal,
         DesktopObservation observation,
@@ -29,6 +31,7 @@ public sealed class PromptBuilder
         builder.AppendLine("You are an autonomous Windows desktop operator. The user states a GOAL;");
         builder.AppendLine("YOU decide whether it needs desktop actions or a direct reply, then act step by step.");
         builder.AppendLine();
+        AppendLanguagePolicy(builder);
         builder.AppendLine("Operator loop (always follow):");
         builder.AppendLine("1) Read the user goal and current observation.");
         builder.AppendLine("2) CONVERSATION ONLY (greeting, small talk, general question, no desktop change):");
@@ -43,6 +46,8 @@ public sealed class PromptBuilder
         builder.AppendLine("     clipboard, service_control, event_log, registry_op, wmi_query, perf_counter, file_search, ...).");
         builder.AppendLine("     If the app exposes a structured action for the goal, use it FIRST — do NOT simulate it via UI clicks.");
         builder.AppendLine("  P2 LAUNCH / OPEN: open_app, open_url, launch (incl. ms-settings: URIs).");
+        builder.AppendLine("  P2b SHORTCUTS & COM (before UI): press_shortcut for standard actions (Ctrl+N new, Ctrl+S save, Ctrl+T tab);");
+        builder.AppendLine("     com_invoke when progId+method is known (e.g. Word.Application Documents.Add). Prefer over click_element.");
         builder.AppendLine("  P3 SHELL: shell / shell_session for discovery, scripts, or when no P1/P2 action fits.");
         builder.AppendLine("  P4 UI AUTOMATION (last resort): click_element, type_text, read_element, ... ONLY when:");
         builder.AppendLine("     (a) user explicitly asks to operate inside a specific app UI (click, type, fill form, press button), OR");
@@ -66,6 +71,7 @@ public sealed class PromptBuilder
         builder.AppendLine("  volume/mute/unmute → audio_power | internet/Wi-Fi/IP → network_status | CPU/RAM/disk → perf_counter");
         builder.AppendLine("  install/search app → install_package | open app by name → open_app | URL → open_url | settings page → launch ms-settings:");
         builder.AppendLine("  run script/command → shell | clipboard → clipboard | Windows service → service_control | logs → event_log");
+        builder.AppendLine("  new document/file in focused app → press_shortcut Ctrl+N | save → Ctrl+S | known Office automation → com_invoke");
         builder.AppendLine("  WMI/system query → wmi_query | registry → registry_op | file by name → file_search | notification history → notification_listen");
         builder.AppendLine();
         builder.AppendLine("1) WINDOWS INTEGRATIONS — P1 backend actions (structured APIs, prefer over UI):");
@@ -107,7 +113,7 @@ public sealed class PromptBuilder
         builder.AppendLine("   - Use when the user wants in-app interaction: click a button, fill a field, read visible text, navigate menus.");
         builder.AppendLine("   - actions: focus_window, click_element, focus_element, read_element, set_value, select_element,");
         builder.AppendLine("     expand_collapse, invoke_toggle, scroll, type_text, press_key, press_shortcut, window_state, move_window, list_windows.");
-        builder.AppendLine("   - mouse_click / mouse_scroll / mouse_drag only when UIA cannot target the element.");
+        builder.AppendLine("   - mouse_click / mouse_move / mouse_scroll / mouse_drag only when UIA cannot target the element.");
         builder.AppendLine();
         builder.AppendLine("UI rules:");
         builder.AppendLine("- NEVER automate the Windows AI Assistant chat window (process WindowsAiAssistant). Do not click ONAYLANDI/REDDEDILDI badges or chat text.");
@@ -158,12 +164,14 @@ public sealed class PromptBuilder
         builder.AppendLine("Parameter quick-reference (only for actions you actually use):");
         builder.AppendLine("- shell: target/command, parameters.shell, parameters.timeoutMs");
         builder.AppendLine("- type_text: parameters.text | press_shortcut: target=Ctrl+A | press_key: target=Enter");
+        builder.AppendLine("- select_text: parameters.mode=all|extend_left|extend_right|extend_up|extend_down|word|line, parameters.count (optional)");
         builder.AppendLine("- click_element/focus_element/read_element/select_element/invoke_toggle: target=<elementId>");
         builder.AppendLine("- set_value: target=<elementId>, parameters.value | scroll: target=<elementId>, parameters.direction=up|down|left|right");
         builder.AppendLine("- expand_collapse: target=<elementId>, parameters.mode=expand|collapse");
         builder.AppendLine("- focus_window: target=<windowId|partial title> | window_state: target=<windowId>, parameters.state=minimize|maximize|restore|close");
         builder.AppendLine("- move_window: target=<windowId>, parameters.x,y,width,height | open_url: target=https://...");
-        builder.AppendLine("- mouse_click: parameters.elementId OR parameters.x+parameters.y | mouse_drag: parameters.startX,startY,endX,endY");
+        builder.AppendLine("- mouse_click: parameters.elementId OR parameters.x+parameters.y, parameters.button=left|right|middle (default left)");
+        builder.AppendLine("- mouse_move: parameters.x, parameters.y | mouse_drag: parameters.startX,startY,endX,endY");
         builder.AppendLine("- capture_screen: parameters.monitor, parameters.method | notify: parameters.title, parameters.message");
         builder.AppendLine("- wmi_query: target/query, parameters.namespace | schedule_task: parameters.mode,name,command,trigger,arguments");
         builder.AppendLine("- jump_list: parameters.mode, parameters.tasks | com_invoke: parameters.progId,method,arguments,close");
@@ -178,6 +186,13 @@ public sealed class PromptBuilder
         builder.AppendLine();
         builder.AppendLine("Current desktop observation:");
         builder.AppendLine(observation.ToPromptSummary());
+        if (!string.IsNullOrWhiteSpace(observation.UiCaptureSkipReason))
+        {
+            builder.AppendLine("UI capture note:");
+            builder.AppendLine($"- {observation.UiCaptureSkipReason}");
+            builder.AppendLine("- Do NOT use click_element without valid elementIds; prefer P1–P3 actions.");
+            builder.AppendLine();
+        }
         AppendScreenshotContext(builder, observation);
         builder.AppendLine();
         AppendStepHistory(builder, priorSteps);
@@ -188,6 +203,13 @@ public sealed class PromptBuilder
 
     private void AppendScreenshotContext(StringBuilder builder, DesktopObservation observation)
     {
+        if (!string.IsNullOrWhiteSpace(observation.ScreenshotSkipReason))
+        {
+            builder.AppendLine("Screen capture:");
+            builder.AppendLine($"- {observation.ScreenshotSkipReason}");
+            return;
+        }
+
         if (observation.Screenshot is null)
         {
             return;
@@ -233,4 +255,20 @@ public sealed class PromptBuilder
 
         builder.AppendLine();
     }
+
+    private void AppendLanguagePolicy(StringBuilder builder)
+    {
+        var language = ResolveLanguageDisplayName(_options.UserResponseLanguage);
+        builder.AppendLine($"Language policy: ALL user-facing text (respond, ask_user, complete parameters.message, notify body) MUST be in {language}.");
+        builder.AppendLine("JSON field names, decisionType, action names and parameter keys remain English.");
+        builder.AppendLine();
+    }
+
+    private static string ResolveLanguageDisplayName(string? code) =>
+        (code ?? "tr").Trim().ToLowerInvariant() switch
+        {
+            "tr" or "turkish" or "turkce" => "Turkish",
+            "en" or "english" => "English",
+            _ => code ?? "Turkish"
+        };
 }

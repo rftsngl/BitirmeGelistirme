@@ -122,7 +122,7 @@ public sealed partial class AssistantOverlayWindow : Window
         _cardVisual.StartAnimation("Scale", scale);
     }
 
-    private async void PlayHideAnimation()
+    private async Task PlayHideAnimationAsync()
     {
         EnsureCompositor();
         if (_compositor is null || _cardVisual is null)
@@ -399,7 +399,7 @@ public sealed partial class AssistantOverlayWindow : Window
     {
         _sessionRunner.CancelActiveSession();
         StopAllActivityAnimations();
-        PlayHideAnimation();
+        SafeFireAndForget.Run(PlayHideAnimationAsync, nameof(PlayHideAnimationAsync));
     }
 
     public Task RunVoiceSessionAsync(CancellationToken cancellationToken = default) =>

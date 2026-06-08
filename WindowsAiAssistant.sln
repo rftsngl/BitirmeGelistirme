@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsAiAssistant.Runtime"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsAiAssistant.Agent", "src\WindowsAiAssistant.Agent\WindowsAiAssistant.Agent.csproj", "{7467F68A-1D46-4C10-B7FA-6BCC960563E4}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{7D01D613-13D9-4DC9-BD67-3B4A72815BBA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsAiAssistant.Tests", "tests\WindowsAiAssistant.Tests\WindowsAiAssistant.Tests.csproj", "{E4BBD131-24F4-40BA-BACD-0146EE4435AA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -57,6 +61,18 @@ Global
 		{7467F68A-1D46-4C10-B7FA-6BCC960563E4}.Release|x64.Build.0 = Release|Any CPU
 		{7467F68A-1D46-4C10-B7FA-6BCC960563E4}.Release|x86.ActiveCfg = Release|Any CPU
 		{7467F68A-1D46-4C10-B7FA-6BCC960563E4}.Release|x86.Build.0 = Release|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Debug|x64.Build.0 = Debug|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Debug|x86.Build.0 = Debug|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Release|x64.ActiveCfg = Release|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Release|x64.Build.0 = Release|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Release|x86.ActiveCfg = Release|Any CPU
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -65,5 +81,6 @@ Global
 		{095AB54B-8F95-4F03-B85C-FC52BA4E1734} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{D1D59528-C1E5-4B6F-9338-3D9DE99D8BC2} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{7467F68A-1D46-4C10-B7FA-6BCC960563E4} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{E4BBD131-24F4-40BA-BACD-0146EE4435AA} = {7D01D613-13D9-4DC9-BD67-3B4A72815BBA}
 	EndGlobalSection
 EndGlobal

@@ -24,6 +24,20 @@ public sealed class SwitchableSpeechToTextService : ISpeechToTextService, IDispo
         }
     }
 
+    public async Task WarmupAsync(CancellationToken cancellationToken = default)
+    {
+        ISpeechToTextService inner;
+        lock (_gate)
+        {
+            inner = _inner;
+        }
+
+        if (inner is WhisperSpeechToTextService whisper)
+        {
+            await whisper.WarmupAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     public Task<string?> ListenOnceAsync(
         CancellationToken cancellationToken = default,
         int? listenTimeoutSeconds = null,

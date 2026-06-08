@@ -1,6 +1,7 @@
 namespace WindowsAiAssistant.Agent;
 
 using System.Text;
+using WindowsAiAssistant.Agent.Dispatch;
 using WindowsAiAssistant.Runtime.Observation;
 
 /// <summary>
@@ -108,6 +109,8 @@ internal static class GoalRoutingHints
             builder.AppendLine("- Do NOT open Task Manager UI for a quick CPU/RAM/disk summary.");
             builder.AppendLine();
         }
+
+        PlaybookPromptHints.Append(builder, userGoal, observation);
 
         if (observation.UiCaptureSkipReason is not null &&
             observation.UiCaptureSkipReason.Contains("atlandi", StringComparison.OrdinalIgnoreCase))

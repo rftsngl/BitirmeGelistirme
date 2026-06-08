@@ -1,21 +1,31 @@
 using System.Text.Json;
 using WindowsAiAssistant.Runtime.Automation;
+using WindowsAiAssistant.Runtime.Input;
 
 namespace WindowsAiAssistant.Agent;
 
 public sealed class DecisionParser
 {
-    public DecisionParseResult Parse(string llmRawOutput)
+    public DecisionParseResult Parse(string llmRawOutput) =>
+        Parse(llmRawOutput, uiElements: null);
+
+    public DecisionParseResult Parse(
+        string llmRawOutput,
+        IReadOnlyList<UiElementSnapshot>? uiElements)
     {
         if (string.IsNullOrWhiteSpace(llmRawOutput))
         {
-            return DecisionParseResult.Fail("Asistan cevabi bos geldi. Lutfen tekrar deneyin.");
+            return DecisionParseResult.Fail(
+                "Asistan cevabi bos geldi. Lutfen tekrar deneyin.",
+                DecisionParseErrorCode.EmptyOutput);
         }
 
         var jsonText = DecisionJsonNormalizer.ExtractJsonObject(llmRawOutput);
         if (string.IsNullOrWhiteSpace(jsonText))
         {
-            return DecisionParseResult.Fail("Asistan gecerli bir JSON karari dondurmedi.");
+            return DecisionParseResult.Fail(
+                "Asistan gecerli bir JSON karari dondurmedi.",
+                DecisionParseErrorCode.MissingJson);
         }
 
         JsonDocument document;
@@ -25,44 +35,54 @@ public sealed class DecisionParser
         }
         catch (JsonException)
         {
-            return DecisionParseResult.Fail("Karar JSON formatinda degil. Lutfen tekrar deneyin.");
+            return DecisionParseResult.Fail(
+                "Karar JSON formatinda degil. Lutfen tekrar deneyin.",
+                DecisionParseErrorCode.InvalidJson);
         }
 
         using (document)
         {
-            return ParseRoot(document.RootElement);
+            return ParseRoot(document.RootElement, uiElements);
         }
     }
 
-    private static DecisionParseResult ParseRoot(JsonElement root)
+    private static DecisionParseResult ParseRoot(
+        JsonElement root,
+        IReadOnlyList<UiElementSnapshot>? uiElements)
     {
         if (root.ValueKind != JsonValueKind.Object)
         {
-            return DecisionParseResult.Fail("Karar tek bir JSON nesnesi olmali.");
+            return DecisionParseResult.Fail(
+                "Karar tek bir JSON nesnesi olmali.",
+                DecisionParseErrorCode.InvalidRoot);
         }
 
-        if (!TryReadDecisionType(root, out var decisionType, out var typeError))
+        if (!TryReadDecisionType(root, out var decisionType, out var typeError, out var typeErrorCode))
         {
-            return DecisionParseResult.Fail(typeError!);
+            return DecisionParseResult.Fail(typeError!, typeErrorCode);
         }
 
         var action = ReadString(root, "action");
         if (string.IsNullOrWhiteSpace(action))
         {
-            return DecisionParseResult.Fail("Kararda 'action' alani eksik.");
+            return DecisionParseResult.Fail(
+                "Kararda 'action' alani eksik.",
+                DecisionParseErrorCode.MissingAction);
         }
 
         action = action.Trim();
 
         if (!DecisionSchema.SupportedActions.Contains(action))
         {
-            return DecisionParseResult.Fail($"Desteklenmeyen islem: '{action}'.");
+            return DecisionParseResult.Fail(
+                $"Desteklenmeyen islem: '{action}'.",
+                DecisionParseErrorCode.UnsupportedAction);
         }
 
         var typeActionError = ValidateDecisionTypeAndAction(decisionType, action);
         if (typeActionError is not null)
         {
-            return DecisionParseResult.Fail(typeActionError);
+            return DecisionParseResult.Fail(typeActionError, DecisionParseErrorCode.TypeActionMismatch);
         }
 
         var parameters = ReadParameters(root);
@@ -70,13 +90,14 @@ public sealed class DecisionParser
         var parameterError = ValidateRequiredParameters(action, parameters, target);
         if (parameterError is not null)
         {
-            return DecisionParseResult.Fail(parameterError);
+            return DecisionParseResult.Fail(parameterError, DecisionParseErrorCode.MissingRequiredField);
         }
 
-        var uiElementError = ValidateUiElementTarget(action, parameters, target);
+        var repaired = TryRepairUiElementTarget(action, ref target, parameters, uiElements);
+        var uiElementError = ValidateUiElementTarget(action, parameters, target, uiElements);
         if (uiElementError is not null)
         {
-            return DecisionParseResult.Fail(uiElementError);
+            return DecisionParseResult.Fail(uiElementError, DecisionParseErrorCode.InvalidElementId);
         }
 
         var decision = new AgentDecision
@@ -86,7 +107,8 @@ public sealed class DecisionParser
             Reason = ReadString(root, "reason"),
             Target = target,
             Parameters = parameters,
-            IsComplete = ReadBool(root, "isComplete")
+            IsComplete = ReadBool(root, "isComplete"),
+            RepairedElementTarget = repaired
         };
 
         return DecisionParseResult.Ok(decision);
@@ -95,10 +117,12 @@ public sealed class DecisionParser
     private static bool TryReadDecisionType(
         JsonElement root,
         out AgentDecisionType decisionType,
-        out string? error)
+        out string? error,
+        out DecisionParseErrorCode errorCode)
     {
         decisionType = default;
         error = null;
+        errorCode = DecisionParseErrorCode.Other;
 
         var rawType = ReadString(root, "decisionType");
         if (string.IsNullOrWhiteSpace(rawType))
@@ -106,10 +130,12 @@ public sealed class DecisionParser
             if (root.TryGetProperty("type", out _))
             {
                 error = "Eski 'type' alani kullanilmis. Lutfen 'decisionType' kullanin.";
+                errorCode = DecisionParseErrorCode.LegacyTypeField;
                 return false;
             }
 
             error = "Kararda 'decisionType' alani eksik.";
+            errorCode = DecisionParseErrorCode.MissingDecisionType;
             return false;
         }
 
@@ -117,6 +143,7 @@ public sealed class DecisionParser
         if (!DecisionSchema.SupportedDecisionTypes.Contains(rawType))
         {
             error = $"Desteklenmeyen karar tipi: '{rawType}'.";
+            errorCode = DecisionParseErrorCode.UnsupportedDecisionType;
             return false;
         }
 
@@ -173,6 +200,9 @@ public sealed class DecisionParser
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "shortcut")) &&
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "keys")) =>
                 "press_shortcut icin target veya parameters.shortcut gerekli.",
+            "select_text" when string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "mode")) &&
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "shortcut")) =>
+                "select_text icin parameters.mode veya parameters.shortcut gerekli.",
             "click_element" or "focus_element" or "read_element" or
             "select_element" or "expand_collapse" or "invoke_toggle" or "scroll" when
                 string.IsNullOrWhiteSpace(target) &&
@@ -203,6 +233,12 @@ public sealed class DecisionParser
                 (string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "x")) ||
                  string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "y"))) =>
                 "mouse_click icin parameters.elementId veya parameters.x + parameters.y gerekli.",
+            "mouse_click" when !IsValidMouseButton(ReadStringFromParameters(parameters, "button")) =>
+                "mouse_click parameters.button left|right|middle olmali.",
+            "mouse_move" when
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "x")) ||
+                string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "y")) =>
+                "mouse_move icin parameters.x ve parameters.y gerekli.",
             "move_window" when string.IsNullOrWhiteSpace(target) &&
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "windowId")) &&
                 string.IsNullOrWhiteSpace(ReadStringFromParameters(parameters, "title")) =>
@@ -291,10 +327,57 @@ public sealed class DecisionParser
                modes.Any(m => string.Equals(value, m, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static bool TryRepairUiElementTarget(
+        string action,
+        ref string? target,
+        Dictionary<string, string> parameters,
+        IReadOnlyList<UiElementSnapshot>? uiElements)
+    {
+        if (uiElements is null || uiElements.Count == 0)
+        {
+            return false;
+        }
+
+        if (!UiElementIdValidator.IsUiAutomationAction(action) &&
+            !action.Equals("mouse_click", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var current = UiElementIdValidator.GetElementTarget(action, target, parameters);
+        if (string.IsNullOrWhiteSpace(current) || UiElementIdValidator.IsValidFormat(current))
+        {
+            return false;
+        }
+
+        var resolved = UiElementTargetResolver.TryResolve(current, uiElements);
+        if (resolved is null)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(target) &&
+            string.Equals(target.Trim(), current, StringComparison.OrdinalIgnoreCase))
+        {
+            target = resolved;
+        }
+        else if (parameters.ContainsKey("elementId"))
+        {
+            parameters["elementId"] = resolved;
+        }
+        else
+        {
+            target = resolved;
+        }
+
+        return true;
+    }
+
     private static string? ValidateUiElementTarget(
         string action,
         IReadOnlyDictionary<string, string> parameters,
-        string? target)
+        string? target,
+        IReadOnlyList<UiElementSnapshot>? uiElements)
     {
         if (!UiElementIdValidator.IsUiAutomationAction(action) &&
             !action.Equals("mouse_click", StringComparison.OrdinalIgnoreCase))
@@ -313,8 +396,30 @@ public sealed class DecisionParser
             return null;
         }
 
+        var hint = BuildElementIdHint(uiElements);
         return $"'{action}' icin target gecerli bir elementId olmali (uiElements listesinden; ornek: btn-kaydet-a1b2). " +
-               "Gorunur metin, onay rozeti veya sohbet etiketi kullanmayin.";
+               "Gorunur metin, onay rozeti veya sohbet etiketi kullanmayin." +
+               hint;
+    }
+
+    private static string BuildElementIdHint(IReadOnlyList<UiElementSnapshot>? uiElements)
+    {
+        if (uiElements is null || uiElements.Count == 0)
+        {
+            return " uiElements listesi bos veya yakalanmadi; once focus_window sonra tekrar dene.";
+        }
+
+        var samples = uiElements
+            .Take(5)
+            .Select(element => element.ElementId)
+            .Where(id => UiElementIdValidator.IsValidFormat(id))
+            .ToList();
+        if (samples.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return $" Mevcut elementId ornekleri: {string.Join(", ", samples)}.";
     }
 
     private static string? ReadStringFromParameters(
@@ -341,7 +446,7 @@ public sealed class DecisionParser
     }
 
 
-    private static IReadOnlyDictionary<string, string> ReadParameters(JsonElement root)
+    private static Dictionary<string, string> ReadParameters(JsonElement root)
     {
         if (!root.TryGetProperty("parameters", out var parametersElement) ||
             parametersElement.ValueKind != JsonValueKind.Object)
@@ -400,6 +505,9 @@ public sealed class DecisionParser
             _ => false
         };
     }
+
+    private static bool IsValidMouseButton(string? button) =>
+        string.IsNullOrWhiteSpace(button) || MouseButtonParser.TryParse(button, out _);
 }
 
 internal static class DecisionJsonNormalizer

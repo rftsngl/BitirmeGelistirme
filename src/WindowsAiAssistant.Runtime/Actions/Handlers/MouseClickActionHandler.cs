@@ -48,11 +48,21 @@ public sealed class MouseClickActionHandler : IActionHandler
             });
         }
 
-        MouseInput.Click(x, y);
+        var buttonRaw = ActionParameterReader.GetTargetOrParameter(action, "button");
+        if (!MouseButtonParser.TryParse(buttonRaw, out var button))
+        {
+            return Task.FromResult(new ActionResult
+            {
+                Success = false,
+                Message = "mouse_click parameters.button degeri left|right|middle olmali."
+            });
+        }
+
+        MouseInput.Click(x, y, button);
         return Task.FromResult(new ActionResult
         {
             Success = true,
-            Message = $"Mouse click @ {x},{y}"
+            Message = $"Mouse {button.ToString().ToLowerInvariant()} click @ {x},{y}"
         });
     }
 }

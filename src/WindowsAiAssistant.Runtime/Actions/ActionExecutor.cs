@@ -20,6 +20,7 @@ public sealed class ActionExecutor
             return new ActionResult
             {
                 Success = false,
+                ErrorCode = ActionFailureCodes.UnsupportedAction,
                 Message = $"Desteklenmeyen action: '{action.Action}'."
             };
         }
@@ -33,8 +34,21 @@ public sealed class ActionExecutor
             return new ActionResult
             {
                 Success = false,
-                Message = $"Action hatasi ({action.Action}): {ex.Message}"
+                ErrorCode = ActionFailureCodes.HandlerException,
+                ExceptionType = ex.GetType().Name,
+                Message = $"Action hatasi ({action.Action}): {SanitizeUserMessage(ex.Message)}"
             };
         }
+    }
+
+    private static string SanitizeUserMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return "Bilinmeyen hata.";
+        }
+
+        var oneLine = message.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return oneLine.Length <= 240 ? oneLine : oneLine[..240];
     }
 }

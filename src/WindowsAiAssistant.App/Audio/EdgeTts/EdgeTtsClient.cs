@@ -7,6 +7,8 @@ namespace WindowsAiAssistant.App.Audio.EdgeTts;
 
 internal sealed class EdgeTtsClient
 {
+    private static readonly HttpClient SharedHttp = CreateSharedHttpClient();
+
     private static readonly Regex VoicePattern = new(
         @"^([a-z]{2,})-([A-Z]{2,})-(.+Neural)$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -55,12 +57,20 @@ internal sealed class EdgeTtsClient
 
     private static async Task RefreshClockSkewAsync(CancellationToken cancellationToken)
     {
-        using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.ParseAdd(EdgeTtsConstants.UserAgent);
         var url =
             $"https://{EdgeTtsConstants.BaseUrl}/voices/list?trustedclienttoken={EdgeTtsConstants.TrustedClientToken}";
-        using var response = await http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        using var response = await SharedHttp.GetAsync(url, cancellationToken).ConfigureAwait(false);
         EdgeTtsDrm.AdjustClockSkewFromResponse(response);
+    }
+
+    private static HttpClient CreateSharedHttpClient()
+    {
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(EdgeTtsConstants.UserAgent);
+        return client;
     }
 
     private static bool IsRetryableAuthFailure(Exception ex) =>

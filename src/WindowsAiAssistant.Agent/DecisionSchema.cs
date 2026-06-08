@@ -31,6 +31,7 @@ public static class DecisionSchema
         "type_text",
         "press_key",
         "press_shortcut",
+        "select_text",
         "click_element",
         "focus_element",
         "read_element",
@@ -45,6 +46,7 @@ public static class DecisionSchema
         "list_windows",
         "launch",
         "mouse_click",
+        "mouse_move",
         "mouse_scroll",
         "mouse_drag",
         "shell",
@@ -94,6 +96,7 @@ public sealed class AgentDecision
     public IReadOnlyDictionary<string, string> Parameters { get; init; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public bool IsComplete { get; init; }
+    public bool RepairedElementTarget { get; init; }
 
     public AgentAction ToAgentAction() =>
         new()
@@ -130,10 +133,11 @@ public sealed class DecisionParseResult
     public bool Success { get; init; }
     public AgentDecision? Decision { get; init; }
     public string? ErrorMessage { get; init; }
+    public DecisionParseErrorCode ErrorCode { get; init; }
 
     public static DecisionParseResult Ok(AgentDecision decision) =>
         new() { Success = true, Decision = decision };
 
-    public static DecisionParseResult Fail(string message) =>
-        new() { Success = false, ErrorMessage = message };
+    public static DecisionParseResult Fail(string message, DecisionParseErrorCode errorCode = DecisionParseErrorCode.Other) =>
+        new() { Success = false, ErrorMessage = message, ErrorCode = errorCode };
 }

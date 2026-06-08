@@ -73,12 +73,12 @@ public sealed class ClipboardActionHandler : IActionHandler
 
     public string ActionName => "clipboard";
 
-    public Task<ActionResult> ExecuteAsync(AgentAction action, CancellationToken cancellationToken = default)
+    public async Task<ActionResult> ExecuteAsync(AgentAction action, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var mode = ActionParameterReader.GetTargetOrParameter(action, "mode") ?? "read";
         var text = ActionParameterReader.GetTargetOrParameter(action, "text", "content");
-        return Task.FromResult(_clipboard.Execute(mode, text));
+        return await _clipboard.ExecuteAsync(mode, text, cancellationToken).ConfigureAwait(false);
     }
 }
 

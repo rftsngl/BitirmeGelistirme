@@ -1,6 +1,8 @@
 using WindowsAiAssistant.Agent;
 using WindowsAiAssistant.Runtime.Actions;
+using WindowsAiAssistant.Runtime.Debugging;
 using WindowsAiAssistant.Runtime.Policy;
+using WindowsAiAssistant.Runtime.Session;
 
 namespace WindowsAiAssistant.App.Services;
 
@@ -94,9 +96,23 @@ public sealed class ActionApprovalCoordinator : IActionApprovalHandler
         }
 
         var approved = await request.WaitAsync(cancellationToken).ConfigureAwait(false);
-        if (approved && request.RememberForSession)
+        if (approved)
         {
-            _actionGate.RememberSessionApproval(gateDecision.ApprovalKey);
+            if (request.RememberForSession)
+            {
+                _actionGate.RememberSessionApproval(gateDecision.ApprovalKey);
+            }
+
+            if (action.Action.Equals("shell", StringComparison.OrdinalIgnoreCase))
+            {
+                var command = ActionParameterReader.GetTargetOrParameter(action, "command", "cmd", "script");
+                DebugAgentLog.Write(
+                    "F009",
+                    "ActionApprovalCoordinator.RequestApprovalAsync",
+                    "approved shell command",
+                    new { command = ShellSecurityPolicy.SanitizeForAudit(command ?? string.Empty) },
+                    AgentRunScope.Current?.RunId ?? _actionGate.ActiveRunId);
+            }
         }
 
         return approved;

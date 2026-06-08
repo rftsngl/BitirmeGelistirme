@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WindowsAiAssistant.Runtime.Config;
 
 namespace WindowsAiAssistant.Runtime.Debugging;
 
@@ -7,6 +8,18 @@ public static class DebugAgentLog
 {
     private static readonly object Gate = new();
     private static readonly string LogPath = ResolveLogPath();
+    private static volatile bool _enabled;
+
+    public static bool IsEnabled => _enabled;
+
+    public static void Configure(RuntimeOptions? runtimeOptions)
+    {
+#if DEBUG
+        _enabled = runtimeOptions?.Logging.EnableDebugAgentLog ?? true;
+#else
+        _enabled = runtimeOptions?.Logging.EnableDebugAgentLog ?? false;
+#endif
+    }
 
     public static void Write(
         string hypothesisId,
@@ -15,6 +28,11 @@ public static class DebugAgentLog
         object? data = null,
         string? runId = null)
     {
+        if (!_enabled)
+        {
+            return;
+        }
+
         try
         {
             var payload = new Dictionary<string, object?>

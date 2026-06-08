@@ -78,59 +78,69 @@ public sealed partial class UnifiedSettingsPage : Page
     private void ApiKeyPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
         => ProviderVM.ApiKeyInput = ApiKeyPasswordBox.Password;
 
-    private async void SetActive_OnClick(object sender, RoutedEventArgs e)
-        => await ProviderVM.SetActiveAsync().ConfigureAwait(true);
+    private void SetActive_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(() => ProviderVM.SetActiveAsync(), nameof(SetActive_OnClick));
 
-    private async void SaveKey_OnClick(object sender, RoutedEventArgs e)
+    private void SaveKey_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(SaveKeyAsync, nameof(SaveKey_OnClick));
+
+    private async Task SaveKeyAsync()
     {
         await ProviderVM.SaveKeyAsync().ConfigureAwait(true);
         ApiKeyPasswordBox.Password = string.Empty;
     }
 
-    private async void RemoveKey_OnClick(object sender, RoutedEventArgs e)
-        => await ProviderVM.RemoveKeyAsync().ConfigureAwait(true);
+    private void RemoveKey_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(() => ProviderVM.RemoveKeyAsync(), nameof(RemoveKey_OnClick));
 
-    private async void TestConnection_OnClick(object sender, RoutedEventArgs e)
-        => await ProviderVM.TestConnectionAsync().ConfigureAwait(true);
+    private void TestConnection_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(() => ProviderVM.TestConnectionAsync(), nameof(TestConnection_OnClick));
 
-    private async void NewProfile_OnClick(object sender, RoutedEventArgs e)
+    private void NewProfile_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(NewProfileAsync, nameof(NewProfile_OnClick));
+
+    private async Task NewProfileAsync()
     {
         ProviderVM.BeginNewProfile();
         await ShowProfileEditorAsync().ConfigureAwait(true);
     }
 
-    private async void PresetOpenAi_OnClick(object sender, RoutedEventArgs e)
+    private void PresetOpenAi_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(() => ShowPresetEditorAsync("openai"), nameof(PresetOpenAi_OnClick));
+
+    private void PresetGemini_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(() => ShowPresetEditorAsync("gemini"), nameof(PresetGemini_OnClick));
+
+    private void PresetOllama_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(() => ShowPresetEditorAsync("ollama"), nameof(PresetOllama_OnClick));
+
+    private void PresetLmStudio_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(() => ShowPresetEditorAsync("lmstudio"), nameof(PresetLmStudio_OnClick));
+
+    private async Task ShowPresetEditorAsync(string preset)
     {
-        ProviderVM.BeginFromPreset("openai");
+        ProviderVM.BeginFromPreset(preset);
         await ShowProfileEditorAsync().ConfigureAwait(true);
     }
 
-    private async void PresetGemini_OnClick(object sender, RoutedEventArgs e)
-    {
-        ProviderVM.BeginFromPreset("gemini");
-        await ShowProfileEditorAsync().ConfigureAwait(true);
-    }
+    private void EditProfile_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(EditProfileAsync, nameof(EditProfile_OnClick));
 
-    private async void PresetOllama_OnClick(object sender, RoutedEventArgs e)
-    {
-        ProviderVM.BeginFromPreset("ollama");
-        await ShowProfileEditorAsync().ConfigureAwait(true);
-    }
-
-    private async void PresetLmStudio_OnClick(object sender, RoutedEventArgs e)
-    {
-        ProviderVM.BeginFromPreset("lmstudio");
-        await ShowProfileEditorAsync().ConfigureAwait(true);
-    }
-
-    private async void EditProfile_OnClick(object sender, RoutedEventArgs e)
+    private async Task EditProfileAsync()
     {
         ProviderVM.BeginEditCurrent();
-        if (!ProviderVM.IsEditing) return;
+        if (!ProviderVM.IsEditing)
+        {
+            return;
+        }
+
         await ShowProfileEditorAsync().ConfigureAwait(true);
     }
 
-    private async void DeleteProfile_OnClick(object sender, RoutedEventArgs e)
+    private void DeleteProfile_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(DeleteProfileAsync, nameof(DeleteProfile_OnClick));
+
+    private async Task DeleteProfileAsync()
     {
         var current = ProviderVM.SelectedProfile;
         if (current is null) return;
@@ -198,6 +208,6 @@ public sealed partial class UnifiedSettingsPage : Page
         SettingsScrollViewer.ChangeView(null, 0, null, false);
     }
 
-    private async void SaveAppSettings_OnClick(object sender, RoutedEventArgs e)
-        => await AppVM.SaveAsync().ConfigureAwait(true);
+    private void SaveAppSettings_OnClick(object sender, RoutedEventArgs e) =>
+        SafeFireAndForget.Run(() => AppVM.SaveAsync(), nameof(SaveAppSettings_OnClick));
 }

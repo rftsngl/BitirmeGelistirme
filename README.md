@@ -176,4 +176,45 @@ Sorun yaşarsanız:
 
 ---
 
+## Geliştirici notları
+
+### Mimari
+
+```mermaid
+flowchart LR
+    App[WindowsAiAssistant.App\nWinUI / Ses / Tray]
+    Agent[WindowsAiAssistant.Agent\nAgentLoop / LLM]
+    Runtime[WindowsAiAssistant.Runtime\nUIA / Actions / Policy]
+    Tests[WindowsAiAssistant.Tests]
+
+    App --> Agent
+    Agent --> Runtime
+    Tests --> Agent
+    Tests --> Runtime
+```
+
+| Katman | Rol |
+|--------|-----|
+| **App** | Kullanıcı arayüzü, sağlayıcı ayarları, overlay, arka plan servisleri |
+| **Agent** | Karar döngüsü, prompt, parse retry, task dispatch playbook'ları |
+| **Runtime** | Masaüstü gözlemi, Win32 input, action handler'lar, ActionGate |
+
+### Build ve test
+
+```bash
+dotnet test
+dotnet build src/WindowsAiAssistant.App/WindowsAiAssistant.App.csproj
+```
+
+- **Gereksinim:** .NET 8 SDK, Windows 10 2004+ (19041)
+- **Yapılandırma:** `src/WindowsAiAssistant.App/appsettings.json` (+ isteğe bağlı `appsettings.Local.json`)
+
+### Dokümantasyon
+
+- Kod asistanı kuralları: [AGENTS.md](AGENTS.md)
+- İyileştirme planı: [docs/plan/README.md](docs/plan/README.md)
+- Sistem denetimi: [docs/full-repo-audit.md](docs/full-repo-audit.md)
+
+---
+
 *Windows AI Assistant — masaüstünüz için sesli ve yazılı yapay zekâ yardımcısı.*

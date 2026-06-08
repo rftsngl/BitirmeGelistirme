@@ -1,11 +1,13 @@
 using System.Text;
 using System.Text.Json;
+using WindowsAiAssistant.Agent.Dispatch;
 using WindowsAiAssistant.Runtime.Actions;
 using WindowsAiAssistant.Runtime.Automation;
 using WindowsAiAssistant.Runtime.Debugging;
 using WindowsAiAssistant.Runtime.Logging;
 using WindowsAiAssistant.Runtime.Observation;
 using WindowsAiAssistant.Runtime.Policy;
+using WindowsAiAssistant.Runtime.Session;
 
 namespace WindowsAiAssistant.Agent;
 
@@ -19,6 +21,7 @@ public sealed class AgentLoop
         "type_text",
         "press_key",
         "press_shortcut",
+        "select_text",
         "click_element",
         "focus_element",
         "read_element",
@@ -33,6 +36,7 @@ public sealed class AgentLoop
         "list_windows",
         "launch",
         "mouse_click",
+        "mouse_move",
         "mouse_scroll",
         "mouse_drag",
         "shell",
@@ -68,6 +72,7 @@ public sealed class AgentLoop
     private readonly DecisionParser _decisionParser;
     private readonly ActionExecutor _actionExecutor;
     private readonly ActionGate _actionGate;
+    private readonly ITaskDispatchRouter _taskDispatchRouter;
     private readonly IActionApprovalHandler _approvalHandler;
     private readonly RunLogger _runLogger;
     private readonly ForegroundFocusService _foregroundFocus;
@@ -80,6 +85,7 @@ public sealed class AgentLoop
         DecisionParser decisionParser,
         ActionExecutor actionExecutor,
         ActionGate actionGate,
+        ITaskDispatchRouter taskDispatchRouter,
         IActionApprovalHandler approvalHandler,
         RunLogger runLogger,
         ForegroundFocusService foregroundFocus)
@@ -91,6 +97,7 @@ public sealed class AgentLoop
         _decisionParser = decisionParser ?? throw new ArgumentNullException(nameof(decisionParser));
         _actionExecutor = actionExecutor ?? throw new ArgumentNullException(nameof(actionExecutor));
         _actionGate = actionGate ?? throw new ArgumentNullException(nameof(actionGate));
+        _taskDispatchRouter = taskDispatchRouter ?? throw new ArgumentNullException(nameof(taskDispatchRouter));
         _approvalHandler = approvalHandler ?? throw new ArgumentNullException(nameof(approvalHandler));
         _runLogger = runLogger ?? throw new ArgumentNullException(nameof(runLogger));
         _foregroundFocus = foregroundFocus ?? throw new ArgumentNullException(nameof(foregroundFocus));
@@ -112,7 +119,8 @@ public sealed class AgentLoop
         };
 
         var maxSteps = Math.Clamp(_options.MaxSteps, 1, 40);
-        _actionGate.BeginSession();
+        using var runScope = new AgentRunScope(session.RunId, session.UserGoal, triggerSource);
+        _actionGate.BeginSession(session.RunId);
         Report(progress, 0, maxSteps, "basladi", session.UserGoal);
 
         _foregroundFocus.BeginAutomationSession(session.UserGoal);
@@ -136,7 +144,8 @@ public sealed class AgentLoop
                     RunId = session.RunId,
                     StepIndex = stepIndex,
                     PreviousActiveWindowTitle = previousObservation?.ActiveWindowTitle,
-                    PreviousActiveProcessName = previousObservation?.ActiveProcessName
+                    PreviousActiveProcessName = previousObservation?.ActiveProcessName,
+                    PreviousObservation = previousObservation
                 },
                 cancellationToken).ConfigureAwait(false);
             lastObservation = observation;
@@ -144,7 +153,7 @@ public sealed class AgentLoop
             AgentDecision decision;
             string llmRawOutput = string.Empty;
 
-            var fastDecision = GoalRoutingHints.TryBuildFastDecision(session.UserGoal);
+            var fastDecision = _taskDispatchRouter.TryResolve(session.UserGoal, observation);
             if (fastDecision is not null &&
                 !session.Steps.Any(step =>
                     string.Equals(step.ParsedDecision?.Action, fastDecision.Action, StringComparison.OrdinalIgnoreCase)))
@@ -169,12 +178,15 @@ public sealed class AgentLoop
                     return Fail(session, llmContent.Error, lastObservation, AgentErrorKind.Provider);
                 }
 
-                var parseResult = _decisionParser.Parse(llmContent.Content!);
-                if (!parseResult.Success)
+                var uiElements = observation.UiTree?.Elements;
+                var parseResult = _decisionParser.Parse(llmContent.Content!, uiElements);
+                var maxParseRetries = Math.Clamp(_options.MaxParseRetries, 0, 5);
+                var parseRetryCount = 0;
+
+                while (!parseResult.Success && parseRetryCount < maxParseRetries)
                 {
                     var retryReason = parseResult.ErrorMessage ?? "bilinmeyen sebep";
-                    var retryPrompt = prompt + Environment.NewLine +
-                        $"Your previous reply was invalid ({retryReason}). Return ONLY one valid JSON object matching the schema.";
+                    var retryPrompt = DecisionParseRetryPromptBuilder.Build(prompt, parseResult, uiElements);
                     llmContent = await RequestLlmDecisionAsync(retryPrompt, observation, cancellationToken).ConfigureAwait(false);
                     if (llmContent.Error is not null)
                     {
@@ -187,18 +199,26 @@ public sealed class AgentLoop
                             RunId = session.RunId,
                             StepIndex = stepIndex,
                             UserGoal = session.UserGoal,
-                            ObservationSummaryJson = $"{{\"parseRetryReason\":\"{Escape(retryReason)}\"}}",
+                            ObservationSummaryJson =
+                                $"{{\"parseRetryReason\":\"{Escape(retryReason)}\",\"parseRetryCount\":{parseRetryCount + 1},\"parseErrorCode\":\"{parseResult.ErrorCode}\"}}",
                             LlmRawOutput = llmRawOutput,
                             Timestamp = DateTimeOffset.UtcNow
                         },
                         cancellationToken).ConfigureAwait(false);
 
-                    parseResult = _decisionParser.Parse(llmContent.Content!);
+                    parseResult = _decisionParser.Parse(llmContent.Content!, uiElements);
+                    parseRetryCount++;
                 }
 
                 if (!parseResult.Success || parseResult.Decision is null)
                 {
-                    return Fail(session, parseResult.ErrorMessage ?? "Karar okunamadi.", lastObservation, AgentErrorKind.Decision);
+                    var actionable = parseResult.ErrorMessage ?? "Karar okunamadi.";
+                    if (parseResult.ErrorCode == DecisionParseErrorCode.InvalidElementId)
+                    {
+                        actionable += " Gecerli elementId kullanin veya focus_window + entegrasyon aksiyonu deneyin.";
+                    }
+
+                    return Fail(session, actionable, lastObservation, AgentErrorKind.Decision);
                 }
 
                 decision = parseResult.Decision;
@@ -227,7 +247,22 @@ public sealed class AgentLoop
                     userGoal = session.UserGoal
                 },
                 session.RunId);
-            if (isUiAction && !string.IsNullOrWhiteSpace(decision.Target) && !targetLooksLikeElementId)
+            if (isUiAction && decision.RepairedElementTarget)
+            {
+                DebugAgentLog.Write(
+                    "H3",
+                    "AgentLoop.RunAsync",
+                    "ui element target auto-repaired from observation",
+                    new
+                    {
+                        session.RunId,
+                        stepIndex,
+                        decision.Action,
+                        decision.Target
+                    },
+                    session.RunId);
+            }
+            else if (isUiAction && !string.IsNullOrWhiteSpace(decision.Target) && !targetLooksLikeElementId)
             {
                 DebugAgentLog.Write(
                     "H3",
@@ -342,17 +377,43 @@ public sealed class AgentLoop
                 },
                 cancellationToken).ConfigureAwait(false);
 
-            // Otonom operatör: başarısız bir eylem ölü nokta değil, geri bildirimdir.
-            // Hata mesajı sonraki gözlemin lastActionResult'una ve adım geçmişine düşer;
-            // LLM bunu okuyup strateji değiştirebilir (shell ile keşif, başka aile, ya da
-            // gerekirse respond). Döngü yalnızca maxSteps ile sınırlanır, ilk hatada durmaz.
+            // Otonom operatör: başarısız bir eylem ölü nokta değil, geri bildirimdir — ancak aynı
+            // action+target tekrar tekrar basarisiz olursa donguyu durdur (F-018).
             if (!actionResult.Success)
             {
+                if (decision.Action is not ("respond" or "ask_user" or "stop"))
+                {
+                    var failCount = session.RecordActionFailure(decision.Action, decision.Target);
+                    var maxSameFailures = Math.Clamp(_options.MaxSameActionFailures, 2, 10);
+                    if (failCount >= maxSameFailures)
+                    {
+                        session.IsComplete = true;
+                        var loopStopMessage =
+                            $"'{decision.Action}' islemi {failCount} kez basarisiz oldu. " +
+                            "Farkli bir yol deneyin veya hedefi netlestirin.";
+                        Report(progress, stepIndex, maxSteps, "limit", loopStopMessage);
+                        await _runLogger.AppendAsync(
+                            new AgentRunLog
+                            {
+                                RunId = session.RunId,
+                                StepIndex = stepIndex,
+                                UserGoal = session.UserGoal,
+                                ObservationSummaryJson =
+                                    $"{{\"loopStop\":\"sameActionFailures\",\"action\":\"{Escape(decision.Action)}\",\"count\":{failCount}}}",
+                                Timestamp = DateTimeOffset.UtcNow
+                            },
+                            cancellationToken).ConfigureAwait(false);
+                        return Complete(session, loopStopMessage, lastObservation, reachedMaxSteps: false);
+                    }
+                }
+
                 continue;
             }
 
+            session.ResetActionFailure(decision.Action, decision.Target);
+
             if (actionResult.Success &&
-                GoalRoutingHints.ShouldCompleteAfterFastRoute(session.UserGoal, decision.Action))
+                _taskDispatchRouter.ShouldCompleteAfterRoute(session.UserGoal, decision.Action))
             {
                 session.IsComplete = true;
                 var fastMessage = ResolveAssistantMessage(decision, actionResult);
@@ -542,8 +603,12 @@ public sealed class AgentLoop
     {
         try
         {
+            var imagePayload = VisionAttachmentPolicy.SelectImagePayload(
+                _promptBuilder.VisionEnabled,
+                observation.Screenshot?.Base64Png,
+                observation.ScreenshotSkipReason);
             var content = await _aiClient
-                .GetDecisionAsync(prompt, observation.Screenshot?.Base64Png, cancellationToken)
+                .GetDecisionAsync(prompt, imagePayload, cancellationToken)
                 .ConfigureAwait(false);
             return (content, null);
         }

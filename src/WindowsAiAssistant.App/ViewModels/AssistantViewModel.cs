@@ -54,7 +54,10 @@ public sealed class AssistantViewModel : ObservableObject
 
         ProviderStatus.PropertyChanged += OnProviderStatusChanged;
         _approvalCoordinator.ApprovalRequested += OnApprovalRequested;
+        _runCoordinator.RunEnded += OnRunEnded;
     }
+
+    private void OnRunEnded() => ResetTransientRunState();
 
     public IActiveProviderStatus ProviderStatus { get; }
     public ObservableCollection<ConversationItem> Conversation { get; }
@@ -200,6 +203,8 @@ public sealed class AssistantViewModel : ObservableObject
             StatusMessage = "Başka bir asistan oturumu çalışıyor. Lütfen bekleyin.";
             return;
         }
+
+        ResetTransientRunState();
 
         _runCts?.Cancel();
         _runCts?.Dispose();
@@ -393,6 +398,17 @@ public sealed class AssistantViewModel : ObservableObject
             State = TimelineEntryState.Active
         });
         item.NotifyTimelineChanged();
+    }
+
+    private void ResetTransientRunState()
+    {
+        if (_liveActivityItem is not null && _liveActivityItem.IsActive)
+        {
+            Conversation.Remove(_liveActivityItem);
+        }
+
+        _liveActivityItem = null;
+        OnPropertyChanged(nameof(UserFriendlyStatus));
     }
 
     private void FinalizeLiveActivity(bool success)

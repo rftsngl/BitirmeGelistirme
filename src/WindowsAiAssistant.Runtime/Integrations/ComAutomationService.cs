@@ -1,11 +1,24 @@
 using System.Reflection;
 using System.Text;
 using WindowsAiAssistant.Runtime.Actions;
+using WindowsAiAssistant.Runtime.Config;
 
 namespace WindowsAiAssistant.Runtime.Integrations;
 
 public sealed class ComAutomationService : IComAutomationService
 {
+    private readonly ComAutomationOptions _options;
+
+    public ComAutomationService(RuntimeOptions runtimeOptions)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeOptions);
+        _options = runtimeOptions.ComAutomation ?? new ComAutomationOptions();
+        if (_options.AllowedOperations.Count == 0)
+        {
+            _options.AllowedOperations = ComAllowlistDefaults.CreateDefault();
+        }
+    }
+
     public ActionResult Invoke(string progId, string method, string? arguments = null, bool closeInstance = false)
     {
         if (string.IsNullOrWhiteSpace(progId) || string.IsNullOrWhiteSpace(method))
@@ -17,32 +30,52 @@ public sealed class ComAutomationService : IComAutomationService
             };
         }
 
+        var trimmedProgId = progId.Trim();
+        var trimmedMethod = method.Trim();
+
+        if (!ComAllowlistValidator.IsAllowed(trimmedProgId, trimmedMethod, _options.AllowedOperations))
+        {
+            return new ActionResult
+            {
+                Success = false,
+                Message = $"COM islemi allowlist disinda: progId={trimmedProgId}, method={trimmedMethod}"
+            };
+        }
+
         object? comObject = null;
+        var createdNewInstance = false;
         try
         {
-            var type = Type.GetTypeFromProgID(progId.Trim(), throwOnError: false);
+            var type = Type.GetTypeFromProgID(trimmedProgId, throwOnError: false);
             if (type is null)
             {
-                return new ActionResult { Success = false, Message = $"ProgID bulunamadi: {progId}" };
+                return new ActionResult { Success = false, Message = $"ProgID bulunamadi: {trimmedProgId}" };
             }
 
-            comObject = Activator.CreateInstance(type);
+            comObject = ComInstanceResolver.TryGetRunningInstance(trimmedProgId);
             if (comObject is null)
             {
-                return new ActionResult { Success = false, Message = $"COM ornegi olusturulamadi: {progId}" };
+                comObject = Activator.CreateInstance(type);
+                createdNewInstance = comObject is not null;
+            }
+
+            if (comObject is null)
+            {
+                return new ActionResult { Success = false, Message = $"COM ornegi olusturulamadi: {trimmedProgId}" };
             }
 
             var args = ParseArguments(arguments);
             var result = type.InvokeMember(
-                method.Trim(),
+                trimmedMethod,
                 BindingFlags.InvokeMethod | BindingFlags.Public | BindingFlags.Instance,
                 binder: null,
                 target: comObject,
                 args: args);
 
             var message = new StringBuilder()
-                .AppendLine($"progId={progId.Trim()}")
-                .AppendLine($"method={method.Trim()}")
+                .AppendLine($"progId={trimmedProgId}")
+                .AppendLine($"method={trimmedMethod}")
+                .AppendLine($"reusedInstance={!createdNewInstance}")
                 .AppendLine($"result={FormatResult(result)}")
                 .ToString();
 
@@ -54,7 +87,7 @@ public sealed class ComAutomationService : IComAutomationService
         }
         finally
         {
-            if (closeInstance && comObject is not null)
+            if (closeInstance && comObject is not null && createdNewInstance)
             {
                 TryQuit(comObject);
                 ReleaseComObject(comObject);

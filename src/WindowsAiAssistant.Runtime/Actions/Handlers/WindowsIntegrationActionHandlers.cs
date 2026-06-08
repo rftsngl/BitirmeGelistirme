@@ -104,13 +104,13 @@ public sealed class JumpListActionHandler : IActionHandler
 
     public string ActionName => "jump_list";
 
-    public Task<ActionResult> ExecuteAsync(AgentAction action, CancellationToken cancellationToken = default)
+    public async Task<ActionResult> ExecuteAsync(AgentAction action, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var mode = ActionParameterReader.GetTargetOrParameter(action, "mode") ?? "set";
         var tasks = ActionParameterReader.GetTargetOrParameter(action, "tasks", "items");
-        return Task.FromResult(_jumpList.Update(mode, tasks));
+        return await _jumpList.UpdateAsync(mode, tasks, cancellationToken).ConfigureAwait(false);
     }
 }
 

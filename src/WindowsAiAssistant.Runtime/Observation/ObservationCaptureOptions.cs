@@ -12,4 +12,7 @@ public sealed class ObservationCaptureOptions
 
     /// <summary>Bir onceki adimda aktif olan surec adi (action sonrasi diff icin).</summary>
     public string? PreviousActiveProcessName { get; init; }
+
+    /// <summary>Incremental observation icin onceki tam snapshot.</summary>
+    public DesktopObservation? PreviousObservation { get; init; }
 }

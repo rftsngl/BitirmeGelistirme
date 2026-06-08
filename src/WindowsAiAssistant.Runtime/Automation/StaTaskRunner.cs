@@ -44,4 +44,43 @@ internal static class StaTaskRunner
         thread.Start();
         return tcs.Task;
     }
+
+    public static void RunBlocking(Action action) =>
+        RunBlocking<object?>(() =>
+        {
+            action();
+            return null;
+        });
+
+    public static T RunBlocking<T>(Func<T> func)
+    {
+        Exception? error = null;
+        T? result = default;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                result = func();
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "WindowsAiAssistant-STA-Blocking"
+        };
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (error is not null)
+        {
+            throw error;
+        }
+
+        return result!;
+    }
 }

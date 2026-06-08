@@ -22,7 +22,7 @@ internal static class DesktopInput
             return;
         }
 
-        TypeTextViaClipboardAsync(text).GetAwaiter().GetResult();
+        StaTaskRunner.RunBlocking(() => PasteTextViaClipboard(text));
     }
 
     public static Task TypeTextViaClipboardAsync(string text, CancellationToken cancellationToken = default)

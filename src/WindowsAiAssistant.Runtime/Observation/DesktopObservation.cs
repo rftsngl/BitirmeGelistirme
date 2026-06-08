@@ -19,10 +19,14 @@ public sealed class DesktopObservation
     public string? PreviousActiveWindowTitle { get; init; }
     public bool ActiveWindowChanged { get; init; }
     public ScreenshotObservation? Screenshot { get; init; }
+    public string? ScreenshotSkipReason { get; init; }
     public IReadOnlyList<WindowInfo> Windows { get; init; } = Array.Empty<WindowInfo>();
     public UiElementTree? UiTree { get; init; }
     public string? UiCaptureSkipReason { get; init; }
     public IReadOnlyList<MonitorDescription> Monitors { get; init; } = Array.Empty<MonitorDescription>();
+    public bool ReusedFromPreviousStep { get; init; }
+    public string? ObservationFingerprint { get; init; }
+    public long CaptureDurationMs { get; init; }
 
     public string ToShortSummary()
     {
@@ -50,9 +54,22 @@ public sealed class DesktopObservation
         builder.AppendLine(ActiveWindowChanged
             ? $"activeWindowChanged: yes (onceki: {PreviousActiveWindowTitle ?? "(none)"})"
             : "activeWindowChanged: no");
-        builder.AppendLine($"screenshotPath: {Screenshot?.FilePath ?? "(none)"}");
-        builder.AppendLine(
-            $"screenshotSize: {(Screenshot is null ? "(none)" : $"{Screenshot.Width}x{Screenshot.Height}")}");
+        if (ReusedFromPreviousStep)
+        {
+            builder.AppendLine("observationReuse: yes (static desktop — previous UI tree and screenshot reused)");
+        }
+
+        builder.AppendLine($"captureDurationMs: {CaptureDurationMs}");
+        if (!string.IsNullOrWhiteSpace(ScreenshotSkipReason))
+        {
+            builder.AppendLine($"screenshot: {ScreenshotSkipReason}");
+        }
+        else
+        {
+            builder.AppendLine($"screenshotPath: {Screenshot?.FilePath ?? "(none)"}");
+            builder.AppendLine(
+                $"screenshotSize: {(Screenshot is null ? "(none)" : $"{Screenshot.Width}x{Screenshot.Height}")}");
+        }
 
         if (Monitors.Count > 0)
         {
